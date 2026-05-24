@@ -26,6 +26,8 @@ def _trainer_to_read(trainer: Trainer) -> TrainerRead:
         id=trainer.id,
         first_name=trainer.first_name,
         last_name=trainer.last_name,
+        created_at=trainer.created_at,
+        updated_at=trainer.updated_at,
         branches=[BranchRead.model_validate(b, from_attributes=True) for b in branches_sorted],
     )
 

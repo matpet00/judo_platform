@@ -14,11 +14,29 @@ Volitelně zkopírujte `.env.example` na `.env` a doplňte SMTP pro odesílání
 ## Spuštění
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8001
 ```
 
-- Dokumentace API: http://127.0.0.1:8000/docs  
+- Dokumentace API: http://127.0.0.1:8001/docs  
 - SQLite soubor (výchozí): `./judo.db` (vznikne při startu v aktuálním adresáři)
+
+### Demo žáci (Orlova) přes API
+
+Po spuštění API můžeš z kořene projektu vytvořit **30 fiktivních žáků** na pobočce **Orlova** čistě voláním REST (žádný seed v aplikaci):
+
+```bash
+python scripts/populate_orlova_students.py
+```
+
+Jiný port (např. výchozí uvicorn 8000): `BASE_URL=http://127.0.0.1:8000 python scripts/populate_orlova_students.py`
+
+Skript má výchozí `BASE_URL` **:8001** (stejně jako příkaz výše). Očekává, že na tom URL už běží **toto** API (`GET /health` → `{"status":"ok"}`). Když `GET /branches` vrátí **404**, na daném portu typicky běží jiná aplikace — spusť `uvicorn` z adresáře **judo** v druhém terminálu, nebo nastav správný `BASE_URL`.
+
+Trenér **Petr Matej** na Orlově (jednorázově přes API, pokud ještě neexistuje):
+
+```bash
+python scripts/create_trainer_petr_matej_orlova.py
+```
 
 ## Endpointy (shrnutí)
 

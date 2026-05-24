@@ -58,6 +58,8 @@ def _student_to_read(student: Student) -> StudentRead:
         first_name=student.first_name,
         last_name=student.last_name,
         age_group=student.age_group,
+        created_at=student.created_at,
+        updated_at=student.updated_at,
         branches=[BranchRead.model_validate(b, from_attributes=True) for b in branches_sorted],
         parents=[ParentRead.model_validate(p, from_attributes=True) for p in student.parents],
     )
