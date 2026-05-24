@@ -1,11 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Branch, Parent, Student
-from app.schemas import BranchRead, ParentRead, StudentCreate, StudentParentInput, StudentRead
+from app.schemas import (
+    BranchRead,
+    ParentRead,
+    StudentCreate,
+    StudentParentInput,
+    StudentPatch,
+    StudentRead,
+)
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -34,6 +41,28 @@ async def get_or_create_parent(db: AsyncSession, row: StudentParentInput) -> Par
     return parent
 
 
+async def get_branches_by_ids(db: AsyncSession, branch_ids: list[int]) -> list[Branch]:
+    branches: list[Branch] = []
+    for bid in branch_ids:
+        b = await db.get(Branch, bid)
+        if b is None:
+            raise HTTPException(status_code=404, detail=f"Branch id not found: {bid}")
+        branches.append(b)
+    return branches
+
+
+def _student_to_read(student: Student) -> StudentRead:
+    branches_sorted = sorted(student.branches, key=lambda br: br.id)
+    return StudentRead(
+        id=student.id,
+        first_name=student.first_name,
+        last_name=student.last_name,
+        age_group=student.age_group,
+        branches=[BranchRead.model_validate(b, from_attributes=True) for b in branches_sorted],
+        parents=[ParentRead.model_validate(p, from_attributes=True) for p in student.parents],
+    )
+
+
 @router.post("", response_model=StudentRead)
 async def create_student(
     payload: StudentCreate,
@@ -48,14 +77,7 @@ async def create_student(
     if len(set(emails)) != len(emails):
         raise HTTPException(status_code=400, detail="Duplicate parent emails in one request are not allowed.")
 
-    branch_name = payload.branch.value
-    br = await db.execute(select(Branch).where(Branch.name == branch_name))
-    branch = br.scalar_one_or_none()
-    if branch is None:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Branch '{branch_name}' is missing in the database. Restart the app to run seed.",
-        )
+    branches_list = await get_branches_by_ids(db, payload.branch_ids)
 
     parents: list[Parent] = []
     for p in payload.parents:
@@ -65,23 +87,14 @@ async def create_student(
         first_name=payload.first_name,
         last_name=payload.last_name,
         age_group=payload.age_group,
-        branch_id=branch.id,
     )
+    student.branches.extend(branches_list)
     student.parents.extend(parents)
     db.add(student)
     await db.commit()
-    await db.refresh(student, attribute_names=["parents", "branch"])
+    await db.refresh(student, attribute_names=["parents", "branches"])
 
-    return StudentRead(
-        id=student.id,
-        first_name=student.first_name,
-        last_name=student.last_name,
-        age_group=student.age_group,
-        branch=BranchRead.model_validate(student.branch, from_attributes=True),
-        parents=[
-            ParentRead.model_validate(x, from_attributes=True) for x in student.parents
-        ],
-    )
+    return _student_to_read(student)
 
 
 @router.get("", response_model=list[StudentRead])
@@ -90,19 +103,81 @@ async def list_students(db: AsyncSession = Depends(get_db)) -> list[StudentRead]
         select(Student)
         .options(
             selectinload(Student.parents),
-            selectinload(Student.branch),
+            selectinload(Student.branches),
         )
         .order_by(Student.id),
     )
     students = result.scalars().unique().all()
-    return [
-        StudentRead(
-            id=s.id,
-            first_name=s.first_name,
-            last_name=s.last_name,
-            age_group=s.age_group,
-            branch=BranchRead.model_validate(s.branch, from_attributes=True),
-            parents=[ParentRead.model_validate(p, from_attributes=True) for p in s.parents],
-        )
-        for s in students
-    ]
+    return [_student_to_read(s) for s in students]
+
+
+@router.patch("/{student_id}", response_model=StudentRead)
+async def patch_student(
+    student_id: int,
+    payload: StudentPatch,
+    db: AsyncSession = Depends(get_db),
+) -> StudentRead:
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+
+    result = await db.execute(
+        select(Student)
+        .where(Student.id == student_id)
+        .options(selectinload(Student.parents), selectinload(Student.branches)),
+    )
+    student = result.scalar_one_or_none()
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    if "parents" in data:
+        parents_payload = data.pop("parents")
+        if parents_payload is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Field 'parents' cannot be null; omit it or use an array (possibly empty).",
+            )
+        if len(parents_payload) > MAX_PARENTS_PER_STUDENT:
+            raise HTTPException(
+                status_code=400,
+                detail=f"At most {MAX_PARENTS_PER_STUDENT} parents per student.",
+            )
+        emails = [_normalize_email(str(p["email"])) for p in parents_payload]
+        if len(set(emails)) != len(emails):
+            raise HTTPException(status_code=400, detail="Duplicate parent emails in one request are not allowed.")
+        student.parents.clear()
+        for raw in parents_payload:
+            row = StudentParentInput.model_validate(raw)
+            student.parents.append(await get_or_create_parent(db, row))
+
+    if "branch_ids" in data:
+        branch_ids = data.pop("branch_ids")
+        if branch_ids is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Field 'branch_ids' cannot be null; omit it or use a non-empty array.",
+            )
+        branches_list = await get_branches_by_ids(db, branch_ids)
+        student.branches.clear()
+        student.branches.extend(branches_list)
+
+    if "first_name" in data:
+        student.first_name = data["first_name"]
+    if "last_name" in data:
+        student.last_name = data["last_name"]
+    if "age_group" in data:
+        student.age_group = data["age_group"]
+
+    await db.commit()
+    await db.refresh(student, attribute_names=["parents", "branches"])
+
+    return _student_to_read(student)
+
+
+@router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student(student_id: int, db: AsyncSession = Depends(get_db)) -> None:
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    await db.delete(student)
+    await db.commit()
