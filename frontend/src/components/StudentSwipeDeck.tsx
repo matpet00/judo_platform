@@ -37,8 +37,21 @@ function DeckCard({
 }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-8, 8]);
-  const presentOpacity = useTransform(x, [0, 120], [0, 1]);
-  const absentOpacity = useTransform(x, [0, -120], [0, 1]);
+  const presentOpacity = useTransform(x, [0, 60], [0, 1]);
+  const absentOpacity = useTransform(x, [0, -60], [0, 1]);
+  const presentOverlay = useTransform(x, [0, 60], [0, 0.35]);
+  const absentOverlay = useTransform(x, [0, -60], [0, 0.35]);
+  const borderColor = useTransform(
+    x,
+    [-120, -30, 0, 30, 120],
+    [
+      "rgba(161, 40, 40, 0.55)",
+      "rgba(161, 40, 40, 0.25)",
+      "rgba(212, 175, 55, 0.45)",
+      "rgba(45, 157, 107, 0.25)",
+      "rgba(45, 157, 107, 0.55)",
+    ],
+  );
   const lastTap = useRef(0);
   const busy = disabled || saving;
 
@@ -72,14 +85,36 @@ function DeckCard({
       onTap={handleTap}
       whileTap={{ scale: 0.98 }}
     >
-      <motion.div className="deck-card__hint deck-card__hint--present" style={{ opacity: presentOpacity }}>
-        PŘÍTOMEN
-      </motion.div>
-      <motion.div className="deck-card__hint deck-card__hint--absent" style={{ opacity: absentOpacity }}>
-        NEPŘÍTOMEN
-      </motion.div>
-
-      <div className={`deck-card${status ? ` deck-card--${status}` : ""}${saving ? " deck-card--saving" : ""}`}>
+      <motion.div
+        className={`deck-card${status ? ` deck-card--${status}` : ""}${saving ? " deck-card--saving" : ""}`}
+        style={{ borderColor: busy ? undefined : borderColor }}
+      >
+        {!busy && (
+          <>
+            <motion.div
+              className="deck-card__drag-overlay deck-card__drag-overlay--present"
+              style={{ opacity: presentOverlay }}
+            />
+            <motion.div
+              className="deck-card__drag-overlay deck-card__drag-overlay--absent"
+              style={{ opacity: absentOverlay }}
+            />
+            <motion.div
+              className="deck-card__swipe-hint deck-card__swipe-hint--present"
+              style={{ opacity: presentOpacity }}
+            >
+              <span className="deck-card__swipe-hint__lead">Bude změněn na</span>
+              <span className="deck-card__swipe-hint__status">Přítomen</span>
+            </motion.div>
+            <motion.div
+              className="deck-card__swipe-hint deck-card__swipe-hint--absent"
+              style={{ opacity: absentOpacity }}
+            >
+              <span className="deck-card__swipe-hint__lead">Bude změněn na</span>
+              <span className="deck-card__swipe-hint__status">Nepřítomen</span>
+            </motion.div>
+          </>
+        )}
         <div className="deck-card__belt" />
         <div className="deck-card__age">{student.age_group}</div>
         <h2 className="deck-card__name">
@@ -92,7 +127,7 @@ function DeckCard({
           <div className={`deck-card__status deck-card__status--${status}`}>{statusLabel(status)}</div>
         )}
         <p className="deck-card__tap-hint">2× tap = omluven</p>
-      </div>
+      </motion.div>
     </motion.div>
   );
 }
