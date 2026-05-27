@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -262,11 +262,116 @@ class MailToParentsResponse(BaseModel):
     message: str = Field(default="ok", examples=["ok"])
 
 
-class TrainingSessionCreate(BaseModel):
+class TrainingGroupCreate(BaseModel):
     branch_id: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=128)
+    start_time: time
+    end_time: time
+    weekdays: list[int] | None = Field(default=None, description="ISO weekday 1=Mon … 7=Sun")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("weekdays", mode="after")
+    @classmethod
+    def validate_weekdays(cls, v: list[int] | None) -> list[int] | None:
+        if v is None:
+            return v
+        if len(set(v)) != len(v):
+            raise ValueError("Duplicate weekdays are not allowed.")
+        for day in v:
+            if day < 1 or day > 7:
+                raise ValueError("weekdays must be integers 1–7 (ISO, Monday=1).")
+        return sorted(v)
+
+    @field_validator("end_time")
+    @classmethod
+    def end_after_start(cls, v: time, info) -> time:
+        start = info.data.get("start_time")
+        if start is not None and v <= start:
+            raise ValueError("end_time must be after start_time.")
+        return v
+
+
+class TrainingGroupPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    branch_id: int | None = Field(default=None, ge=1)
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    start_time: time | None = None
+    end_time: time | None = None
+    weekdays: list[int] | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_optional_name(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("weekdays", mode="after")
+    @classmethod
+    def validate_weekdays_patch(cls, v: list[int] | None) -> list[int] | None:
+        if v is None:
+            return v
+        if len(set(v)) != len(v):
+            raise ValueError("Duplicate weekdays are not allowed.")
+        for day in v:
+            if day < 1 or day > 7:
+                raise ValueError("weekdays must be integers 1–7 (ISO, Monday=1).")
+        return sorted(v)
+
+
+class TrainingGroupRead(BaseModel):
+    id: int = Field(examples=[1])
+    branch_id: int = Field(examples=[1])
+    name: str = Field(examples=["Orlova 16:00–17:30"])
+    start_time: time
+    end_time: time
+    weekdays: list[int] | None = Field(examples=[[1, 3]])
+    created_at: datetime
+    updated_at: datetime
+    branch: BranchRead
+
+    model_config = {"from_attributes": True}
+
+
+class TrainingGroupDetailRead(TrainingGroupRead):
+    students: list[StudentBrief] = Field(default_factory=list)
+
+
+class TrainingGroupBrief(BaseModel):
+    id: int = Field(examples=[1])
+    branch_id: int = Field(examples=[1])
+    name: str = Field(examples=["Orlova 16:00–17:30"])
+    start_time: time
+    end_time: time
+    weekdays: list[int] | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TrainingGroupStudentsReplace(BaseModel):
+    student_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("student_ids", mode="after")
+    @classmethod
+    def unique_student_ids(cls, v: list[int]) -> list[int]:
+        if len(set(v)) != len(v):
+            raise ValueError("Duplicate student_ids are not allowed.")
+        if any(sid < 1 for sid in v):
+            raise ValueError("student_ids must be >= 1.")
+        return v
+
+
+class TrainingSessionCreate(BaseModel):
+    training_group_id: int = Field(ge=1)
+    session_date: date
     trainer_id: int | None = Field(default=None, ge=1)
-    starts_at: datetime
-    age_group: AgeGroup | None = None
     notes: str | None = Field(default=None, max_length=512)
 
     @field_validator("notes", mode="before")
@@ -278,13 +383,26 @@ class TrainingSessionCreate(BaseModel):
         return v
 
 
+class TrainingGroupSessionCreate(BaseModel):
+    session_date: date
+    trainer_id: int | None = Field(default=None, ge=1)
+    notes: str | None = Field(default=None, max_length=512)
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def strip_group_session_notes(cls, v: object) -> object:
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
+
+
 class TrainingSessionPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    branch_id: int | None = Field(default=None, ge=1)
+    training_group_id: int | None = Field(default=None, ge=1)
+    session_date: date | None = None
     trainer_id: int | None = Field(default=None, ge=1)
-    starts_at: datetime | None = None
-    age_group: AgeGroup | None = None
     notes: str | None = Field(default=None, max_length=512)
 
     @field_validator("notes", mode="before")
@@ -299,13 +417,14 @@ class TrainingSessionPatch(BaseModel):
 class TrainingSessionRead(BaseModel):
     id: int = Field(examples=[1])
     branch_id: int = Field(examples=[1])
+    training_group_id: int = Field(examples=[1])
     trainer_id: int | None = Field(examples=[1])
     starts_at: datetime
-    age_group: AgeGroup | None = Field(examples=[AgeGroup.U10])
     notes: str | None = None
     created_at: datetime
     updated_at: datetime
     branch: BranchRead
+    training_group: TrainingGroupBrief
     trainer: TrainerBrief | None = None
 
     model_config = {"from_attributes": True}
@@ -338,7 +457,42 @@ class AttendanceRecordRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AttendanceSummary(BaseModel):
+    id: int
+    status: AttendanceStatus
+    recorded_by_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionStudentWithAttendance(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    age_group: AgeGroup
+    attendance: AttendanceSummary | None = None
+
+
+class AttendanceBulkItem(BaseModel):
+    student_id: int = Field(ge=1)
+    status: AttendanceStatus
+    recorded_by_id: int | None = Field(default=None, ge=1)
+
+
+class AttendanceBulkReplace(BaseModel):
+    records: list[AttendanceBulkItem] = Field(min_length=1)
+
+    @field_validator("records", mode="after")
+    @classmethod
+    def unique_student_ids(cls, v: list[AttendanceBulkItem]) -> list[AttendanceBulkItem]:
+        ids = [item.student_id for item in v]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Duplicate student_id in records.")
+        return v
+
+
 class TrainingSessionDetailRead(TrainingSessionRead):
+    students: list[SessionStudentWithAttendance] = Field(default_factory=list)
     attendance_records: list[AttendanceRecordRead] = Field(default_factory=list)
 
 

@@ -60,13 +60,21 @@ python scripts/create_trainer_petr_matej_orlova.py
 | POST | `/students` | Žák: `first_name`, `last_name`, `age_group`, **`branch_ids`** (1+ poboček, M:N), `parents` … |
 | PATCH | `/students/{id}` | Částečná úprava; volitelně **`branch_ids`** (nahradí celý seznam, min. 1) nebo **`parents`** … |
 | DELETE | `/students/{id}` | Smazání žáka |
-| GET | `/training-sessions` | Seznam tréninků (volitelně `?branch_id=`, `?trainer_id=`) |
-| POST | `/training-sessions` | Nový trénink (`branch_id`, `starts_at`, volitelně `trainer_id`, `age_group`, `notes`) |
-| GET | `/training-sessions/{id}` | Trénink včetně **`attendance_records`** |
-| PATCH | `/training-sessions/{id}` | Částečná úprava tréninku |
+| GET | `/training-groups` | Seznam tréninkových skupin včetně **`students`** (volitelně `?branch_id=`) |
+| POST | `/training-groups` | Nová skupina: `branch_id`, `name`, `start_time`, `end_time`, volitelně `weekdays` |
+| GET | `/training-groups/{id}` | Skupina včetně **`students`** |
+| PATCH | `/training-groups/{id}` | Částečná úprava slotu |
+| DELETE | `/training-groups/{id}` | Smazání (409, pokud existují tréninky) |
+| PUT | `/training-groups/{id}/students` | Nahradit celý roster (`student_ids`) |
+| POST | `/training-groups/{id}/sessions` | Trénink pro daný den (`session_date`); **201** nový, **200** už existuje |
+| GET | `/training-sessions` | Seznam tréninků (`?branch_id=`, `?trainer_id=`, `?training_group_id=`) |
+| POST | `/training-sessions` | Nový trénink: **`training_group_id`**, **`session_date`**, volitelně `trainer_id`, `notes` (409 pokud existuje) |
+| GET | `/training-sessions/{id}` | Trénink včetně **`students`** (roster + `attendance`) a **`attendance_records`** |
+| PATCH | `/training-sessions/{id}` | Částečná úprava (`session_date`, `training_group_id`, `trainer_id`, `notes`) |
 | DELETE | `/training-sessions/{id}` | Smazání tréninku (včetně docházky) |
 | GET | `/training-sessions/{id}/attendance` | Docházka na tréninku |
-| POST | `/training-sessions/{id}/attendance` | Záznam docházky (`student_id`, `status`, volitelně `recorded_by_id`) |
+| PUT | `/training-sessions/{id}/attendance` | Hromadný upsert docházky (`records`: `[{student_id, status}, …]`) |
+| POST | `/training-sessions/{id}/attendance` | Jeden záznam docházky (`student_id`, `status`, volitelně `recorded_by_id`) |
 | GET/PATCH/DELETE | `/training-sessions/{id}/attendance/{attendance_id}` | Jedna záznam docházky |
 | GET | `/students/{id}/attendance` | Historie docházky žáka (volitelně `?session_id=`) |
 | POST | `/mail/parents` | E-mail rodičům (`parent_ids`, `subject`, `body`) — vyžaduje SMTP v `.env` |
@@ -77,7 +85,11 @@ Bez `SMTP_HOST` a `SMTP_FROM` vrátí `/mail/parents` **503**.
 
 **Žák i trenér ↔ pobočka:** vztah **M:N** — pole **`branch_ids`** při zápisu, v odpovědi **`branches`** (řazeno podle id pobočky).
 
-**Docházka:** `status` je `present`, `absent` nebo `excused`. Žák musí být na pobočce tréninku; pokud má trénink `age_group`, musí sedět se žákem. Jedna docházka na pár (trénink, žák) — duplicitní **POST** → **409**.
+**Docházka:** `status` je `present`, `absent` nebo `excused`. Platí roster tréninkové skupiny. **`GET /training-sessions/{id}`** vrací všechny žáky ve skupině s `attendance: null` (ještě neoznačeno) nebo stavem. Duplicitní **POST** jednoho záznamu → **409** (použij **PUT** bulk nebo **PATCH**).
+
+**Tréninková session:** vždy vázaná na **`training_group_id`**. Při vytvoření stačí **`session_date`** (YYYY-MM-DD) — `branch_id` a `starts_at` (datum + `start_time` grupy) se odvodí na backendu. Duplicitní session pro stejnou grupu a den → **409** (nebo **POST /training-groups/{id}/sessions** vrátí existující **200**).
+
+**Tréninkové skupiny:** časový slot na pobočce (`start_time`–`end_time`), nezávislý na U-skupině — v jednom slotu mohou být U8, U10, … Volitelně `weekdays` (ISO 1=Po … 7=Ne). Žák musí být na pobočce skupiny, aby šel do rosteru.
 
 **Výchozí seed poboček** (viz `DEFAULT_BRANCHES` v [`app/models.py`](app/models.py)): Orlova, Dolni Lutyne, Petrvald + fiktivní adresy.
 

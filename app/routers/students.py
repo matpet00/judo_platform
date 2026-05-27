@@ -204,6 +204,7 @@ async def list_student_attendance(
             selectinload(AttendanceRecord.student),
             selectinload(AttendanceRecord.recorded_by),
             selectinload(AttendanceRecord.session).selectinload(TrainingSession.branch),
+            selectinload(AttendanceRecord.session).selectinload(TrainingSession.training_group),
             selectinload(AttendanceRecord.session).selectinload(TrainingSession.trainer),
         )
         .order_by(AttendanceRecord.updated_at.desc(), AttendanceRecord.id.desc())

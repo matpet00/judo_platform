@@ -1,7 +1,7 @@
 import enum
-from datetime import datetime
+from datetime import datetime, time
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, JSON, String, Table, Time, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -53,6 +53,13 @@ trainer_branches = Table(
     Column("branch_id", Integer, ForeignKey("branches.id", ondelete="CASCADE"), primary_key=True),
 )
 
+student_training_groups = Table(
+    "student_training_groups",
+    Base.metadata,
+    Column("student_id", Integer, ForeignKey("students.id", ondelete="CASCADE"), primary_key=True),
+    Column("group_id", Integer, ForeignKey("training_groups.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Branch(Base):
     __tablename__ = "branches"
@@ -76,6 +83,7 @@ class Branch(Base):
         back_populates="branches",
     )
     training_sessions: Mapped[list["TrainingSession"]] = relationship(back_populates="branch")
+    training_groups: Mapped[list["TrainingGroup"]] = relationship(back_populates="branch")
 
 
 class Trainer(Base):
@@ -145,19 +153,50 @@ class Student(Base):
         back_populates="children",
     )
     attendance_records: Mapped[list["AttendanceRecord"]] = relationship(back_populates="student")
+    training_groups: Mapped[list["TrainingGroup"]] = relationship(
+        secondary=student_training_groups,
+        back_populates="students",
+    )
+
+
+class TrainingGroup(Base):
+    __tablename__ = "training_groups"
+    __table_args__ = (
+        UniqueConstraint("branch_id", "start_time", "end_time", "name", name="uq_training_group_branch_slot"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(128))
+    start_time: Mapped[time] = mapped_column(Time)
+    end_time: Mapped[time] = mapped_column(Time)
+    weekdays: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    branch: Mapped[Branch] = relationship(back_populates="training_groups")
+    students: Mapped[list[Student]] = relationship(
+        secondary=student_training_groups,
+        back_populates="training_groups",
+    )
+    training_sessions: Mapped[list["TrainingSession"]] = relationship(back_populates="training_group")
 
 
 class TrainingSession(Base):
     __tablename__ = "training_sessions"
+    __table_args__ = (
+        UniqueConstraint("training_group_id", "starts_at", name="uq_training_session_group_starts_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    training_group_id: Mapped[int] = mapped_column(ForeignKey("training_groups.id", ondelete="CASCADE"))
     trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    age_group: Mapped[AgeGroup | None] = mapped_column(
-        Enum(AgeGroup, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
-        nullable=True,
-    )
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -167,6 +206,7 @@ class TrainingSession(Base):
     )
 
     branch: Mapped[Branch] = relationship(back_populates="training_sessions")
+    training_group: Mapped[TrainingGroup | None] = relationship(back_populates="training_sessions")
     trainer: Mapped[Trainer | None] = relationship(back_populates="training_sessions")
     attendance_records: Mapped[list["AttendanceRecord"]] = relationship(
         back_populates="session",
