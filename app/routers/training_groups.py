@@ -17,6 +17,7 @@ from app.schemas import (
     TrainingSessionRead,
 )
 from app.routers.training_sessions import _session_to_read, create_session_for_group
+from app.security import require_trainer_token
 
 router = APIRouter(prefix="/training-groups", tags=["training-groups"])
 
@@ -157,6 +158,7 @@ async def create_training_group_session(
     payload: TrainingGroupSessionCreate,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingSessionRead:
     session, created = await create_session_for_group(
         db,

@@ -67,7 +67,7 @@ python scripts/create_trainer_petr_matej_orlova.py
 | DELETE | `/training-groups/{id}` | Smazání (409, pokud existují tréninky) |
 | PUT | `/training-groups/{id}/students` | Nahradit celý roster (`student_ids`) |
 | POST | `/training-groups/{id}/sessions` | Trénink pro daný den (`session_date`); **201** nový, **200** už existuje |
-| GET | `/training-sessions` | Seznam tréninků (`?branch_id=`, `?trainer_id=`, `?training_group_id=`) |
+| GET | `/training-sessions` | Seznam tréninků (`?branch_id=`, `?trainer_id=`, `?training_group_id=`, **`?session_date=`**) |
 | POST | `/training-sessions` | Nový trénink: **`training_group_id`**, **`session_date`**, volitelně `trainer_id`, `notes` (409 pokud existuje) |
 | GET | `/training-sessions/{id}` | Trénink včetně **`students`** (roster + `attendance`) a **`attendance_records`** |
 | PATCH | `/training-sessions/{id}` | Částečná úprava (`session_date`, `training_group_id`, `trainer_id`, `notes`) |
@@ -90,6 +90,25 @@ Bez `SMTP_HOST` a `SMTP_FROM` vrátí `/mail/parents` **503**.
 **Tréninková session:** vždy vázaná na **`training_group_id`**. Při vytvoření stačí **`session_date`** (YYYY-MM-DD) — `branch_id` a `starts_at` (datum + `start_time` grupy) se odvodí na backendu. Duplicitní session pro stejnou grupu a den → **409** (nebo **POST /training-groups/{id}/sessions** vrátí existující **200**).
 
 **Tréninkové skupiny:** časový slot na pobočce (`start_time`–`end_time`), nezávislý na U-skupině — v jednom slotu mohou být U8, U10, … Volitelně `weekdays` (ISO 1=Po … 7=Ne). Žák musí být na pobočce skupiny, aby šel do rosteru.
+
+## Frontend (docházka)
+
+Mobilní React app pro trenéra — smart boot flow + swipe docházka.
+
+```bash
+cd frontend
+cp .env.example .env   # volitelně uprav VITE_API_URL
+npm install
+npm run dev            # http://127.0.0.1:5173
+```
+
+Backend musí běžet na portu **8001** (CORS povolen pro `:5173`).
+
+### Flow aplikace
+
+1. **`/` (Boot)** — načte skupiny + dnešní session; pokud jsi v okně slotu (45 min před startem až do konce), nabídne rovnou otevřít existující session nebo potvrzení „Zahájit docházku“.
+2. **`/today`** — přehled: probíhající slot, existující docházky, nové tréninky.
+3. **`/session/:id`** — fullscreen karty: swipe **→** přítomen, **←** nepřítomen, **2× tap** omluven; přepínač Seznam/Karty.
 
 **Výchozí seed poboček** (viz `DEFAULT_BRANCHES` v [`app/models.py`](app/models.py)): Orlova, Dolni Lutyne, Petrvald + fiktivní adresy.
 

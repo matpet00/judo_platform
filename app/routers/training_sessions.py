@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -24,6 +24,7 @@ from app.schemas import (
     TrainerBrief,
     StudentBrief,
 )
+from app.security import require_trainer_token
 
 router = APIRouter(prefix="/training-sessions", tags=["training-sessions"])
 
@@ -264,6 +265,7 @@ async def list_training_sessions(
     branch_id: int | None = Query(default=None, ge=1),
     trainer_id: int | None = Query(default=None, ge=1),
     training_group_id: int | None = Query(default=None, ge=1),
+    session_date: date | None = Query(default=None, description="Filter by session calendar date (UTC, YYYY-MM-DD)"),
 ) -> list[TrainingSessionRead]:
     stmt = (
         select(TrainingSession)
@@ -280,6 +282,13 @@ async def list_training_sessions(
         stmt = stmt.where(TrainingSession.trainer_id == trainer_id)
     if training_group_id is not None:
         stmt = stmt.where(TrainingSession.training_group_id == training_group_id)
+    if session_date is not None:
+        day_start = datetime.combine(session_date, datetime.min.time(), tzinfo=timezone.utc)
+        day_end = day_start + timedelta(days=1)
+        stmt = stmt.where(
+            TrainingSession.starts_at >= day_start,
+            TrainingSession.starts_at < day_end,
+        )
 
     result = await db.execute(stmt)
     sessions = result.scalars().unique().all()
@@ -290,6 +299,7 @@ async def list_training_sessions(
 async def create_training_session(
     payload: TrainingSessionCreate,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingSessionRead:
     session, created = await create_session_for_group(
         db,
@@ -320,6 +330,7 @@ async def patch_training_session(
     session_id: int,
     payload: TrainingSessionPatch,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingSessionRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -365,7 +376,11 @@ async def patch_training_session(
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_training_session(session_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_training_session(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> None:
     session = await db.get(TrainingSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found.")
@@ -388,6 +403,7 @@ async def replace_session_attendance(
     session_id: int,
     payload: AttendanceBulkReplace,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> list[AttendanceRecordRead]:
     session = await _get_session_or_404(db, session_id)
     roster_ids = {s.id for s in session.training_group.students}
@@ -432,6 +448,7 @@ async def create_attendance_record(
     session_id: int,
     payload: AttendanceRecordCreate,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> AttendanceRecordRead:
     session = await _get_session_or_404(db, session_id)
     student = await _get_student_with_branches_or_404(db, payload.student_id)
@@ -511,6 +528,7 @@ async def patch_attendance_record(
     attendance_id: int,
     payload: AttendanceRecordPatch,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> AttendanceRecordRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -525,7 +543,7 @@ async def patch_attendance_record(
         setattr(record, key, value)
 
     await db.commit()
-    await db.refresh(record, attribute_names=["student", "recorded_by"])
+    record = await _get_attendance_in_session_or_404(db, session_id, attendance_id)
     return _attendance_to_read(record)
 
 
@@ -534,6 +552,7 @@ async def delete_attendance_record(
     session_id: int,
     attendance_id: int,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> None:
     record = await _get_attendance_in_session_or_404(db, session_id, attendance_id)
     await db.delete(record)

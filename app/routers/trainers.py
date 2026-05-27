@@ -5,7 +5,15 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Branch, Trainer
-from app.schemas import BranchRead, TrainerCreate, TrainerPatch, TrainerRead
+from app.schemas import (
+    BranchRead,
+    TrainerAuthToken,
+    TrainerCreate,
+    TrainerPatch,
+    TrainerPinVerify,
+    TrainerRead,
+)
+from app.security import create_trainer_token, hash_pin, verify_pin
 
 router = APIRouter(prefix="/trainers", tags=["trainers"])
 
@@ -60,6 +68,26 @@ async def create_trainer(
     return _trainer_to_read(trainer)
 
 
+@router.post("/{trainer_id}/verify-pin", response_model=TrainerAuthToken)
+async def verify_trainer_pin(
+    trainer_id: int,
+    payload: TrainerPinVerify,
+    db: AsyncSession = Depends(get_db),
+) -> TrainerAuthToken:
+    trainer = await db.get(Trainer, trainer_id)
+    if trainer is None:
+        raise HTTPException(status_code=404, detail="Trainer not found.")
+    if not verify_pin(payload.pin, trainer.pin_hash):
+        raise HTTPException(status_code=401, detail="Invalid PIN.")
+
+    token, expires_at = create_trainer_token(trainer.id)
+    return TrainerAuthToken(
+        access_token=token,
+        expires_at=expires_at,
+        trainer_id=trainer.id,
+    )
+
+
 @router.patch("/{trainer_id}", response_model=TrainerRead)
 async def patch_trainer(
     trainer_id: int,
@@ -87,6 +115,10 @@ async def patch_trainer(
         branches_list = await get_branches_by_ids(db, branch_ids)
         trainer.branches.clear()
         trainer.branches.extend(branches_list)
+
+    if "pin" in data:
+        pin = data.pop("pin")
+        trainer.pin_hash = hash_pin(pin) if pin else None
 
     if "first_name" in data:
         trainer.first_name = data["first_name"]

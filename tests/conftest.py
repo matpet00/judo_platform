@@ -1,0 +1,85 @@
+import os
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("API_WRITE_KEY", "test-api-key")
+os.environ.setdefault("PIN_PEPPER", "test-pin-pepper")
+
+from app.database import async_session_maker, engine, migrate_schema, seed_branches
+from app.main import app
+from app.models import AgeGroup, Base, Branch, Student, Trainer, TrainingGroup
+from app.security import hash_pin
+
+API_KEY = "test-api-key"
+DEFAULT_PIN = "1234"
+
+
+async def seed_test_data() -> None:
+    async with async_session_maker() as session:
+        async with session.begin():
+            branch = (await session.execute(select(Branch).where(Branch.name == "Orlova"))).scalar_one()
+
+            trainer = Trainer(first_name="Petr", last_name="Matej", pin_hash=hash_pin(DEFAULT_PIN))
+            trainer.branches.append(branch)
+
+            students = [
+                Student(first_name="A", last_name="Novak", age_group=AgeGroup.U8),
+                Student(first_name="B", last_name="Svoboda", age_group=AgeGroup.U10),
+                Student(first_name="C", last_name="Dvorak", age_group=AgeGroup.U12),
+            ]
+            for student in students:
+                student.branches.append(branch)
+                session.add(student)
+
+            session.add(trainer)
+            await session.flush()
+
+            group = TrainingGroup(
+                branch_id=branch.id,
+                name="Test 16:00-17:30",
+                start_time=__import__("datetime").time(16, 0),
+                end_time=__import__("datetime").time(17, 30),
+            )
+            group.students.extend(students)
+            session.add(group)
+
+
+@pytest.fixture
+async def client():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    await migrate_schema()
+    await seed_branches()
+    await seed_test_data()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+def write_headers(token: str | None = None) -> dict[str, str]:
+    headers = {"X-API-Key": API_KEY}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+async def login_trainer(client: AsyncClient, trainer_id: int = 1) -> str:
+    response = await client.post(
+        f"/trainers/{trainer_id}/verify-pin",
+        json={"pin": DEFAULT_PIN},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+async def first_group_id(client: AsyncClient) -> int:
+    response = await client.get("/training-groups")
+    assert response.status_code == 200
+    groups = response.json()
+    assert groups
+    return groups[0]["id"]

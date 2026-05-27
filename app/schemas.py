@@ -108,6 +108,7 @@ class TrainerPatch(BaseModel):
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     branch_ids: list[int] | None = Field(default=None, min_length=1)
+    pin: str | None = Field(default=None, min_length=4, max_length=8)
 
     @field_validator("branch_ids", mode="after")
     @classmethod
@@ -119,6 +120,17 @@ class TrainerPatch(BaseModel):
         if any(bid < 1 for bid in v):
             raise ValueError("branch_ids must be >= 1.")
         return v
+
+
+class TrainerPinVerify(BaseModel):
+    pin: str = Field(min_length=4, max_length=8)
+
+
+class TrainerAuthToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+    trainer_id: int
 
 
 class ParentCreate(BaseModel):
