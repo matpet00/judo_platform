@@ -60,6 +60,15 @@ python scripts/create_trainer_petr_matej_orlova.py
 | POST | `/students` | Žák: `first_name`, `last_name`, `age_group`, **`branch_ids`** (1+ poboček, M:N), `parents` … |
 | PATCH | `/students/{id}` | Částečná úprava; volitelně **`branch_ids`** (nahradí celý seznam, min. 1) nebo **`parents`** … |
 | DELETE | `/students/{id}` | Smazání žáka |
+| GET | `/training-sessions` | Seznam tréninků (volitelně `?branch_id=`, `?trainer_id=`) |
+| POST | `/training-sessions` | Nový trénink (`branch_id`, `starts_at`, volitelně `trainer_id`, `age_group`, `notes`) |
+| GET | `/training-sessions/{id}` | Trénink včetně **`attendance_records`** |
+| PATCH | `/training-sessions/{id}` | Částečná úprava tréninku |
+| DELETE | `/training-sessions/{id}` | Smazání tréninku (včetně docházky) |
+| GET | `/training-sessions/{id}/attendance` | Docházka na tréninku |
+| POST | `/training-sessions/{id}/attendance` | Záznam docházky (`student_id`, `status`, volitelně `recorded_by_id`) |
+| GET/PATCH/DELETE | `/training-sessions/{id}/attendance/{attendance_id}` | Jedna záznam docházky |
+| GET | `/students/{id}/attendance` | Historie docházky žáka (volitelně `?session_id=`) |
 | POST | `/mail/parents` | E-mail rodičům (`parent_ids`, `subject`, `body`) — vyžaduje SMTP v `.env` |
 
 **PATCH:** posílej jen pole, která chceš změnit; prázdné tělo → **400** `No fields to update.`
@@ -67,6 +76,8 @@ python scripts/create_trainer_petr_matej_orlova.py
 Bez `SMTP_HOST` a `SMTP_FROM` vrátí `/mail/parents` **503**.
 
 **Žák i trenér ↔ pobočka:** vztah **M:N** — pole **`branch_ids`** při zápisu, v odpovědi **`branches`** (řazeno podle id pobočky).
+
+**Docházka:** `status` je `present`, `absent` nebo `excused`. Žák musí být na pobočce tréninku; pokud má trénink `age_group`, musí sedět se žákem. Jedna docházka na pár (trénink, žák) — duplicitní **POST** → **409**.
 
 **Výchozí seed poboček** (viz `DEFAULT_BRANCHES` v [`app/models.py`](app/models.py)): Orlova, Dolni Lutyne, Petrvald + fiktivní adresy.
 

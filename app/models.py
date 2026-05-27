@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, func
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -12,6 +12,12 @@ class AgeGroup(str, enum.Enum):
     U14 = "U14"
     U16 = "U16"
     U18 = "U18"
+
+
+class AttendanceStatus(str, enum.Enum):
+    present = "present"
+    absent = "absent"
+    excused = "excused"
 
 
 # (název v API/DB, fiktivní adresa pro vývoj — seed při startu)
@@ -69,6 +75,7 @@ class Branch(Base):
         secondary=student_branches,
         back_populates="branches",
     )
+    training_sessions: Mapped[list["TrainingSession"]] = relationship(back_populates="branch")
 
 
 class Trainer(Base):
@@ -88,6 +95,8 @@ class Trainer(Base):
         secondary=trainer_branches,
         back_populates="trainers",
     )
+    training_sessions: Mapped[list["TrainingSession"]] = relationship(back_populates="trainer")
+    recorded_attendance: Mapped[list["AttendanceRecord"]] = relationship(back_populates="recorded_by")
 
 
 class Parent(Base):
@@ -135,3 +144,54 @@ class Student(Base):
         secondary=student_parents,
         back_populates="children",
     )
+    attendance_records: Mapped[list["AttendanceRecord"]] = relationship(back_populates="student")
+
+
+class TrainingSession(Base):
+    __tablename__ = "training_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    age_group: Mapped[AgeGroup | None] = mapped_column(
+        Enum(AgeGroup, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
+        nullable=True,
+    )
+    notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    branch: Mapped[Branch] = relationship(back_populates="training_sessions")
+    trainer: Mapped[Trainer | None] = relationship(back_populates="training_sessions")
+    attendance_records: Mapped[list["AttendanceRecord"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+
+
+class AttendanceRecord(Base):
+    __tablename__ = "attendance_records"
+    __table_args__ = (UniqueConstraint("session_id", "student_id", name="uq_attendance_session_student"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("training_sessions.id", ondelete="CASCADE"))
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"))
+    status: Mapped[AttendanceStatus] = mapped_column(
+        Enum(AttendanceStatus, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=16),
+    )
+    recorded_by_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    session: Mapped[TrainingSession] = relationship(back_populates="attendance_records")
+    student: Mapped[Student] = relationship(back_populates="attendance_records")
+    recorded_by: Mapped[Trainer | None] = relationship(back_populates="recorded_attendance")

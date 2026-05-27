@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Branch, Parent, Student
+from app.models import AttendanceRecord, Branch, Parent, Student, TrainingSession
 from app.schemas import (
+    AttendanceRecordWithSessionRead,
     BranchRead,
     ParentRead,
     StudentCreate,
@@ -13,6 +14,7 @@ from app.schemas import (
     StudentPatch,
     StudentRead,
 )
+from app.routers.training_sessions import attendance_with_session_to_read
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -183,3 +185,32 @@ async def delete_student(student_id: int, db: AsyncSession = Depends(get_db)) ->
         raise HTTPException(status_code=404, detail="Student not found.")
     await db.delete(student)
     await db.commit()
+
+
+@router.get("/{student_id}/attendance", response_model=list[AttendanceRecordWithSessionRead])
+async def list_student_attendance(
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    session_id: int | None = Query(default=None, ge=1),
+) -> list[AttendanceRecordWithSessionRead]:
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    stmt = (
+        select(AttendanceRecord)
+        .where(AttendanceRecord.student_id == student_id)
+        .options(
+            selectinload(AttendanceRecord.student),
+            selectinload(AttendanceRecord.recorded_by),
+            selectinload(AttendanceRecord.session).selectinload(TrainingSession.branch),
+            selectinload(AttendanceRecord.session).selectinload(TrainingSession.trainer),
+        )
+        .order_by(AttendanceRecord.updated_at.desc(), AttendanceRecord.id.desc())
+    )
+    if session_id is not None:
+        stmt = stmt.where(AttendanceRecord.session_id == session_id)
+
+    result = await db.execute(stmt)
+    records = result.scalars().unique().all()
+    return [attendance_with_session_to_read(r) for r in records]

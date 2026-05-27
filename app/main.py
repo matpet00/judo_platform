@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database import init_db
-from app.routers import branches, mail, parents, students, trainers
+from app.routers import branches, mail, parents, students, trainers, training_sessions
 
 
 @asynccontextmanager
@@ -19,6 +19,7 @@ app.include_router(branches.router)
 app.include_router(parents.router)
 app.include_router(students.router)
 app.include_router(mail.router)
+app.include_router(training_sessions.router)
 
 
 @app.get("/health")

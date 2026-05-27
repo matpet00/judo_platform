@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.models import DEFAULT_BRANCHES, AgeGroup
+from app.models import DEFAULT_BRANCHES, AgeGroup, AttendanceStatus
 
 _EX_BRANCH_NAME, _EX_BRANCH_ADDR = DEFAULT_BRANCHES[0]
 
@@ -260,3 +260,87 @@ class MailToParentsRequest(BaseModel):
 class MailToParentsResponse(BaseModel):
     sent_to: list[EmailStr] = Field(examples=[["marie.novakova@example.com"]])
     message: str = Field(default="ok", examples=["ok"])
+
+
+class TrainingSessionCreate(BaseModel):
+    branch_id: int = Field(ge=1)
+    trainer_id: int | None = Field(default=None, ge=1)
+    starts_at: datetime
+    age_group: AgeGroup | None = None
+    notes: str | None = Field(default=None, max_length=512)
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def strip_notes(cls, v: object) -> object:
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
+
+
+class TrainingSessionPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    branch_id: int | None = Field(default=None, ge=1)
+    trainer_id: int | None = Field(default=None, ge=1)
+    starts_at: datetime | None = None
+    age_group: AgeGroup | None = None
+    notes: str | None = Field(default=None, max_length=512)
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def strip_optional_notes(cls, v: object) -> object:
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
+
+
+class TrainingSessionRead(BaseModel):
+    id: int = Field(examples=[1])
+    branch_id: int = Field(examples=[1])
+    trainer_id: int | None = Field(examples=[1])
+    starts_at: datetime
+    age_group: AgeGroup | None = Field(examples=[AgeGroup.U10])
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    branch: BranchRead
+    trainer: TrainerBrief | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class AttendanceRecordCreate(BaseModel):
+    student_id: int = Field(ge=1)
+    status: AttendanceStatus = Field(examples=[AttendanceStatus.present])
+    recorded_by_id: int | None = Field(default=None, ge=1)
+
+
+class AttendanceRecordPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: AttendanceStatus | None = None
+    recorded_by_id: int | None = Field(default=None, ge=1)
+
+
+class AttendanceRecordRead(BaseModel):
+    id: int = Field(examples=[1])
+    session_id: int = Field(examples=[1])
+    student_id: int = Field(examples=[1])
+    status: AttendanceStatus = Field(examples=[AttendanceStatus.present])
+    recorded_by_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    student: StudentBrief
+    recorded_by: TrainerBrief | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TrainingSessionDetailRead(TrainingSessionRead):
+    attendance_records: list[AttendanceRecordRead] = Field(default_factory=list)
+
+
+class AttendanceRecordWithSessionRead(AttendanceRecordRead):
+    session: TrainingSessionRead
