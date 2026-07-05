@@ -38,6 +38,20 @@ class NotificationAudience(str, enum.Enum):
     parent = "parent"
 
 
+class EventType(str, enum.Enum):
+    tournament = "tournament"
+    training = "training"
+    meeting = "meeting"
+    seminar = "seminar"
+    other = "other"
+
+
+class RsvpStatus(str, enum.Enum):
+    yes = "yes"
+    no = "no"
+    maybe = "maybe"
+
+
 # (název v API/DB, fiktivní adresa pro vývoj — seed při startu)
 DEFAULT_BRANCHES: tuple[tuple[str, str], ...] = (
     ("Orlova", "Hlavní třída 1285/45, 735 14 Orlová"),
@@ -243,6 +257,7 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(160))
     body: Mapped[str] = mapped_column(String(4000))
     author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=True)
     visible_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     grace_seconds: Mapped[int] = mapped_column(Integer, server_default="0")
     last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -409,3 +424,122 @@ class ChatMessage(Base):
     conversation: Mapped[ChatConversation] = relationship(back_populates="messages")
     sender_trainer: Mapped[Trainer | None] = relationship()
     sender_parent: Mapped[Parent | None] = relationship()
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(String(4000), server_default="")
+    event_type: Mapped[EventType] = mapped_column(
+        Enum(EventType, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=16),
+    )
+    location: Mapped[str] = mapped_column(String(512), server_default="")
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    author_trainer: Mapped[Trainer | None] = relationship()
+    targets: Mapped[list["EventTarget"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+    )
+    comments: Mapped[list["EventComment"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+    )
+    attachments: Mapped[list["EventAttachment"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+    )
+    rsvps: Mapped[list["EventRsvp"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+    )
+
+
+class EventTarget(Base):
+    __tablename__ = "event_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    audience: Mapped[NotificationAudience] = mapped_column(
+        Enum(NotificationAudience, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=16),
+    )
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"), nullable=True)
+    age_group: Mapped[AgeGroup | None] = mapped_column(
+        Enum(AgeGroup, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
+        nullable=True,
+    )
+
+    event: Mapped[Event] = relationship(back_populates="targets")
+    branch: Mapped[Branch | None] = relationship()
+
+
+class EventComment(Base):
+    __tablename__ = "event_comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    author_parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="SET NULL"), nullable=True)
+    body: Mapped[str] = mapped_column(String(4000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    event: Mapped[Event] = relationship(back_populates="comments")
+    author_trainer: Mapped[Trainer | None] = relationship()
+    author_parent: Mapped[Parent | None] = relationship()
+
+
+class EventAttachment(Base):
+    __tablename__ = "event_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(128), server_default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, server_default="0")
+    stored_name: Mapped[str] = mapped_column(String(128))
+    uploaded_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    uploaded_parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    event: Mapped[Event] = relationship(back_populates="attachments")
+
+
+class EventRsvp(Base):
+    __tablename__ = "event_rsvps"
+    __table_args__ = (
+        UniqueConstraint("event_id", "trainer_id", name="uq_event_rsvp_trainer"),
+        UniqueConstraint("event_id", "parent_id", name="uq_event_rsvp_parent"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="CASCADE"), nullable=True)
+    status: Mapped[RsvpStatus] = mapped_column(
+        Enum(RsvpStatus, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    event: Mapped[Event] = relationship(back_populates="rsvps")
+    trainer: Mapped[Trainer | None] = relationship()
+    parent: Mapped[Parent | None] = relationship()

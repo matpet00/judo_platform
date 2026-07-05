@@ -76,6 +76,8 @@ async def migrate_schema() -> None:
             # Existing notifications keep the previous 7-day grace period after expiry.
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN grace_seconds INTEGER DEFAULT 604800"))
             await conn.execute(text("UPDATE notifications SET grace_seconds = 604800 WHERE grace_seconds IS NULL"))
+        if notification_columns and "event_id" not in notification_columns:
+            await conn.execute(text("ALTER TABLE notifications ADD COLUMN event_id INTEGER REFERENCES events(id)"))
 
         result = await conn.execute(text("PRAGMA table_info(notification_targets)"))
         target_columns = {row[1] for row in result.fetchall()}

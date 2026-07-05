@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     jwt_ttl_hours: int = 8
     pin_pepper: str = "dev-pin-pepper-change-me"
     allowed_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
+    upload_dir: str = "./uploads"
+    max_upload_bytes: int = 10 * 1024 * 1024
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

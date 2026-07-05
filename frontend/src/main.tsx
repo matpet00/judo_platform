@@ -10,6 +10,7 @@ import { TodayPage } from "./pages/TodayPage";
 import { SessionSwipePage } from "./pages/SessionSwipePage";
 import { ParentHomePage } from "./pages/ParentHomePage";
 import { ChatPage } from "./pages/ChatPage";
+import { EventsPage } from "./pages/EventsPage";
 import "./index.css";
 import "./components/StudentSwipeDeck.css";
 
@@ -38,6 +39,18 @@ function ParentChatRoute() {
   return <ChatPage role="parent" selfId={parent.id} homePath="/parent" />;
 }
 
+function TrainerEventsRoute() {
+  const { trainer, isAuthenticated } = useTrainer();
+  if (!isAuthenticated || !trainer) return <Navigate to="/" replace />;
+  return <EventsPage role="trainer" selfId={trainer.id} homePath="/" />;
+}
+
+function ParentEventsRoute() {
+  const { parent, isAuthenticated } = useParent();
+  if (!isAuthenticated || !parent) return <Navigate to="/" replace />;
+  return <EventsPage role="parent" selfId={parent.id} homePath="/parent" />;
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -51,8 +64,10 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/today" element={<TodayPage />} />
               <Route path="/session/:id" element={<SessionRoute />} />
               <Route path="/chat" element={<TrainerChatRoute />} />
+              <Route path="/events" element={<TrainerEventsRoute />} />
               <Route path="/parent" element={<ParentHomePage />} />
               <Route path="/parent/chat" element={<ParentChatRoute />} />
+              <Route path="/parent/events" element={<ParentEventsRoute />} />
             </Routes>
           </BrowserRouter>
         </ParentProvider>

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,7 @@ from app.database import init_db
 from app.routers import (
     branches,
     chat,
+    events,
     mail,
     notifications,
     parents,
@@ -22,6 +24,7 @@ from app.security import WRITE_METHODS, check_api_write_key, is_public_write_pat
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     await init_db()
     yield
 
@@ -56,6 +59,7 @@ app.include_router(training_groups.router)
 app.include_router(training_sessions.router)
 app.include_router(notifications.router)
 app.include_router(chat.router)
+app.include_router(events.router)
 
 
 @app.get("/health")

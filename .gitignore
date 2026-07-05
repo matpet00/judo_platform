@@ -4,5 +4,6 @@ __pycache__/
 .env
 judo.db
 payload_examples.txt
+uploads/
 frontend/node_modules/
 frontend/dist/

@@ -1,22 +1,18 @@
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.deps import Viewer, get_viewer, viewer_can_see_targets
 from app.models import (
-    AgeGroup,
     Branch,
     Notification,
-    NotificationAudience,
     NotificationComment,
     NotificationReadReceipt,
     NotificationTarget,
-    Parent,
-    Student,
     Trainer,
 )
 from app.schemas import (
@@ -29,43 +25,11 @@ from app.schemas import (
     ParentBrief,
     TrainerBrief,
 )
-from app.security import decode_any_token, require_trainer_token
+from app.security import require_trainer_token
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 DEFAULT_VISIBLE_FOR = timedelta(days=7)
-
-
-@dataclass
-class Viewer:
-    kind: str  # "trainer" | "parent"
-    trainer_id: int | None = None
-    parent_id: int | None = None
-    branch_ids: set[int] = field(default_factory=set)
-    # For parents: one (branch_ids, age_group) tuple per child.
-    children: list[tuple[set[int], AgeGroup]] = field(default_factory=list)
-
-
-async def get_viewer(
-    authorization: str | None = Header(default=None),
-    db: AsyncSession = Depends(get_db),
-) -> Viewer:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token.")
-    kind, subject_id = decode_any_token(authorization.removeprefix("Bearer ").strip())
-    if kind == "trainer":
-        trainer = await db.get(Trainer, subject_id, options=[selectinload(Trainer.branches)])
-        branch_ids = {branch.id for branch in trainer.branches} if trainer is not None else set()
-        return Viewer(kind="trainer", trainer_id=subject_id, branch_ids=branch_ids)
-    parent = await db.get(
-        Parent,
-        subject_id,
-        options=[selectinload(Parent.children).selectinload(Student.branches)],
-    )
-    children: list[tuple[set[int], AgeGroup]] = []
-    if parent is not None:
-        children = [({b.id for b in child.branches}, child.age_group) for child in parent.children]
-    return Viewer(kind="parent", parent_id=subject_id, children=children)
 
 
 def notification_now() -> datetime:
@@ -206,6 +170,7 @@ def _notification_to_read(notification: Notification, viewer: Viewer, now: datet
         title=notification.title,
         body=notification.body,
         author_trainer_id=notification.author_trainer_id,
+        event_id=notification.event_id,
         visible_until=_as_aware_utc(notification.visible_until),
         hide_after=hide_after,
         visibility_state=_visibility_state(notification, now),
@@ -225,33 +190,10 @@ def _notification_to_read(notification: Notification, viewer: Viewer, now: datet
     )
 
 
-def _parent_matches_target(viewer: Viewer, target: NotificationTarget) -> bool:
-    for branch_ids, age_group in viewer.children:
-        if target.branch_id is not None and target.branch_id not in branch_ids:
-            continue
-        if target.age_group is not None and target.age_group != age_group:
-            continue
-        return True
-    return False
-
-
 def _visible_to_viewer(notification: Notification, viewer: Viewer) -> bool:
-    if viewer.kind == "trainer":
-        if notification.author_trainer_id == viewer.trainer_id:
-            return True
-        for target in notification.targets:
-            if target.audience != NotificationAudience.trainer:
-                continue
-            if target.branch_id is None or target.branch_id in viewer.branch_ids:
-                return True
-        return False
-
-    for target in notification.targets:
-        if target.audience != NotificationAudience.parent:
-            continue
-        if _parent_matches_target(viewer, target):
-            return True
-    return False
+    if viewer.kind == "trainer" and notification.author_trainer_id == viewer.trainer_id:
+        return True
+    return viewer_can_see_targets(viewer, notification.targets)
 
 
 def _visible_on_board(notification: Notification, now: datetime) -> bool:

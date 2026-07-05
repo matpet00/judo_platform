@@ -3,7 +3,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models import DEFAULT_BRANCHES, AgeGroup, AttendanceStatus, NotificationAudience
+from app.models import (
+    DEFAULT_BRANCHES,
+    AgeGroup,
+    AttendanceStatus,
+    EventType,
+    NotificationAudience,
+    RsvpStatus,
+)
 
 _EX_BRANCH_NAME, _EX_BRANCH_ADDR = DEFAULT_BRANCHES[0]
 
@@ -714,6 +721,7 @@ class NotificationRead(BaseModel):
     title: str
     body: str
     author_trainer_id: int | None = None
+    event_id: int | None = None
     visible_until: datetime
     hide_after: datetime
     visibility_state: str
@@ -726,3 +734,144 @@ class NotificationRead(BaseModel):
     unread: bool = True
     has_read: bool = False
     comment_count: int = 0
+
+
+class EventTargetCreate(NotificationTargetCreate):
+    pass
+
+
+class EventCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=4000)
+    event_type: EventType = Field(examples=[EventType.tournament])
+    location: str = Field(default="", max_length=512)
+    starts_at: datetime
+    ends_at: datetime | None = None
+    targets: list[EventTargetCreate] = Field(default_factory=list)
+
+    @field_validator("title", "description", "location", mode="before")
+    @classmethod
+    def strip_event_text(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @model_validator(mode="after")
+    def validate_event(self) -> "EventCreate":
+        if not self.targets:
+            raise ValueError("Event needs at least one target.")
+        if self.ends_at is not None and self.ends_at < self.starts_at:
+            raise ValueError("ends_at must be at or after starts_at.")
+        return self
+
+
+class EventPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=4000)
+    event_type: EventType | None = None
+    location: str | None = Field(default=None, max_length=512)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    targets: list[EventTargetCreate] | None = None
+
+    @field_validator("title", "description", "location", mode="before")
+    @classmethod
+    def strip_event_patch_text(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class EventTargetRead(BaseModel):
+    id: int
+    audience: NotificationAudience
+    branch_id: int | None = None
+    age_group: AgeGroup | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class EventCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def strip_event_comment_body(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class EventCommentRead(BaseModel):
+    id: int
+    event_id: int
+    author_trainer_id: int | None = None
+    author_parent_id: int | None = None
+    body: str
+    created_at: datetime
+    updated_at: datetime
+    author_trainer: TrainerBrief | None = None
+    author_parent: ParentBrief | None = None
+    can_delete: bool = False
+    can_edit: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class EventAttachmentRead(BaseModel):
+    id: int
+    event_id: int
+    filename: str
+    content_type: str
+    size_bytes: int
+    created_at: datetime
+    can_delete: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class EventRsvpSet(BaseModel):
+    status: RsvpStatus = Field(examples=[RsvpStatus.yes])
+
+
+class EventRsvpParticipant(BaseModel):
+    kind: ChatParticipantKind
+    id: int
+    name: str
+    status: RsvpStatus
+
+
+class EventRsvpSummary(BaseModel):
+    yes: int = 0
+    no: int = 0
+    maybe: int = 0
+    participants: list[EventRsvpParticipant] = Field(default_factory=list)
+
+
+class EventRead(BaseModel):
+    id: int
+    title: str
+    description: str
+    event_type: EventType
+    location: str
+    starts_at: datetime
+    ends_at: datetime | None = None
+    author_trainer_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    author_trainer: TrainerBrief | None = None
+    targets: list[EventTargetRead] = Field(default_factory=list)
+    can_edit: bool = False
+    my_rsvp: RsvpStatus | None = None
+    comment_count: int = 0
+    attachment_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class EventDetailRead(EventRead):
+    comments: list[EventCommentRead] = Field(default_factory=list)
+    attachments: list[EventAttachmentRead] = Field(default_factory=list)
+    rsvp_summary: EventRsvpSummary | None = None

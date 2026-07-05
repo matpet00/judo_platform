@@ -1137,3 +1137,395 @@ textarea {
 .chat-input input {
   flex: 1;
 }
+
+/* ── Events / plánovač akcí ───────────────────────────── */
+:root {
+  --evt-tournament: #d4af37;
+  --evt-training: #3d6a8a;
+  --evt-meeting: #8a5a9e;
+  --evt-seminar: #1b7a54;
+  --evt-other: #8b8798;
+}
+
+.events-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.events-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.events-view-toggle button {
+  background: var(--surface);
+  color: var(--muted);
+  border: none;
+  padding: 8px 18px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.events-view-toggle button.is-active {
+  background: var(--gold);
+  color: #1a1408;
+  font-weight: 600;
+}
+
+.events-compose__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .events-compose__row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--evt-other);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.event-type--tournament { border-left-color: var(--evt-tournament); }
+.event-type--training { border-left-color: var(--evt-training); }
+.event-type--meeting { border-left-color: var(--evt-meeting); }
+.event-type--seminar { border-left-color: var(--evt-seminar); }
+.event-type--other { border-left-color: var(--evt-other); }
+
+.event-card--today {
+  box-shadow: 0 0 0 1px var(--gold), 0 0 18px rgba(212, 175, 55, 0.25);
+}
+
+.event-card__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.event-type-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--evt-other);
+}
+.event-type-dot--tournament { background: var(--evt-tournament); }
+.event-type-dot--training { background: var(--evt-training); }
+.event-type-dot--meeting { background: var(--evt-meeting); }
+.event-type-dot--seminar { background: var(--evt-seminar); }
+.event-type-dot--other { background: var(--evt-other); }
+
+.event-card__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-card__main h3 {
+  margin: 4px 0 2px;
+  font-size: 1.05rem;
+}
+
+.event-card__main small {
+  color: var(--muted);
+}
+
+.event-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.event-type-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #12100a;
+  background: var(--evt-other);
+}
+.event-type-badge--tournament { background: var(--evt-tournament); }
+.event-type-badge--training { background: var(--evt-training); color: #eaf2f8; }
+.event-type-badge--meeting { background: var(--evt-meeting); color: #f4ecf7; }
+.event-type-badge--seminar { background: var(--evt-seminar); color: #eafaf2; }
+.event-type-badge--other { background: var(--evt-other); }
+
+.event-card__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.event-countdown {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.event-countdown--today {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.event-rsvp-chip {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.event-rsvp-chip--yes { color: #6fdcac; border-color: var(--present); }
+.event-rsvp-chip--no { color: #e88; border-color: var(--absent); }
+.event-rsvp-chip--maybe { color: #9cc4e0; border-color: var(--excused); }
+
+.event-detail {
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.event-detail__description {
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+}
+
+.event-detail__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 0;
+}
+.event-detail__facts dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.event-detail__facts dd {
+  margin: 2px 0 0;
+}
+
+.event-detail__subtitle {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: var(--gold);
+}
+
+.event-rsvp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.event-rsvp__label {
+  color: var(--muted);
+}
+.event-rsvp__buttons {
+  display: inline-flex;
+  gap: 8px;
+}
+.event-rsvp__btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--cream);
+  cursor: pointer;
+}
+.event-rsvp__btn--yes.is-active { background: var(--present); border-color: var(--present); }
+.event-rsvp__btn--no.is-active { background: var(--absent); border-color: var(--absent); }
+.event-rsvp__btn--maybe.is-active { background: var(--excused); border-color: var(--excused); }
+
+.event-summary {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.event-summary__counts {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+.event-summary__count--yes { color: #6fdcac; }
+.event-summary__count--maybe { color: #9cc4e0; }
+.event-summary__count--no { color: #e88; }
+.event-summary__list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.event-attachments__list {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.event-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.event-attachment__name {
+  background: none;
+  border: none;
+  color: var(--gold);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.event-attachment__size {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.event-attachment__delete {
+  background: none;
+  border: none;
+  color: var(--absent);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.event-attachments__empty,
+.event-attachments__upload {
+  color: var(--muted);
+}
+.event-attachments__upload input {
+  display: none;
+}
+.event-attachments__upload {
+  display: inline-block;
+  cursor: pointer;
+}
+
+/* Calendar */
+.event-calendar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.event-calendar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.event-calendar__title {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.event-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.event-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.event-calendar__cell {
+  min-height: 74px;
+  background: var(--bg-elevated);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.event-calendar__cell.is-muted {
+  opacity: 0.4;
+}
+.event-calendar__cell.is-today {
+  border-color: var(--gold);
+}
+.event-calendar__cell.is-clickable {
+  cursor: pointer;
+}
+.event-calendar__cell.is-clickable:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.event-calendar__day {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.event-calendar__events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.event-calendar__pill {
+  border: none;
+  border-left: 3px solid var(--evt-other);
+  background: var(--surface);
+  color: var(--cream);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 0.68rem;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.event-calendar__pill.is-active {
+  outline: 1px solid var(--gold);
+}
+.events-list--calendar-detail {
+  margin-top: 14px;
+}
+
+.event-detail__owner-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}

@@ -52,6 +52,39 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+async function uploadRequest<T>(path: string, formData: FormData, role: Role = "trainer"): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (WRITE_KEY) headers["X-API-Key"] = WRITE_KEY;
+  const token = role === "parent" ? getParentToken() : getTrainerToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, { method: "POST", body: formData, headers });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(parseApiError(detail, res.statusText));
+  }
+  return res.json() as Promise<T>;
+}
+
+async function downloadRequest(path: string, filename: string, role: Role = "trainer"): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = role === "parent" ? getParentToken() : getTrainerToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, { headers });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(parseApiError(detail, res.statusText));
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export { todayIso } from "../lib/sessionRouting";
 
 export const api = {
@@ -189,6 +222,48 @@ export const api = {
     }, true, false, role),
   deleteChatMessage: (conversationId: number, messageId: number, role: Role = "trainer") =>
     request<void>(`/chat/conversations/${conversationId}/messages/${messageId}`, { method: "DELETE" }, true, false, role),
+  events: (role: Role = "trainer") =>
+    request<import("./types").EventItem[]>("/events", undefined, false, true, role),
+  event: (id: number, role: Role = "trainer") =>
+    request<import("./types").EventDetail>(`/events/${id}`, undefined, false, true, role),
+  createEvent: (payload: import("./types").EventCreate) =>
+    request<import("./types").EventDetail>("/events", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true),
+  updateEvent: (id: number, payload: Partial<import("./types").EventCreate>) =>
+    request<import("./types").EventDetail>(`/events/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true),
+  deleteEvent: (id: number) =>
+    request<void>(`/events/${id}`, { method: "DELETE" }, true),
+  setRsvp: (id: number, status: import("./types").RsvpStatus, role: Role = "trainer") =>
+    request<import("./types").EventDetail>(`/events/${id}/rsvp`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }, true, false, role),
+  addEventComment: (id: number, body: string, role: Role = "trainer") =>
+    request<import("./types").EventComment>(`/events/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }, true, false, role),
+  updateEventComment: (eventId: number, commentId: number, body: string, role: Role = "trainer") =>
+    request<import("./types").EventComment>(`/events/${eventId}/comments/${commentId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    }, true, false, role),
+  deleteEventComment: (eventId: number, commentId: number, role: Role = "trainer") =>
+    request<void>(`/events/${eventId}/comments/${commentId}`, { method: "DELETE" }, true, false, role),
+  uploadEventAttachment: (eventId: number, file: File, role: Role = "trainer") => {
+    const form = new FormData();
+    form.append("file", file);
+    return uploadRequest<import("./types").EventAttachment>(`/events/${eventId}/attachments`, form, role);
+  },
+  downloadEventAttachment: (eventId: number, attachmentId: number, filename: string, role: Role = "trainer") =>
+    downloadRequest(`/events/${eventId}/attachments/${attachmentId}/download`, filename, role),
+  deleteEventAttachment: (eventId: number, attachmentId: number, role: Role = "trainer") =>
+    request<void>(`/events/${eventId}/attachments/${attachmentId}`, { method: "DELETE" }, true, false, role),
 };
 
 function toSummary(record: import("./types").AttendanceRecordRead): AttendanceSummary {

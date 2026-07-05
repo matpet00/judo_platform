@@ -249,3 +249,92 @@ export interface NotificationCreate {
   grace_amount?: number | null;
   grace_unit?: NotificationDurationUnit | null;
 }
+
+export type EventType = "tournament" | "training" | "meeting" | "seminar" | "other";
+export type RsvpStatus = "yes" | "no" | "maybe";
+
+export interface EventTarget {
+  id: number;
+  audience: NotificationAudience;
+  branch_id: number | null;
+  age_group: AgeGroup | null;
+}
+
+export interface EventComment {
+  id: number;
+  event_id: number;
+  author_trainer_id: number | null;
+  author_parent_id: number | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  author_trainer: TrainerBrief | null;
+  author_parent: ParentBrief | null;
+  can_delete: boolean;
+  can_edit: boolean;
+}
+
+export interface EventAttachment {
+  id: number;
+  event_id: number;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+  can_delete: boolean;
+}
+
+export interface EventRsvpParticipant {
+  kind: ChatParticipantKind;
+  id: number;
+  name: string;
+  status: RsvpStatus;
+}
+
+export interface EventRsvpSummary {
+  yes: number;
+  no: number;
+  maybe: number;
+  participants: EventRsvpParticipant[];
+}
+
+export interface EventItem {
+  id: number;
+  title: string;
+  description: string;
+  event_type: EventType;
+  location: string;
+  starts_at: string;
+  ends_at: string | null;
+  author_trainer_id: number | null;
+  created_at: string;
+  updated_at: string;
+  author_trainer: TrainerBrief | null;
+  targets: EventTarget[];
+  can_edit: boolean;
+  my_rsvp: RsvpStatus | null;
+  comment_count: number;
+  attachment_count: number;
+}
+
+export interface EventDetail extends EventItem {
+  comments: EventComment[];
+  attachments: EventAttachment[];
+  rsvp_summary: EventRsvpSummary | null;
+}
+
+export interface EventTargetCreate {
+  audience: NotificationAudience;
+  branch_id?: number | null;
+  age_group?: AgeGroup | null;
+}
+
+export interface EventCreate {
+  title: string;
+  description?: string;
+  event_type: EventType;
+  location?: string;
+  starts_at: string;
+  ends_at?: string | null;
+  targets: EventTargetCreate[];
+}
