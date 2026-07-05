@@ -154,6 +154,41 @@ export const api = {
     }, true, false, role),
   deleteNotificationComment: (notificationId: number, commentId: number, role: Role = "trainer") =>
     request<void>(`/notifications/${notificationId}/comments/${commentId}`, { method: "DELETE" }, true, false, role),
+  chatContacts: (role: Role = "trainer") =>
+    request<import("./types").ChatContact[]>("/chat/contacts", undefined, false, true, role),
+  chatConversations: (role: Role = "trainer") =>
+    request<import("./types").ChatConversation[]>("/chat/conversations", undefined, false, true, role),
+  startConversation: (counterpartKind: import("./types").ChatParticipantKind, counterpartId: number, role: Role = "trainer") =>
+    request<import("./types").ChatConversation>("/chat/conversations", {
+      method: "POST",
+      body: JSON.stringify({ counterpart_kind: counterpartKind, counterpart_id: counterpartId }),
+    }, true, false, role),
+  chatMessages: (conversationId: number, role: Role = "trainer", afterId?: number) =>
+    request<import("./types").ChatMessage[]>(
+      `/chat/conversations/${conversationId}/messages${afterId ? `?after_id=${afterId}` : ""}`,
+      undefined,
+      false,
+      true,
+      role,
+    ),
+  sendChatMessage: (conversationId: number, body: string, role: Role = "trainer") =>
+    request<import("./types").ChatMessage>(`/chat/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }, true, false, role),
+  markConversationRead: (conversationId: number, role: Role = "trainer") =>
+    request<import("./types").ChatConversation>(`/chat/conversations/${conversationId}/read`, {
+      method: "POST",
+    }, true, false, role),
+  deleteConversation: (conversationId: number, role: Role = "trainer") =>
+    request<void>(`/chat/conversations/${conversationId}`, { method: "DELETE" }, true, false, role),
+  editChatMessage: (conversationId: number, messageId: number, body: string, role: Role = "trainer") =>
+    request<import("./types").ChatMessage>(`/chat/conversations/${conversationId}/messages/${messageId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    }, true, false, role),
+  deleteChatMessage: (conversationId: number, messageId: number, role: Role = "trainer") =>
+    request<void>(`/chat/conversations/${conversationId}/messages/${messageId}`, { method: "DELETE" }, true, false, role),
 };
 
 function toSummary(record: import("./types").AttendanceRecordRead): AttendanceSummary {

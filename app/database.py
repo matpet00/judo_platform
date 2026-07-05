@@ -116,6 +116,11 @@ async def migrate_schema() -> None:
             )
             await conn.execute(text("DROP TABLE notification_reads_old"))
 
+        result = await conn.execute(text("PRAGMA table_info(chat_participants)"))
+        chat_participant_columns = {row[1] for row in result.fetchall()}
+        if chat_participant_columns and "hidden_at" not in chat_participant_columns:
+            await conn.execute(text("ALTER TABLE chat_participants ADD COLUMN hidden_at DATETIME"))
+
         result = await conn.execute(text("PRAGMA table_info(notification_comments)"))
         comment_columns = {row[1] for row in result.fetchall()}
         if comment_columns and "author_parent_id" not in comment_columns:

@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -88,6 +89,22 @@ async def require_trainer_token(authorization: str | None = Header(default=None)
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing trainer token.")
     return decode_trainer_token(authorization.removeprefix("Bearer ").strip())
+
+
+@dataclass(frozen=True)
+class Actor:
+    kind: str  # "trainer" | "parent"
+    trainer_id: int | None = None
+    parent_id: int | None = None
+
+
+async def get_actor(authorization: str | None = Header(default=None)) -> Actor:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token.")
+    kind, subject_id = decode_any_token(authorization.removeprefix("Bearer ").strip())
+    if kind == "trainer":
+        return Actor(kind="trainer", trainer_id=subject_id)
+    return Actor(kind="parent", parent_id=subject_id)
 
 
 async def require_parent_token(authorization: str | None = Header(default=None)) -> int:

@@ -54,6 +54,9 @@ export function ParentHomePage() {
           ))}
         </ul>
 
+        <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/chat")}>
+          Chat
+        </button>
         <button type="button" className="btn btn--ghost auth-back" onClick={logout}>
           Odhlásit
         </button>

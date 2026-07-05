@@ -182,6 +182,42 @@ export interface ParentBrief {
   last_name: string;
 }
 
+export type ChatParticipantKind = "trainer" | "parent";
+
+export interface ChatContact {
+  kind: ChatParticipantKind;
+  id: number;
+  name: string;
+  subtitle: string | null;
+}
+
+export interface ChatParticipantBrief {
+  kind: ChatParticipantKind;
+  id: number;
+  name: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  conversation_id: number;
+  sender_kind: ChatParticipantKind | null;
+  sender_id: number | null;
+  sender_name: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatConversation {
+  id: number;
+  is_group: boolean;
+  counterpart: ChatParticipantBrief | null;
+  last_message: ChatMessage | null;
+  last_message_at: string | null;
+  unread_count: number;
+  created_at: string;
+}
+
 export interface NotificationComment {
   id: number;
   notification_id: number;

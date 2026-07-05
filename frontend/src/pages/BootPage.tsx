@@ -72,6 +72,10 @@ export function BootPage() {
             <span className="trainer-card__name">Docházka</span>
             <span className="trainer-card__branch">Dnešní tréninky</span>
           </button>
+          <button type="button" className="trainer-card" onClick={() => navigate("/chat")}>
+            <span className="trainer-card__name">Chat</span>
+            <span className="trainer-card__branch">Zprávy 1-1</span>
+          </button>
         </div>
       </div>
     </div>

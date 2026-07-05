@@ -1,4 +1,5 @@
 from datetime import date, datetime, time
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -653,6 +654,59 @@ class NotificationCommentRead(BaseModel):
     can_edit: bool = False
 
     model_config = {"from_attributes": True}
+
+
+ChatParticipantKind = Literal["trainer", "parent"]
+
+
+class ChatContact(BaseModel):
+    kind: ChatParticipantKind
+    id: int
+    name: str
+    subtitle: str | None = None
+
+
+class ChatParticipantBrief(BaseModel):
+    kind: ChatParticipantKind
+    id: int
+    name: str
+
+
+class ChatMessageRead(BaseModel):
+    id: int
+    conversation_id: int
+    sender_kind: ChatParticipantKind | None = None
+    sender_id: int | None = None
+    sender_name: str | None = None
+    body: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatConversationRead(BaseModel):
+    id: int
+    is_group: bool = False
+    counterpart: ChatParticipantBrief | None = None
+    last_message: ChatMessageRead | None = None
+    last_message_at: datetime | None = None
+    unread_count: int = 0
+    created_at: datetime
+
+
+class ChatMessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def strip_message_body(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class StartConversation(BaseModel):
+    counterpart_kind: ChatParticipantKind
+    counterpart_id: int = Field(ge=1)
 
 
 class NotificationRead(BaseModel):

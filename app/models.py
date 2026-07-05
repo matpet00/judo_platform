@@ -1,7 +1,20 @@
 import enum
 from datetime import datetime, time
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, JSON, String, Table, Time, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Table,
+    Time,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -330,3 +343,69 @@ class AttendanceRecord(Base):
     session: Mapped[TrainingSession] = relationship(back_populates="attendance_records")
     student: Mapped[Student] = relationship(back_populates="attendance_records")
     recorded_by: Mapped[Trainer | None] = relationship(back_populates="recorded_attendance")
+
+
+class ChatConversation(Base):
+    __tablename__ = "chat_conversations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    is_group: Mapped[bool] = mapped_column(Boolean, server_default="0")
+    # Canonical key for 1-1 conversations, e.g. "parent:31|trainer:1"; NULL for groups.
+    dm_key: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    participants: Mapped[list["ChatParticipant"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+
+
+class ChatParticipant(Base):
+    __tablename__ = "chat_participants"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "trainer_id", name="uq_chat_participant_trainer"),
+        UniqueConstraint("conversation_id", "parent_id", name="uq_chat_participant_parent"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("chat_conversations.id", ondelete="CASCADE"))
+    trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="CASCADE"), nullable=True)
+    last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per-user soft delete: conversation hidden from this participant's list until new activity.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    conversation: Mapped[ChatConversation] = relationship(back_populates="participants")
+    trainer: Mapped[Trainer | None] = relationship()
+    parent: Mapped[Parent | None] = relationship()
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("chat_conversations.id", ondelete="CASCADE"))
+    sender_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    sender_parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="SET NULL"), nullable=True)
+    body: Mapped[str] = mapped_column(String(4000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    conversation: Mapped[ChatConversation] = relationship(back_populates="messages")
+    sender_trainer: Mapped[Trainer | None] = relationship()
+    sender_parent: Mapped[Parent | None] = relationship()
