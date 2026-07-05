@@ -79,12 +79,64 @@ async def migrate_schema() -> None:
         if notification_columns and "event_id" not in notification_columns:
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN event_id INTEGER REFERENCES events(id)"))
 
+        result = await conn.execute(text("PRAGMA table_info(events)"))
+        event_columns = {row[1] for row in result.fetchall()}
+        if event_columns and "reminder_sent" not in event_columns:
+            await conn.execute(text("ALTER TABLE events ADD COLUMN reminder_sent BOOLEAN DEFAULT 0"))
+
+        result = await conn.execute(text("PRAGMA table_info(training_groups)"))
+        group_columns = {row[1] for row in result.fetchall()}
+        if group_columns and "active_from" not in group_columns:
+            await conn.execute(text("ALTER TABLE training_groups ADD COLUMN active_from DATE"))
+        if group_columns and "active_until" not in group_columns:
+            await conn.execute(text("ALTER TABLE training_groups ADD COLUMN active_until DATE"))
+
+        result = await conn.execute(text("PRAGMA table_info(training_sessions)"))
+        session_columns = {row[1] for row in result.fetchall()}
+        if session_columns and "canceled" not in session_columns:
+            await conn.execute(text("ALTER TABLE training_sessions ADD COLUMN canceled BOOLEAN DEFAULT 0"))
+
         result = await conn.execute(text("PRAGMA table_info(notification_targets)"))
         target_columns = {row[1] for row in result.fetchall()}
         if target_columns and "branch_id" not in target_columns:
             await conn.execute(text("ALTER TABLE notification_targets ADD COLUMN branch_id INTEGER"))
         if target_columns and "age_group" not in target_columns:
             await conn.execute(text("ALTER TABLE notification_targets ADD COLUMN age_group VARCHAR(8)"))
+        if target_columns and "parent_id" not in target_columns:
+            await conn.execute(text("ALTER TABLE notification_targets ADD COLUMN parent_id INTEGER"))
+        if target_columns and "trainer_id" not in target_columns:
+            await conn.execute(text("ALTER TABLE notification_targets ADD COLUMN trainer_id INTEGER"))
+
+        result = await conn.execute(text("PRAGMA table_info(event_rsvps)"))
+        rsvp_columns = {row[1] for row in result.fetchall()}
+        if rsvp_columns and "student_id" not in rsvp_columns:
+            # Rebuild to add student_id and swap the parent-uniqueness for student-uniqueness.
+            # Old parent rows carry no child, so only trainer (self) rows are preserved.
+            await conn.execute(text("ALTER TABLE event_rsvps RENAME TO event_rsvps_old"))
+            await conn.execute(
+                text(
+                    "CREATE TABLE event_rsvps ("
+                    "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                    "event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE, "
+                    "trainer_id INTEGER REFERENCES trainers(id) ON DELETE CASCADE, "
+                    "parent_id INTEGER REFERENCES parents(id) ON DELETE CASCADE, "
+                    "student_id INTEGER REFERENCES students(id) ON DELETE CASCADE, "
+                    "status VARCHAR(8) NOT NULL, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "CONSTRAINT uq_event_rsvp_trainer UNIQUE (event_id, trainer_id), "
+                    "CONSTRAINT uq_event_rsvp_student UNIQUE (event_id, student_id))",
+                ),
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO event_rsvps "
+                    "(id, event_id, trainer_id, parent_id, student_id, status, created_at, updated_at) "
+                    "SELECT id, event_id, trainer_id, NULL, NULL, status, created_at, updated_at "
+                    "FROM event_rsvps_old WHERE trainer_id IS NOT NULL",
+                ),
+            )
+            await conn.execute(text("DROP TABLE event_rsvps_old"))
 
         result = await conn.execute(text("PRAGMA table_info(parents)"))
         parent_columns = {row[1] for row in result.fetchall()}

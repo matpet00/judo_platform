@@ -11,6 +11,7 @@ import { SessionSwipePage } from "./pages/SessionSwipePage";
 import { ParentHomePage } from "./pages/ParentHomePage";
 import { ChatPage } from "./pages/ChatPage";
 import { EventsPage } from "./pages/EventsPage";
+import { NotificationBell } from "./components/NotificationBell";
 import "./index.css";
 import "./components/StudentSwipeDeck.css";
 
@@ -69,6 +70,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/parent/chat" element={<ParentChatRoute />} />
               <Route path="/parent/events" element={<ParentEventsRoute />} />
             </Routes>
+            <NotificationBell />
           </BrowserRouter>
         </ParentProvider>
       </TrainerProvider>

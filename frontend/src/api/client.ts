@@ -107,6 +107,47 @@ export const api = {
     request<import("./types").TrainingGroup[]>(
       branchId ? `/training-groups?branch_id=${branchId}` : "/training-groups",
     ),
+  students: () => request<import("./types").StudentWithBranches[]>("/students"),
+  trainingGroup: (id: number) => request<import("./types").TrainingGroup>(`/training-groups/${id}`),
+  createTrainingGroup: (payload: import("./types").TrainingGroupCreate) =>
+    request<import("./types").TrainingGroup>("/training-groups", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true),
+  updateTrainingGroup: (id: number, payload: import("./types").TrainingGroupUpdate) =>
+    request<import("./types").TrainingGroup>(`/training-groups/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true),
+  replaceGroupStudents: (id: number, studentIds: number[]) =>
+    request<import("./types").TrainingGroup>(`/training-groups/${id}/students`, {
+      method: "PUT",
+      body: JSON.stringify({ student_ids: studentIds }),
+    }, true),
+  deleteTrainingGroup: (id: number) =>
+    request<void>(`/training-groups/${id}`, { method: "DELETE" }, true),
+  trainingOccurrences: (fromIso: string, toIso: string, role: Role = "trainer") => {
+    const params = new URLSearchParams({ from: fromIso, to: toIso });
+    return request<import("./types").TrainingOccurrence[]>(
+      `/training-groups/occurrences?${params}`,
+      undefined,
+      false,
+      true,
+      role,
+    );
+  },
+  cancelOccurrence: (sessionId: number, canceled: boolean) =>
+    request<import("./types").TrainingSessionSummary>(
+      `/training-sessions/${sessionId}/cancel?canceled=${canceled}`,
+      { method: "POST" },
+      true,
+    ),
+  attendanceReport: (groupId: number, month: string) =>
+    request<import("./types").AttendanceMonthlyReport>(
+      `/training-groups/${groupId}/attendance-report?month=${month}`,
+      undefined,
+      true,
+    ),
   listSessions: (sessionDate: string, branchId?: number) => {
     const params = new URLSearchParams({ session_date: sessionDate });
     if (branchId) params.set("branch_id", String(branchId));
@@ -238,10 +279,10 @@ export const api = {
     }, true),
   deleteEvent: (id: number) =>
     request<void>(`/events/${id}`, { method: "DELETE" }, true),
-  setRsvp: (id: number, status: import("./types").RsvpStatus, role: Role = "trainer") =>
+  setRsvp: (id: number, responses: import("./types").EventRsvpResponse[], role: Role = "trainer") =>
     request<import("./types").EventDetail>(`/events/${id}/rsvp`, {
       method: "POST",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ responses }),
     }, true, false, role),
   addEventComment: (id: number, body: string, role: Role = "trainer") =>
     request<import("./types").EventComment>(`/events/${id}/comments`, {

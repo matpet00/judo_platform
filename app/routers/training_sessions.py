@@ -92,6 +92,7 @@ def _session_to_read(session: TrainingSession) -> TrainingSessionRead:
         trainer_id=session.trainer_id,
         starts_at=session.starts_at,
         notes=session.notes,
+        canceled=bool(session.canceled),
         created_at=session.created_at,
         updated_at=session.updated_at,
         branch=BranchRead.model_validate(session.branch, from_attributes=True),
@@ -372,6 +373,19 @@ async def patch_training_session(
             ) from exc
         raise
 
+    return _session_to_read(await _get_session_or_404(db, session_id))
+
+
+@router.post("/{session_id}/cancel", response_model=TrainingSessionRead)
+async def set_training_session_canceled(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    canceled: bool = Query(default=True, description="Zrušit (true) nebo obnovit (false) tento termín."),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> TrainingSessionRead:
+    session = await _get_session_or_404(db, session_id)
+    session.canceled = canceled
+    await db.commit()
     return _session_to_read(await _get_session_or_404(db, session_id))
 
 

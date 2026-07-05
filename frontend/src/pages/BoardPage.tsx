@@ -435,6 +435,7 @@ type NotificationCardProps = {
 
 function NotificationCard({ notification, branchName, currentTrainerId, onDelete, deletePending }: NotificationCardProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [reply, setReply] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -522,6 +523,21 @@ function NotificationCard({ notification, branchName, currentTrainerId, onDelete
           <span className="notification-card__chevron">{expanded ? "▲" : "▼"}</span>
         </div>
       </button>
+
+      {notification.event_id != null && (
+        <div className="notification-card__event-action">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              if (notification.unread) markRead.mutate();
+              navigate(`/events?event=${notification.event_id}`);
+            }}
+          >
+            Otevřít akci
+          </button>
+        </div>
+      )}
 
       {expanded && (
         <div className="notification-thread">

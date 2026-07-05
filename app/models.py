@@ -1,9 +1,10 @@
 import enum
-from datetime import datetime, time
+from datetime import date, datetime, time
 
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -207,6 +208,9 @@ class TrainingGroup(Base):
     start_time: Mapped[time] = mapped_column(Time)
     end_time: Mapped[time] = mapped_column(Time)
     weekdays: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
+    # Optional window bounding recurring occurrences ("repeat from/until").
+    active_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    active_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -234,6 +238,7 @@ class TrainingSession(Base):
     trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    canceled: Mapped[bool] = mapped_column(Boolean, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -296,6 +301,9 @@ class NotificationTarget(Base):
         Enum(AgeGroup, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
         nullable=True,
     )
+    # Direct personal targets: when set, the notification is visible only to this parent/trainer.
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="CASCADE"), nullable=True)
+    trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True)
 
     notification: Mapped[Notification] = relationship(back_populates="targets")
     branch: Mapped[Branch | None] = relationship()
@@ -439,6 +447,8 @@ class Event(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    # Guards the pre-event reminder sweep so each event only fires reminders once.
+    reminder_sent: Mapped[bool] = mapped_column(Boolean, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -523,13 +533,15 @@ class EventRsvp(Base):
     __tablename__ = "event_rsvps"
     __table_args__ = (
         UniqueConstraint("event_id", "trainer_id", name="uq_event_rsvp_trainer"),
-        UniqueConstraint("event_id", "parent_id", name="uq_event_rsvp_parent"),
+        UniqueConstraint("event_id", "student_id", name="uq_event_rsvp_student"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
     trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True)
+    # For parent RSVPs: parent_id is the submitter, student_id is the child the response is for.
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="CASCADE"), nullable=True)
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), nullable=True)
     status: Mapped[RsvpStatus] = mapped_column(
         Enum(RsvpStatus, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
     )
@@ -543,3 +555,4 @@ class EventRsvp(Base):
     event: Mapped[Event] = relationship(back_populates="rsvps")
     trainer: Mapped[Trainer | None] = relationship()
     parent: Mapped[Parent | None] = relationship()
+    student: Mapped["Student | None"] = relationship()

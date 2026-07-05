@@ -329,6 +329,9 @@ class TrainingGroupCreate(BaseModel):
     start_time: time
     end_time: time
     weekdays: list[int] | None = Field(default=None, description="ISO weekday 1=Mon … 7=Sun")
+    active_from: date | None = Field(default=None, description="Opakovat od (včetně); None = bez omezení.")
+    active_until: date | None = Field(default=None, description="Opakovat do (včetně); None = bez omezení.")
+    student_ids: list[int] = Field(default_factory=list, description="Zapsané děti (roster).")
 
     @field_validator("name", mode="before")
     @classmethod
@@ -349,6 +352,15 @@ class TrainingGroupCreate(BaseModel):
                 raise ValueError("weekdays must be integers 1–7 (ISO, Monday=1).")
         return sorted(v)
 
+    @field_validator("student_ids", mode="after")
+    @classmethod
+    def unique_group_student_ids(cls, v: list[int]) -> list[int]:
+        if len(set(v)) != len(v):
+            raise ValueError("Duplicate student_ids are not allowed.")
+        if any(sid < 1 for sid in v):
+            raise ValueError("student_ids must be >= 1.")
+        return v
+
     @field_validator("end_time")
     @classmethod
     def end_after_start(cls, v: time, info) -> time:
@@ -356,6 +368,12 @@ class TrainingGroupCreate(BaseModel):
         if start is not None and v <= start:
             raise ValueError("end_time must be after start_time.")
         return v
+
+    @model_validator(mode="after")
+    def validate_active_window(self) -> "TrainingGroupCreate":
+        if self.active_from is not None and self.active_until is not None and self.active_until < self.active_from:
+            raise ValueError("active_until must be on or after active_from.")
+        return self
 
 
 class TrainingGroupPatch(BaseModel):
@@ -366,6 +384,8 @@ class TrainingGroupPatch(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     weekdays: list[int] | None = None
+    active_from: date | None = None
+    active_until: date | None = None
 
     @field_validator("name", mode="before")
     @classmethod
@@ -394,6 +414,8 @@ class TrainingGroupRead(BaseModel):
     start_time: time
     end_time: time
     weekdays: list[int] | None = Field(examples=[[1, 3]])
+    active_from: date | None = None
+    active_until: date | None = None
     created_at: datetime
     updated_at: datetime
     branch: BranchRead
@@ -482,6 +504,7 @@ class TrainingSessionRead(BaseModel):
     trainer_id: int | None = Field(examples=[1])
     starts_at: datetime
     notes: str | None = None
+    canceled: bool = False
     created_at: datetime
     updated_at: datetime
     branch: BranchRead
@@ -561,6 +584,35 @@ class AttendanceRecordWithSessionRead(AttendanceRecordRead):
     session: TrainingSessionRead
 
 
+class TrainingOccurrence(BaseModel):
+    group_id: int
+    name: str
+    branch_id: int
+    date: date
+    start_time: time
+    end_time: time
+    session_id: int | None = None
+    canceled: bool = False
+    roster_count: int = 0
+    marked_count: int = 0
+
+
+class AttendanceMonthlyReportRow(BaseModel):
+    student_id: int
+    name: str
+    present: int = 0
+    absent: int = 0
+    excused: int = 0
+    sessions: int = 0
+
+
+class AttendanceMonthlyReport(BaseModel):
+    group_id: int
+    month: str = Field(examples=["2026-07"])
+    sessions: int = 0
+    rows: list[AttendanceMonthlyReportRow] = Field(default_factory=list)
+
+
 class NotificationTargetCreate(BaseModel):
     audience: NotificationAudience
     branch_id: int | None = Field(default=None, ge=1, description="Konkrétní pobočka; None = všechny pobočky.")
@@ -568,6 +620,8 @@ class NotificationTargetCreate(BaseModel):
         default=None,
         description="Jen pro rodiče: konkrétní kategorie; None = všechny kategorie.",
     )
+    parent_id: int | None = Field(default=None, ge=1, description="Přímý osobní příjemce (rodič).")
+    trainer_id: int | None = Field(default=None, ge=1, description="Přímý osobní příjemce (trenér).")
 
     @model_validator(mode="after")
     def validate_age_group(self) -> "NotificationTargetCreate":
@@ -624,6 +678,8 @@ class NotificationTargetRead(BaseModel):
     audience: NotificationAudience
     branch_id: int | None = None
     age_group: AgeGroup | None = None
+    parent_id: int | None = None
+    trainer_id: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -832,8 +888,21 @@ class EventAttachmentRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class EventRsvpSet(BaseModel):
+class EventRsvpItem(BaseModel):
+    student_id: int | None = Field(default=None, ge=1, description="Dítě, za které rodič hlasuje; None = trenér sám za sebe.")
     status: RsvpStatus = Field(examples=[RsvpStatus.yes])
+
+
+class EventRsvpSet(BaseModel):
+    responses: list[EventRsvpItem] = Field(min_length=1)
+
+    @field_validator("responses", mode="after")
+    @classmethod
+    def unique_student_ids(cls, v: list[EventRsvpItem]) -> list[EventRsvpItem]:
+        ids = [item.student_id for item in v]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Duplicate student_id in responses.")
+        return v
 
 
 class EventRsvpParticipant(BaseModel):
@@ -841,6 +910,8 @@ class EventRsvpParticipant(BaseModel):
     id: int
     name: str
     status: RsvpStatus
+    student_id: int | None = None
+    child_name: str | None = None
 
 
 class EventRsvpSummary(BaseModel):
@@ -848,6 +919,12 @@ class EventRsvpSummary(BaseModel):
     no: int = 0
     maybe: int = 0
     participants: list[EventRsvpParticipant] = Field(default_factory=list)
+
+
+class EventChildRsvp(BaseModel):
+    student_id: int
+    name: str
+    status: RsvpStatus | None = None
 
 
 class EventRead(BaseModel):
@@ -865,6 +942,7 @@ class EventRead(BaseModel):
     targets: list[EventTargetRead] = Field(default_factory=list)
     can_edit: bool = False
     my_rsvp: RsvpStatus | None = None
+    my_child_rsvps: list[EventChildRsvp] = Field(default_factory=list)
     comment_count: int = 0
     attachment_count: int = 0
 

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     upload_dir: str = "./uploads"
     max_upload_bytes: int = 10 * 1024 * 1024
+    event_reminder_lead_hours: int = 24
+    reminder_sweep_interval_seconds: int = 300
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

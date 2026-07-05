@@ -74,8 +74,68 @@ export interface TrainingGroup {
   start_time: string;
   end_time: string;
   weekdays: number[] | null;
+  active_from?: string | null;
+  active_until?: string | null;
   branch: { id: number; name: string; address: string };
   students: StudentBrief[];
+}
+
+export interface TrainingGroupCreate {
+  branch_id: number;
+  name: string;
+  start_time: string;
+  end_time: string;
+  weekdays: number[] | null;
+  active_from?: string | null;
+  active_until?: string | null;
+  student_ids: number[];
+}
+
+export interface TrainingGroupUpdate {
+  branch_id?: number;
+  name?: string;
+  start_time?: string;
+  end_time?: string;
+  weekdays?: number[] | null;
+  active_from?: string | null;
+  active_until?: string | null;
+}
+
+export interface TrainingOccurrence {
+  group_id: number;
+  name: string;
+  branch_id: number;
+  date: string;
+  start_time: string;
+  end_time: string;
+  session_id: number | null;
+  canceled: boolean;
+  roster_count: number;
+  marked_count: number;
+}
+
+export interface AttendanceMonthlyReportRow {
+  student_id: number;
+  name: string;
+  present: number;
+  absent: number;
+  excused: number;
+  sessions: number;
+}
+
+export interface AttendanceMonthlyReport {
+  group_id: number;
+  month: string;
+  sessions: number;
+  rows: AttendanceMonthlyReportRow[];
+}
+
+export interface StudentWithBranches {
+  id: number;
+  first_name: string;
+  last_name: string;
+  age_group: AgeGroup;
+  branches: BranchBrief[];
 }
 
 export interface StudentBrief {
@@ -132,6 +192,7 @@ export interface TrainingSessionDetail {
   trainer_id: number | null;
   starts_at: string;
   notes: string | null;
+  canceled?: boolean;
   training_group: {
     id: number;
     name: string;
@@ -162,6 +223,7 @@ export interface Notification {
   title: string;
   body: string;
   author_trainer_id: number | null;
+  event_id: number | null;
   visible_until: string;
   hide_after: string;
   visibility_state: NotificationVisibilityState;
@@ -289,6 +351,19 @@ export interface EventRsvpParticipant {
   id: number;
   name: string;
   status: RsvpStatus;
+  student_id?: number | null;
+  child_name?: string | null;
+}
+
+export interface EventChildRsvp {
+  student_id: number;
+  name: string;
+  status: RsvpStatus | null;
+}
+
+export interface EventRsvpResponse {
+  student_id: number | null;
+  status: RsvpStatus;
 }
 
 export interface EventRsvpSummary {
@@ -313,6 +388,7 @@ export interface EventItem {
   targets: EventTarget[];
   can_edit: boolean;
   my_rsvp: RsvpStatus | null;
+  my_child_rsvps: EventChildRsvp[];
   comment_count: number;
   attachment_count: number;
 }

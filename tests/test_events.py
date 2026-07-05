@@ -69,23 +69,59 @@ async def test_parent_cannot_create_event(client):
 
 
 @pytest.mark.asyncio
-async def test_rsvp_and_organizer_summary(client):
+async def test_per_child_rsvp_and_organizer_summary(client):
     trainer = await login_trainer(client)
-    parent = _parent_token(1)
+    parent = _parent_token(1)  # Marie -> child id 1 (A Novak, U8)
 
     event_id = (await _create_event(client, trainer, [{"audience": "parent"}])).json()["id"]
 
-    rsvp = await client.post(f"/events/{event_id}/rsvp", json={"status": "yes"}, headers=write_headers(parent))
-    assert rsvp.status_code == 200
-    assert rsvp.json()["my_rsvp"] == "yes"
+    # Parent responds for their child by student_id.
+    rsvp = await client.post(
+        f"/events/{event_id}/rsvp",
+        json={"responses": [{"student_id": 1, "status": "yes"}]},
+        headers=write_headers(parent),
+    )
+    assert rsvp.status_code == 200, rsvp.text
+    child_rsvps = rsvp.json()["my_child_rsvps"]
+    assert child_rsvps == [{"student_id": 1, "name": "A Novak", "status": "yes"}]
 
-    # Organizer (trainer author) sees the aggregated summary; a parent does not.
+    # Organizer sees the per-child summary; a parent does not.
     organizer_view = (await client.get(f"/events/{event_id}", headers=_bearer(trainer))).json()
-    assert organizer_view["rsvp_summary"]["yes"] == 1
-    assert len(organizer_view["rsvp_summary"]["participants"]) == 1
+    summary = organizer_view["rsvp_summary"]
+    assert summary["yes"] == 1
+    assert summary["participants"][0]["child_name"] == "A Novak"
+    assert summary["participants"][0]["student_id"] == 1
 
     parent_view = (await client.get(f"/events/{event_id}", headers=_bearer(parent))).json()
     assert parent_view["rsvp_summary"] is None
+
+
+@pytest.mark.asyncio
+async def test_parent_cannot_rsvp_for_other_child(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)  # only owns child id 1
+    event_id = (await _create_event(client, trainer, [{"audience": "parent"}])).json()["id"]
+
+    resp = await client.post(
+        f"/events/{event_id}/rsvp",
+        json={"responses": [{"student_id": 2, "status": "yes"}]},
+        headers=write_headers(parent),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_trainer_self_rsvp(client):
+    trainer = await login_trainer(client)
+    event_id = (await _create_event(client, trainer, [{"audience": "trainer"}])).json()["id"]
+
+    resp = await client.post(
+        f"/events/{event_id}/rsvp",
+        json={"responses": [{"student_id": None, "status": "maybe"}]},
+        headers=write_headers(trainer),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["my_rsvp"] == "maybe"
 
 
 @pytest.mark.asyncio
@@ -111,6 +147,71 @@ async def test_comment_flow(client):
         headers=write_headers(parent),
     )
     assert deleted.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_parent_comment_notifies_organizer(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)
+    event_id = (await _create_event(client, trainer, [{"audience": "parent"}])).json()["id"]
+
+    resp = await client.post(
+        f"/events/{event_id}/comments",
+        json={"body": "Kdy je sraz?"},
+        headers=write_headers(parent),
+    )
+    assert resp.status_code == 201
+
+    notifications = (await client.get("/notifications", headers=write_headers(trainer))).json()
+    reactions = [
+        n for n in notifications if n["event_id"] == event_id and n["title"].startswith("Nová reakce")
+    ]
+    assert len(reactions) == 1
+    assert reactions[0]["unread"] is True
+
+
+@pytest.mark.asyncio
+async def test_reply_notifies_parent_participant(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)
+    event_id = (await _create_event(client, trainer, [{"audience": "parent"}])).json()["id"]
+
+    # Parent asks a question first.
+    await client.post(
+        f"/events/{event_id}/comments",
+        json={"body": "kde to bude?"},
+        headers=write_headers(parent),
+    )
+    # Organizer replies -> the parent participant should be notified.
+    await client.post(
+        f"/events/{event_id}/comments",
+        json={"body": "ostrava"},
+        headers=write_headers(trainer),
+    )
+
+    notifications = (await client.get("/notifications", headers=write_headers(parent))).json()
+    reactions = [
+        n for n in notifications if n["event_id"] == event_id and n["title"].startswith("Nová reakce")
+    ]
+    assert len(reactions) == 1
+    assert reactions[0]["unread"] is True
+
+
+@pytest.mark.asyncio
+async def test_organizer_own_comment_does_not_notify(client):
+    trainer = await login_trainer(client)
+    event_id = (await _create_event(client, trainer, [{"audience": "parent"}])).json()["id"]
+
+    resp = await client.post(
+        f"/events/{event_id}/comments",
+        json={"body": "Interní poznámka"},
+        headers=write_headers(trainer),
+    )
+    assert resp.status_code == 201
+
+    notifications = (await client.get("/notifications", headers=write_headers(trainer))).json()
+    reactions = [n for n in notifications if n["title"].startswith("Nová reakce")]
+    assert reactions == []
 
 
 @pytest.mark.asyncio

@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.deps import Viewer, get_viewer, viewer_can_see_targets
+from app.deps import Viewer, get_viewer, matched_children, viewer_can_see_targets
 from app.models import (
     Branch,
     Event,
@@ -19,13 +19,16 @@ from app.models import (
     EventComment,
     EventRsvp,
     EventTarget,
+    NotificationAudience,
     Notification,
     NotificationReadReceipt,
     NotificationTarget,
+    Parent,
     Trainer,
 )
 from app.schemas import (
     EventAttachmentRead,
+    EventChildRsvp,
     EventCommentCreate,
     EventCommentRead,
     EventCreate,
@@ -75,6 +78,7 @@ def _event_options():
         selectinload(Event.attachments),
         selectinload(Event.rsvps).selectinload(EventRsvp.trainer),
         selectinload(Event.rsvps).selectinload(EventRsvp.parent),
+        selectinload(Event.rsvps).selectinload(EventRsvp.student),
     )
 
 
@@ -108,12 +112,22 @@ async def _get_visible_event_or_404(db: AsyncSession, event_id: int, viewer: Vie
 
 
 def _my_rsvp(event: Event, viewer: Viewer):
+    if viewer.kind != "trainer":
+        return None
     for rsvp in event.rsvps:
-        if viewer.kind == "trainer" and rsvp.trainer_id == viewer.trainer_id:
-            return rsvp.status
-        if viewer.kind == "parent" and rsvp.parent_id == viewer.parent_id:
+        if rsvp.trainer_id == viewer.trainer_id:
             return rsvp.status
     return None
+
+
+def _my_child_rsvps(event: Event, viewer: Viewer) -> list[EventChildRsvp]:
+    if viewer.kind != "parent":
+        return []
+    status_by_student = {rsvp.student_id: rsvp.status for rsvp in event.rsvps if rsvp.student_id is not None}
+    return [
+        EventChildRsvp(student_id=child.id, name=child.name, status=status_by_student.get(child.id))
+        for child in matched_children(viewer, event.targets)
+    ]
 
 
 def _target_to_read(target: EventTarget) -> EventTargetRead:
@@ -188,12 +202,17 @@ def _rsvp_summary(event: Event) -> EventRsvpSummary:
                 ),
             )
         elif rsvp.parent is not None:
+            child_name = (
+                f"{rsvp.student.first_name} {rsvp.student.last_name}" if rsvp.student is not None else None
+            )
             participants.append(
                 EventRsvpParticipant(
                     kind="parent",
                     id=rsvp.parent_id,
                     name=f"{rsvp.parent.first_name} {rsvp.parent.last_name}",
                     status=rsvp.status,
+                    student_id=rsvp.student_id,
+                    child_name=child_name,
                 ),
             )
     return EventRsvpSummary(yes=counts["yes"], no=counts["no"], maybe=counts["maybe"], participants=participants)
@@ -219,6 +238,7 @@ def _event_to_read(event: Event, viewer: Viewer) -> EventRead:
         targets=[_target_to_read(target) for target in event.targets],
         can_edit=_can_edit(event, viewer),
         my_rsvp=_my_rsvp(event, viewer),
+        my_child_rsvps=_my_child_rsvps(event, viewer),
         comment_count=len(event.comments),
         attachment_count=len(event.attachments),
     )
@@ -260,6 +280,8 @@ def _notification_payload(event: Event, now: datetime) -> tuple[str, str, dateti
     body_lines = [f"{type_label}: {event.title}", f"Kdy: {when}"]
     if event.location:
         body_lines.append(f"Kde: {event.location}")
+    if any(target.audience == NotificationAudience.parent for target in event.targets):
+        body_lines.append("Potvrďte prosím účast svých dětí.")
     return f"Nová akce: {event.title}", "\n".join(body_lines), visible_until
 
 
@@ -304,6 +326,68 @@ async def _sync_event_notification(db: AsyncSession, event: Event, now: datetime
     notification.last_activity_at = now
     notification.targets.clear()
     notification.targets.extend(_notification_targets(event))
+
+
+async def _notify_event_comment(
+    db: AsyncSession,
+    event: Event,
+    comment: EventComment,
+    viewer: Viewer,
+    now: datetime,
+) -> None:
+    """Notify everyone in the event conversation when a new comment is posted.
+
+    Recipients are the organizer plus everyone who has already commented in the
+    thread, minus the author of the new comment.
+    """
+    trainer_ids: set[int] = set()
+    parent_ids: set[int] = set()
+
+    if event.author_trainer_id is not None:
+        trainer_ids.add(event.author_trainer_id)
+    for prior in event.comments:
+        if prior.author_trainer_id is not None:
+            trainer_ids.add(prior.author_trainer_id)
+        if prior.author_parent_id is not None:
+            parent_ids.add(prior.author_parent_id)
+
+    if viewer.kind == "trainer":
+        trainer_ids.discard(viewer.trainer_id)
+    else:
+        parent_ids.discard(viewer.parent_id)
+
+    if not trainer_ids and not parent_ids:
+        return
+
+    if viewer.kind == "parent":
+        parent = await db.get(Parent, viewer.parent_id)
+        who = f"{parent.first_name} {parent.last_name}" if parent is not None else "Rodič"
+    else:
+        trainer = await db.get(Trainer, viewer.trainer_id)
+        who = f"{trainer.first_name} {trainer.last_name}" if trainer is not None else "Trenér"
+
+    snippet = comment.body.strip()
+    if len(snippet) > 140:
+        snippet = snippet[:139] + "…"
+    type_label = _EVENT_TYPE_LABELS.get(event.event_type.value, "Akce")
+
+    targets = [
+        NotificationTarget(audience=NotificationAudience.trainer, trainer_id=tid) for tid in trainer_ids
+    ] + [
+        NotificationTarget(audience=NotificationAudience.parent, parent_id=pid) for pid in parent_ids
+    ]
+
+    notification = Notification(
+        title=f"Nová reakce k akci: {event.title}",
+        body=f"{who} napsal(a) k {type_label.lower()} „{event.title}“:\n{snippet}",
+        author_trainer_id=None,
+        event_id=event.id,
+        visible_until=now + DEFAULT_NOTIFY_FALLBACK,
+        grace_seconds=0,
+        last_activity_at=now,
+        targets=targets,
+    )
+    db.add(notification)
 
 
 async def _load_detail(db: AsyncSession, event_id: int, viewer: Viewer) -> EventDetailRead:
@@ -441,26 +525,40 @@ async def set_rsvp(
     viewer: Viewer = Depends(get_viewer),
 ) -> EventDetailRead:
     event = await _get_visible_event_or_404(db, event_id, viewer)
-    existing = next(
-        (
-            rsvp
-            for rsvp in event.rsvps
-            if (viewer.kind == "trainer" and rsvp.trainer_id == viewer.trainer_id)
-            or (viewer.kind == "parent" and rsvp.parent_id == viewer.parent_id)
-        ),
-        None,
-    )
-    if existing is not None:
-        existing.status = payload.status
+
+    if viewer.kind == "trainer":
+        if len(payload.responses) != 1 or payload.responses[0].student_id is not None:
+            raise HTTPException(status_code=422, detail="Trainers respond once, without a student_id.")
+        status_value = payload.responses[0].status
+        existing = next((r for r in event.rsvps if r.trainer_id == viewer.trainer_id), None)
+        if existing is not None:
+            existing.status = status_value
+        else:
+            db.add(EventRsvp(event_id=event_id, trainer_id=viewer.trainer_id, status=status_value))
     else:
-        db.add(
-            EventRsvp(
-                event_id=event_id,
-                trainer_id=viewer.trainer_id if viewer.kind == "trainer" else None,
-                parent_id=viewer.parent_id if viewer.kind == "parent" else None,
-                status=payload.status,
-            ),
-        )
+        allowed_ids = {child.id for child in matched_children(viewer, event.targets)}
+        for item in payload.responses:
+            if item.student_id is None:
+                raise HTTPException(status_code=422, detail="Parents must respond per child (student_id required).")
+            if item.student_id not in allowed_ids:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only respond for your own children targeted by this event.",
+                )
+        existing_by_student = {r.student_id: r for r in event.rsvps if r.parent_id == viewer.parent_id}
+        for item in payload.responses:
+            existing = existing_by_student.get(item.student_id)
+            if existing is not None:
+                existing.status = item.status
+            else:
+                db.add(
+                    EventRsvp(
+                        event_id=event_id,
+                        parent_id=viewer.parent_id,
+                        student_id=item.student_id,
+                        status=item.status,
+                    ),
+                )
     await db.commit()
     db.expire_all()
     return await _load_detail(db, event_id, viewer)
@@ -481,6 +579,7 @@ async def create_event_comment(
         body=payload.body,
     )
     db.add(comment)
+    await _notify_event_comment(db, event, comment, viewer, event_now())
     await db.commit()
 
     result = await db.execute(

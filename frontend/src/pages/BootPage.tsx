@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api, todayIso } from "../api/client";
 import { AuthLanding } from "../components/AuthLanding";
@@ -19,8 +19,27 @@ export function BootPage() {
     isLoading: trainersLoading,
     isError: trainersError,
     error: trainersLoadError,
+    clearTrainer,
   } = useTrainer();
   const { isAuthenticated: parentAuthenticated } = useParent();
+
+  const menuActive = isAuthenticated && !!trainer;
+  const notificationsQuery = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => api.notifications(),
+    enabled: menuActive,
+    refetchInterval: 30_000,
+  });
+  const conversationsQuery = useQuery({
+    queryKey: ["chat-conversations"],
+    queryFn: () => api.chatConversations(),
+    enabled: menuActive,
+    refetchInterval: 30_000,
+  });
+  const notifications = notificationsQuery.data ?? [];
+  const unreadNotifications = notifications.filter((n) => n.unread).length;
+  const unreadEvents = notifications.filter((n) => n.unread && n.event_id != null).length;
+  const unreadChat = (conversationsQuery.data ?? []).reduce((sum, c) => sum + c.unread_count, 0);
 
   if (!isAuthenticated && parentAuthenticated) {
     return <Navigate to="/parent" replace />;
@@ -65,22 +84,41 @@ export function BootPage() {
         </p>
         <div className="hub-card__actions">
           <button type="button" className="trainer-card" onClick={() => navigate("/board")}>
+            {unreadNotifications > 0 && <span className="trainer-card__badge">{unreadNotifications}</span>}
             <span className="trainer-card__name">Board</span>
-            <span className="trainer-card__branch">Notifications</span>
+            <span className="trainer-card__branch">
+              {unreadNotifications > 0 ? `${unreadNotifications} nepřečtených` : "Notifications"}
+            </span>
           </button>
-          <button type="button" className="trainer-card" onClick={() => navigate("/attendance")}>
+          <button type="button" className="trainer-card" onClick={() => navigate("/today")}>
             <span className="trainer-card__name">Docházka</span>
-            <span className="trainer-card__branch">Dnešní tréninky</span>
+            <span className="trainer-card__branch">Tréninky a měsíční přehled</span>
           </button>
           <button type="button" className="trainer-card" onClick={() => navigate("/chat")}>
+            {unreadChat > 0 && <span className="trainer-card__badge">{unreadChat}</span>}
             <span className="trainer-card__name">Chat</span>
-            <span className="trainer-card__branch">Zprávy 1-1</span>
+            <span className="trainer-card__branch">
+              {unreadChat > 0 ? `${unreadChat} nových zpráv` : "Zprávy 1-1"}
+            </span>
           </button>
           <button type="button" className="trainer-card" onClick={() => navigate("/events")}>
+            {unreadEvents > 0 && <span className="trainer-card__badge">{unreadEvents}</span>}
             <span className="trainer-card__name">Akce</span>
-            <span className="trainer-card__branch">Plánovač akcí</span>
+            <span className="trainer-card__branch">
+              {unreadEvents > 0 ? `${unreadEvents} nových akcí` : "Plánovač akcí"}
+            </span>
           </button>
         </div>
+        <button
+          type="button"
+          className="btn btn--ghost hub-card__logout"
+          onClick={() => {
+            clearTrainer();
+            navigate("/", { replace: true });
+          }}
+        >
+          Odhlásit
+        </button>
       </div>
     </div>
   );

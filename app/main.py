@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import init_db
+from app.reminders import reminder_loop
 from app.routers import (
     branches,
     chat,
@@ -26,7 +28,15 @@ from app.security import WRITE_METHODS, check_api_write_key, is_public_write_pat
 async def lifespan(app: FastAPI):
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     await init_db()
-    yield
+    reminder_task = asyncio.create_task(reminder_loop())
+    try:
+        yield
+    finally:
+        reminder_task.cancel()
+        try:
+            await reminder_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Judo club", lifespan=lifespan)

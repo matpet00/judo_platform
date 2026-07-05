@@ -1,49 +1,123 @@
-import { useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { api, todayIso } from "../api/client";
+import type { TrainingOccurrence } from "../api/types";
 import { TrainerSwitcher } from "../components/TrainerSwitcher";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { useTrainer } from "../context/TrainerContext";
-import { useTodayAttendance } from "../hooks/useTodayAttendance";
 import { formatTodayLong } from "../lib/sessionRouting";
-import {
-  SessionPickerCard,
-  existingSessionCardProps,
-  groupSlotCardProps,
-} from "../components/SessionPickerCard";
-import { TodaySessionSummary } from "../components/TodaySessionSummary";
+import { SessionPickerCard } from "../components/SessionPickerCard";
+import { MonthlyAttendanceReport } from "../components/MonthlyAttendanceReport";
 import "../components/StudentSwipeDeck.css";
+
+const LOOKAHEAD_DAYS = 21;
+const LOOKBEHIND_DAYS = 21;
+const MAX_UPCOMING_DAYS = 3;
+const MAX_PAST_DAYS = 3;
+
+function occTime(occ: TrainingOccurrence): string {
+  return `${occ.start_time.slice(0, 5)} – ${occ.end_time.slice(0, 5)}`;
+}
+
+function isActiveNow(occ: TrainingOccurrence, now = new Date()): boolean {
+  const [sh, sm] = occ.start_time.split(":").map(Number);
+  const [eh, em] = occ.end_time.split(":").map(Number);
+  const start = new Date(now);
+  start.setHours(sh, sm - 45, 0, 0);
+  const end = new Date(now);
+  end.setHours(eh, em, 0, 0);
+  return now >= start && now <= end;
+}
+
+function formatDayHeading(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("cs-CZ", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
 
 export function TodayPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { trainer, isAuthenticated, isLoading: trainersLoading } = useTrainer();
-  const {
-    groups,
-    existingSessions,
-    activeGroup,
-    activeSession,
-    slotsWithoutSession,
-    isLoading,
-    isError,
-    error,
-  } = useTodayAttendance();
+  const [tab, setTab] = useState<"trainings" | "monthly">("trainings");
+
+  const today = todayIso();
+  const from = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - LOOKBEHIND_DAYS);
+    return todayIso(d);
+  }, []);
+  const to = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + LOOKAHEAD_DAYS);
+    return todayIso(d);
+  }, []);
+
+  const occurrencesQuery = useQuery({
+    queryKey: ["occurrences", "trainer", from, to],
+    queryFn: () => api.trainingOccurrences(from, to, "trainer"),
+    enabled: isAuthenticated,
+    refetchInterval: 60_000,
+  });
+
+  const occurrences = occurrencesQuery.data ?? [];
+  const todayOccurrences = useMemo(
+    () =>
+      occurrences
+        .filter((o) => o.date === today && !o.canceled)
+        .sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    [occurrences, today],
+  );
+
+  const groupByDate = (predicate: (o: TrainingOccurrence) => boolean, descending: boolean, limit: number) => {
+    const map = new Map<string, TrainingOccurrence[]>();
+    for (const o of occurrences) {
+      if (o.canceled || !predicate(o)) continue;
+      const list = map.get(o.date) ?? [];
+      list.push(o);
+      map.set(o.date, list);
+    }
+    return [...map.entries()]
+      .sort((a, b) => (descending ? b[0].localeCompare(a[0]) : a[0].localeCompare(b[0])))
+      .slice(0, limit)
+      .map(([date, occs]) => ({
+        date,
+        occs: occs.sort((a, b) => a.start_time.localeCompare(b.start_time)),
+      }));
+  };
+
+  const recentByDate = useMemo(
+    () => groupByDate((o) => o.date < today, true, MAX_PAST_DAYS),
+    [occurrences, today],
+  );
+  const upcomingByDate = useMemo(
+    () => groupByDate((o) => o.date > today, false, MAX_UPCOMING_DAYS),
+    [occurrences, today],
+  );
 
   const openOrCreate = useMutation({
-    mutationFn: async (groupId: number) => {
+    mutationFn: async ({ groupId, date }: { groupId: number; date: string }) => {
       if (!trainer) throw new Error("Vyber trenéra");
-      return api.openGroupSession(groupId, todayIso(), trainer.id);
+      return api.openGroupSession(groupId, date, trainer.id);
     },
     onSuccess: (session) => {
       queryClient.invalidateQueries({ queryKey: ["training-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["occurrences"] });
       navigate(`/session/${session.id}`);
     },
   });
 
-  const openSession = (sessionId: number) => navigate(`/session/${sessionId}`);
-  const openSessionOverview = (sessionId: number) =>
-    navigate(`/session/${sessionId}?view=overview`);
+  const openOccurrence = (occ: TrainingOccurrence) => {
+    if (occ.session_id != null) {
+      navigate(`/session/${occ.session_id}`);
+      return;
+    }
+    openOrCreate.mutate({ groupId: occ.group_id, date: occ.date });
+  };
 
   useEffect(() => {
     if (!trainersLoading && !isAuthenticated) {
@@ -71,87 +145,101 @@ export function TodayPage() {
       <TrainerSwitcher variant="bar" />
       <OfflineBanner />
 
-      {isLoading && <div className="loading">Načítám…</div>}
-      {isError && (
+      <div className="events-view-toggle attendance-tabs">
+        <button type="button" className={tab === "trainings" ? "is-active" : ""} onClick={() => setTab("trainings")}>
+          Dnešní a blízké
+        </button>
+        <button type="button" className={tab === "monthly" ? "is-active" : ""} onClick={() => setTab("monthly")}>
+          Měsíční docházka
+        </button>
+      </div>
+
+      {tab === "monthly" && <MonthlyAttendanceReport />}
+
+      {tab === "trainings" && occurrencesQuery.isLoading && <div className="loading">Načítám…</div>}
+      {tab === "trainings" && occurrencesQuery.isError && (
         <div className="error-box">
           API nedostupné.
           <br />
-          <small>{String(error)}</small>
+          <small>{String(occurrencesQuery.error)}</small>
         </div>
       )}
 
-      {!isLoading && !isError && (
+      {tab === "trainings" && !occurrencesQuery.isLoading && !occurrencesQuery.isError && (
         <>
-          <TodaySessionSummary sessions={existingSessions} onOpenOverview={openSessionOverview} />
-
-          {activeGroup && (
+          {todayOccurrences.length > 0 ? (
             <section className="section-block" style={{ animationDelay: "0.05s" }}>
-              <h2 className="section-block__title">Probíhá teď</h2>
+              <h2 className="section-block__title">Dnešní tréninky</h2>
               <div className="section-block__list">
-                {activeSession ? (
+                {todayOccurrences.map((occ) => (
                   <SessionPickerCard
-                    {...existingSessionCardProps(
-                      existingSessions.find((s) => s.id === activeSession.id) ?? {
-                        ...activeSession,
-                        marked: 0,
-                        total: activeGroup.students.length,
-                        present: 0,
-                        absent: 0,
-                        excused: 0,
-                      },
-                    )}
-                    highlight
-                    onClick={() => openSession(activeSession.id)}
-                  />
-                ) : (
-                  <SessionPickerCard
-                    {...groupSlotCardProps(activeGroup)}
-                    highlight
+                    key={`${occ.group_id}-${occ.date}`}
+                    title={occ.name}
+                    subtitle={occTime(occ)}
+                    marked={occ.marked_count}
+                    total={occ.roster_count}
+                    highlight={isActiveNow(occ)}
                     pending={openOrCreate.isPending}
-                    onClick={() => openOrCreate.mutate(activeGroup.id)}
+                    onClick={() => openOccurrence(occ)}
                   />
-                )}
+                ))}
               </div>
+            </section>
+          ) : (
+            <section className="section-block" style={{ animationDelay: "0.05s" }}>
+              <div className="today-empty">Dnes není naplánovaný žádný trénink.</div>
             </section>
           )}
 
-          {existingSessions.filter((s) => s.id !== activeSession?.id).length > 0 && (
+          {todayOccurrences.length === 0 && recentByDate.length > 0 && (
             <section className="section-block" style={{ animationDelay: "0.1s" }}>
-              <h2 className="section-block__title">Otevřít docházku</h2>
-              <div className="section-block__list">
-                {existingSessions
-                  .filter((s) => s.id !== activeSession?.id)
-                  .map((s) => (
-                    <SessionPickerCard
-                      key={s.id}
-                      {...existingSessionCardProps(s)}
-                      onClick={() => openSession(s.id)}
-                    />
-                  ))}
-              </div>
+              <h2 className="section-block__title">Nedávné tréninky</h2>
+              <p className="section-block__hint">Můžeš zpětně doplnit docházku.</p>
+              {recentByDate.map((group) => (
+                <div key={group.date} className="today-upcoming-day">
+                  <h3 className="today-upcoming-day__heading">{formatDayHeading(group.date)}</h3>
+                  <div className="section-block__list">
+                    {group.occs.map((occ) => (
+                      <SessionPickerCard
+                        key={`${occ.group_id}-${occ.date}`}
+                        title={occ.name}
+                        subtitle={`${occTime(occ)} · ${occ.roster_count} žáků`}
+                        marked={occ.session_id != null ? occ.marked_count : undefined}
+                        total={occ.session_id != null ? occ.roster_count : undefined}
+                        pending={openOrCreate.isPending}
+                        onClick={() => openOccurrence(occ)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </section>
           )}
 
-          {slotsWithoutSession.filter((g) => g.id !== activeGroup?.id).length > 0 && (
+          {todayOccurrences.length === 0 && upcomingByDate.length > 0 && (
             <section className="section-block" style={{ animationDelay: "0.15s" }}>
-              <h2 className="section-block__title">Zahájit nový trénink</h2>
-              <div className="section-block__list">
-                {slotsWithoutSession
-                  .filter((g) => g.id !== activeGroup?.id)
-                  .map((g) => (
-                    <SessionPickerCard
-                      key={g.id}
-                      {...groupSlotCardProps(g)}
-                      pending={openOrCreate.isPending}
-                      onClick={() => openOrCreate.mutate(g.id)}
-                    />
-                  ))}
-              </div>
+              <h2 className="section-block__title">Nejbližší tréninky</h2>
+              {upcomingByDate.map((group) => (
+                <div key={group.date} className="today-upcoming-day">
+                  <h3 className="today-upcoming-day__heading">{formatDayHeading(group.date)}</h3>
+                  <div className="section-block__list">
+                    {group.occs.map((occ) => (
+                      <SessionPickerCard
+                        key={`${occ.group_id}-${occ.date}`}
+                        title={occ.name}
+                        subtitle={`${occTime(occ)} · ${occ.roster_count} žáků`}
+                        pending={openOrCreate.isPending}
+                        onClick={() => openOccurrence(occ)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </section>
           )}
 
-          {groups.length === 0 && (
-            <div className="loading">Žádné tréninkové skupiny. Vytvoř je v API.</div>
+          {occurrences.length === 0 && (
+            <div className="loading">Žádné naplánované tréninky. Vytvoř je v kalendáři.</div>
           )}
         </>
       )}
