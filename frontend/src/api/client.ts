@@ -1,30 +1,35 @@
-import type { AttendanceStatus, AttendanceSummary } from "./types";
+import type { AttendanceStatus, AttendanceSummary, NotificationCreate } from "./types";
 import { parseApiError } from "../lib/apiError";
 import { getTrainerToken } from "../lib/auth";
 
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
 const WRITE_KEY = import.meta.env.VITE_API_WRITE_KEY ?? "";
 
-function buildHeaders(mutating: boolean): HeadersInit {
+function buildHeaders(mutating: boolean, authenticated = false): HeadersInit {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   if (mutating && WRITE_KEY) {
     headers["X-API-Key"] = WRITE_KEY;
   }
-  if (mutating) {
+  if (mutating || authenticated) {
     const token = getTrainerToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
   return headers;
 }
 
-async function request<T>(path: string, init?: RequestInit, mutating = false): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  mutating = false,
+  authenticated = false,
+): Promise<T> {
   const attempt = async () => {
     const res = await fetch(`${BASE}${path}`, {
       ...init,
       headers: {
-        ...buildHeaders(mutating),
+        ...buildHeaders(mutating, authenticated),
         ...(init?.headers as Record<string, string> | undefined),
       },
     });
@@ -49,6 +54,7 @@ export { todayIso } from "../lib/sessionRouting";
 export const api = {
   health: () => request<{ status: string }>("/health"),
   trainers: () => request<import("./types").Trainer[]>("/trainers"),
+  parents: () => request<import("./types").Parent[]>("/parents"),
   verifyPin: (trainerId: number, pin: string) =>
     request<import("./types").TrainerAuthToken>(`/trainers/${trainerId}/verify-pin`, {
       method: "POST",
@@ -113,6 +119,15 @@ export const api = {
       return toSummary(record);
     }
   },
+  notifications: () =>
+    request<import("./types").Notification[]>("/notifications", undefined, false, true),
+  createNotification: (payload: NotificationCreate) =>
+    request<import("./types").Notification>("/notifications", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true),
+  deleteNotification: (id: number) =>
+    request<void>(`/notifications/${id}`, { method: "DELETE" }, true),
 };
 
 function toSummary(record: import("./types").AttendanceRecordRead): AttendanceSummary {

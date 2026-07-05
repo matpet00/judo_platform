@@ -11,7 +11,7 @@ os.environ.setdefault("PIN_PEPPER", "test-pin-pepper")
 
 from app.database import async_session_maker, engine, migrate_schema, seed_branches
 from app.main import app
-from app.models import AgeGroup, Base, Branch, Student, Trainer, TrainingGroup
+from app.models import AgeGroup, Base, Branch, Parent, Student, Trainer, TrainingGroup
 from app.security import hash_pin
 
 API_KEY = "test-api-key"
@@ -25,6 +25,8 @@ async def seed_test_data() -> None:
 
             trainer = Trainer(first_name="Petr", last_name="Matej", pin_hash=hash_pin(DEFAULT_PIN))
             trainer.branches.append(branch)
+            other_trainer = Trainer(first_name="Jana", last_name="Coach", pin_hash=hash_pin(DEFAULT_PIN))
+            other_trainer.branches.append(branch)
 
             students = [
                 Student(first_name="A", last_name="Novak", age_group=AgeGroup.U8),
@@ -35,7 +37,16 @@ async def seed_test_data() -> None:
                 student.branches.append(branch)
                 session.add(student)
 
+            parent = Parent(
+                first_name="Marie",
+                last_name="Novakova",
+                email="marie.novakova@example.com",
+                phone="+420601234567",
+            )
+            students[0].parents.append(parent)
+
             session.add(trainer)
+            session.add(other_trainer)
             await session.flush()
 
             group = TrainingGroup(

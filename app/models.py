@@ -20,6 +20,11 @@ class AttendanceStatus(str, enum.Enum):
     excused = "excused"
 
 
+class NotificationAudience(str, enum.Enum):
+    trainer = "trainer"
+    parent = "parent"
+
+
 # (název v API/DB, fiktivní adresa pro vývoj — seed při startu)
 DEFAULT_BRANCHES: tuple[tuple[str, str], ...] = (
     ("Orlova", "Hlavní třída 1285/45, 735 14 Orlová"),
@@ -106,6 +111,7 @@ class Trainer(Base):
     )
     training_sessions: Mapped[list["TrainingSession"]] = relationship(back_populates="trainer")
     recorded_attendance: Mapped[list["AttendanceRecord"]] = relationship(back_populates="recorded_by")
+    authored_notifications: Mapped[list["Notification"]] = relationship(back_populates="author_trainer")
 
 
 class Parent(Base):
@@ -213,6 +219,44 @@ class TrainingSession(Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(160))
+    body: Mapped[str] = mapped_column(String(4000))
+    author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    visible_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    author_trainer: Mapped[Trainer | None] = relationship(back_populates="authored_notifications")
+    targets: Mapped[list["NotificationTarget"]] = relationship(
+        back_populates="notification",
+        cascade="all, delete-orphan",
+    )
+
+
+class NotificationTarget(Base):
+    __tablename__ = "notification_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id", ondelete="CASCADE"))
+    audience: Mapped[NotificationAudience] = mapped_column(
+        Enum(NotificationAudience, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=16),
+    )
+    trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="CASCADE"), nullable=True)
+
+    notification: Mapped[Notification] = relationship(back_populates="targets")
+    trainer: Mapped[Trainer | None] = relationship()
+    parent: Mapped[Parent | None] = relationship()
 
 
 class AttendanceRecord(Base):

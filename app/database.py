@@ -52,6 +52,18 @@ async def migrate_schema() -> None:
         if "pin_hash" not in columns:
             await conn.execute(text("ALTER TABLE trainers ADD COLUMN pin_hash VARCHAR(128)"))
 
+        result = await conn.execute(text("PRAGMA table_info(notifications)"))
+        notification_columns = {row[1] for row in result.fetchall()}
+        if notification_columns and "visible_until" not in notification_columns:
+            await conn.execute(text("ALTER TABLE notifications ADD COLUMN visible_until DATETIME"))
+            await conn.execute(
+                text(
+                    "UPDATE notifications "
+                    "SET visible_until = datetime(COALESCE(created_at, CURRENT_TIMESTAMP), '+7 days') "
+                    "WHERE visible_until IS NULL",
+                ),
+            )
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:

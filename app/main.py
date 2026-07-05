@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import init_db
-from app.routers import branches, mail, parents, students, trainers, training_groups, training_sessions
+from app.routers import branches, mail, notifications, parents, students, trainers, training_groups, training_sessions
 from app.security import WRITE_METHODS, check_api_write_key, is_public_write_path
 
 
@@ -44,6 +44,7 @@ app.include_router(students.router)
 app.include_router(mail.router)
 app.include_router(training_groups.router)
 app.include_router(training_sessions.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health")

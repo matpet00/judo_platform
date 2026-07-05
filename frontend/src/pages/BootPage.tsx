@@ -18,6 +18,68 @@ export function BootPage() {
     isError: trainersError,
     error: trainersLoadError,
   } = useTrainer();
+
+  if (trainersLoading) {
+    return (
+      <div className="boot-screen">
+        <div className="boot-screen__logo">JUDO</div>
+        <p className="page-header__sub">Načítám trenéry…</p>
+      </div>
+    );
+  }
+
+  if (trainersError) {
+    return (
+      <div className="boot-screen app-shell">
+        <div className="error-box">
+          API nedostupné. Spusť backend na portu 8001.
+          <br />
+          <small>{String(trainersLoadError)}</small>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !trainer) {
+    return (
+      <div className="boot-screen app-shell">
+        <TrainerLoginFlow />
+      </div>
+    );
+  }
+
+  return (
+    <div className="boot-screen app-shell">
+      <div className="hub-card">
+        <p className="page-header__eyebrow">Menu</p>
+        <h1 className="trainer-picker__title">Kam chceš jít?</h1>
+        <p className="trainer-picker__sub">
+          {trainer.first_name} {trainer.last_name}
+        </p>
+        <div className="hub-card__actions">
+          <button type="button" className="trainer-card" onClick={() => navigate("/board")}>
+            <span className="trainer-card__name">Board</span>
+            <span className="trainer-card__branch">Notifications</span>
+          </button>
+          <button type="button" className="trainer-card" onClick={() => navigate("/attendance")}>
+            <span className="trainer-card__name">Docházka</span>
+            <span className="trainer-card__branch">Dnešní tréninky</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AttendanceBootPage() {
+  const navigate = useNavigate();
+  const {
+    trainer,
+    isAuthenticated,
+    isLoading: trainersLoading,
+    isError: trainersError,
+    error: trainersLoadError,
+  } = useTrainer();
   const { groups, sessions, isLoading, isError, error } = useTodayAttendance();
   const [confirmGroup, setConfirmGroup] = useState<TrainingGroup | null>(null);
   const [decided, setDecided] = useState(false);

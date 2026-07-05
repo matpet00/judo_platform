@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, todayIso } from "../api/client";
 import { TrainerSwitcher } from "../components/TrainerSwitcher";
 import { OfflineBanner } from "../components/OfflineBanner";
@@ -58,9 +58,14 @@ export function TodayPage() {
   return (
     <div className="app-shell">
       <header className="page-header">
-        <p className="page-header__eyebrow">Dnes</p>
-        <h1 className="page-header__title">{formatTodayLong()}</h1>
-        <p className="page-header__sub">Docházka na trénink</p>
+        <div className="page-header__row">
+          <div>
+            <p className="page-header__eyebrow">Dnes</p>
+            <h1 className="page-header__title">{formatTodayLong()}</h1>
+            <p className="page-header__sub">Docházka na trénink</p>
+          </div>
+          <Link className="board-link" to="/">Menu</Link>
+        </div>
       </header>
 
       <TrainerSwitcher variant="bar" />

@@ -1,8 +1,8 @@
 from datetime import date, datetime, time
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models import DEFAULT_BRANCHES, AgeGroup, AttendanceStatus
+from app.models import DEFAULT_BRANCHES, AgeGroup, AttendanceStatus, NotificationAudience
 
 _EX_BRANCH_NAME, _EX_BRANCH_ADDR = DEFAULT_BRANCHES[0]
 
@@ -510,3 +510,87 @@ class TrainingSessionDetailRead(TrainingSessionRead):
 
 class AttendanceRecordWithSessionRead(AttendanceRecordRead):
     session: TrainingSessionRead
+
+
+class NotificationTargetCreate(BaseModel):
+    audience: NotificationAudience
+    trainer_id: int | None = Field(default=None, ge=1)
+    parent_id: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "NotificationTargetCreate":
+        has_trainer = self.trainer_id is not None
+        has_parent = self.parent_id is not None
+        if has_trainer and has_parent:
+            raise ValueError("Use either trainer_id or parent_id, not both.")
+        if self.audience == NotificationAudience.trainer and self.parent_id is not None:
+            raise ValueError("Trainer target cannot use parent_id.")
+        if self.audience == NotificationAudience.parent and self.trainer_id is not None:
+            raise ValueError("Parent target cannot use trainer_id.")
+        return self
+
+
+class NotificationDurationUnit(str):
+    seconds = "seconds"
+    minutes = "minutes"
+    hours = "hours"
+    days = "days"
+    weeks = "weeks"
+    months = "months"
+
+
+class NotificationCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    body: str = Field(min_length=1, max_length=4000)
+    audiences: list[NotificationAudience] = Field(default_factory=list)
+    targets: list[NotificationTargetCreate] = Field(default_factory=list)
+    visible_until: datetime | None = None
+    duration_amount: int | None = Field(default=None, ge=1)
+    duration_unit: str | None = Field(default=None, pattern="^(seconds|minutes|hours|days|weeks|months)$")
+
+    @field_validator("title", "body", mode="before")
+    @classmethod
+    def strip_notification_text(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("audiences", mode="after")
+    @classmethod
+    def unique_audiences(cls, v: list[NotificationAudience]) -> list[NotificationAudience]:
+        return list(dict.fromkeys(v))
+
+    @model_validator(mode="after")
+    def require_any_target(self) -> "NotificationCreate":
+        if not self.audiences and not self.targets:
+            raise ValueError("Notification needs at least one audience or individual target.")
+        has_duration = self.duration_amount is not None or self.duration_unit is not None
+        if self.visible_until is not None and has_duration:
+            raise ValueError("Use either visible_until or duration_amount/duration_unit, not both.")
+        if (self.duration_amount is None) != (self.duration_unit is None):
+            raise ValueError("duration_amount and duration_unit must be provided together.")
+        return self
+
+
+class NotificationTargetRead(BaseModel):
+    id: int
+    audience: NotificationAudience
+    trainer_id: int | None = None
+    parent_id: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationRead(BaseModel):
+    id: int
+    title: str
+    body: str
+    author_trainer_id: int | None = None
+    visible_until: datetime
+    hide_after: datetime
+    visibility_state: str
+    created_at: datetime
+    updated_at: datetime
+    author_trainer: TrainerBrief | None = None
+    targets: list[NotificationTargetRead] = Field(default_factory=list)
+    can_delete: bool = False
