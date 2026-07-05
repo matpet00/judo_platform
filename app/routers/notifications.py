@@ -1,25 +1,71 @@
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Notification, NotificationAudience, NotificationTarget, Parent, Trainer
+from app.models import (
+    AgeGroup,
+    Branch,
+    Notification,
+    NotificationAudience,
+    NotificationComment,
+    NotificationReadReceipt,
+    NotificationTarget,
+    Parent,
+    Student,
+    Trainer,
+)
 from app.schemas import (
+    NotificationCommentCreate,
+    NotificationCommentRead,
     NotificationCreate,
     NotificationRead,
     NotificationTargetCreate,
     NotificationTargetRead,
+    ParentBrief,
     TrainerBrief,
 )
-from app.security import require_trainer_token
+from app.security import decode_any_token, require_trainer_token
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 DEFAULT_VISIBLE_FOR = timedelta(days=7)
-EXPIRED_VISIBLE_FOR = timedelta(days=7)
+
+
+@dataclass
+class Viewer:
+    kind: str  # "trainer" | "parent"
+    trainer_id: int | None = None
+    parent_id: int | None = None
+    branch_ids: set[int] = field(default_factory=set)
+    # For parents: one (branch_ids, age_group) tuple per child.
+    children: list[tuple[set[int], AgeGroup]] = field(default_factory=list)
+
+
+async def get_viewer(
+    authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> Viewer:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token.")
+    kind, subject_id = decode_any_token(authorization.removeprefix("Bearer ").strip())
+    if kind == "trainer":
+        trainer = await db.get(Trainer, subject_id, options=[selectinload(Trainer.branches)])
+        branch_ids = {branch.id for branch in trainer.branches} if trainer is not None else set()
+        return Viewer(kind="trainer", trainer_id=subject_id, branch_ids=branch_ids)
+    parent = await db.get(
+        Parent,
+        subject_id,
+        options=[selectinload(Parent.children).selectinload(Student.branches)],
+    )
+    children: list[tuple[set[int], AgeGroup]] = []
+    if parent is not None:
+        children = [({b.id for b in child.branches}, child.age_group) for child in parent.children]
+    return Viewer(kind="parent", parent_id=subject_id, children=children)
 
 
 def notification_now() -> datetime:
@@ -33,26 +79,108 @@ async def _get_trainer_or_404(db: AsyncSession, trainer_id: int) -> Trainer:
     return trainer
 
 
-async def _get_parent_or_404(db: AsyncSession, parent_id: int) -> Parent:
-    parent = await db.get(Parent, parent_id)
-    if parent is None:
-        raise HTTPException(status_code=404, detail=f"Parent id not found: {parent_id}")
-    return parent
+async def _get_branch_or_404(db: AsyncSession, branch_id: int) -> Branch:
+    branch = await db.get(Branch, branch_id)
+    if branch is None:
+        raise HTTPException(status_code=404, detail=f"Branch id not found: {branch_id}")
+    return branch
 
 
 def _notification_options():
     return (
         selectinload(Notification.author_trainer),
         selectinload(Notification.targets),
+        selectinload(Notification.comments),
+        selectinload(Notification.reads),
     )
+
+
+async def _get_visible_notification_or_404(
+    db: AsyncSession,
+    notification_id: int,
+    viewer: Viewer,
+    now: datetime,
+) -> Notification:
+    result = await db.execute(
+        select(Notification).where(Notification.id == notification_id).options(*_notification_options()),
+    )
+    notification = result.scalar_one_or_none()
+    if (
+        notification is None
+        or not _visible_to_viewer(notification, viewer)
+        or not _visible_on_board(notification, now)
+    ):
+        raise HTTPException(status_code=404, detail="Notification not found.")
+    return notification
+
+
+def _authored_by_viewer(comment: NotificationComment, viewer: Viewer) -> bool:
+    if viewer.kind == "trainer":
+        return comment.author_trainer_id is not None and comment.author_trainer_id == viewer.trainer_id
+    return comment.author_parent_id is not None and comment.author_parent_id == viewer.parent_id
+
+
+def _comment_to_read(comment: NotificationComment, viewer: Viewer) -> NotificationCommentRead:
+    created_at = _as_aware_utc(comment.created_at)
+    updated_at = _as_aware_utc(comment.updated_at) if comment.updated_at is not None else created_at
+    mine = _authored_by_viewer(comment, viewer)
+    return NotificationCommentRead(
+        id=comment.id,
+        notification_id=comment.notification_id,
+        author_trainer_id=comment.author_trainer_id,
+        author_parent_id=comment.author_parent_id,
+        body=comment.body,
+        created_at=created_at,
+        updated_at=updated_at,
+        author_trainer=(
+            TrainerBrief.model_validate(comment.author_trainer, from_attributes=True)
+            if comment.author_trainer is not None
+            else None
+        ),
+        author_parent=(
+            ParentBrief.model_validate(comment.author_parent, from_attributes=True)
+            if comment.author_parent is not None
+            else None
+        ),
+        can_delete=mine,
+        can_edit=mine,
+    )
+
+
+def _receipt_matches_viewer(receipt: NotificationReadReceipt, viewer: Viewer) -> bool:
+    if viewer.kind == "trainer":
+        return receipt.trainer_id == viewer.trainer_id
+    return receipt.parent_id == viewer.parent_id
+
+
+def _touch_read_receipt(notification: Notification, viewer: Viewer, now: datetime) -> None:
+    receipt = next((row for row in notification.reads if _receipt_matches_viewer(row, viewer)), None)
+    if receipt is not None:
+        receipt.last_read_at = now
+    elif viewer.kind == "trainer":
+        notification.reads.append(NotificationReadReceipt(trainer_id=viewer.trainer_id, last_read_at=now))
+    else:
+        notification.reads.append(NotificationReadReceipt(parent_id=viewer.parent_id, last_read_at=now))
+
+
+def _is_unread(notification: Notification, viewer: Viewer) -> bool:
+    activity = _as_aware_utc(notification.last_activity_at)
+    for receipt in notification.reads:
+        if _receipt_matches_viewer(receipt, viewer):
+            return _as_aware_utc(receipt.last_read_at) < activity
+    return True
+
+
+def _has_read(notification: Notification, viewer: Viewer) -> bool:
+    return any(_receipt_matches_viewer(receipt, viewer) for receipt in notification.reads)
 
 
 def _target_to_read(target: NotificationTarget) -> NotificationTargetRead:
     return NotificationTargetRead(
         id=target.id,
         audience=target.audience,
-        trainer_id=target.trainer_id,
-        parent_id=target.parent_id,
+        branch_id=target.branch_id,
+        age_group=target.age_group,
     )
 
 
@@ -63,42 +191,65 @@ def _as_aware_utc(value: datetime) -> datetime:
 
 
 def _hide_after(notification: Notification) -> datetime:
-    return _as_aware_utc(notification.visible_until) + EXPIRED_VISIBLE_FOR
+    return _as_aware_utc(notification.visible_until) + timedelta(seconds=notification.grace_seconds)
 
 
 def _visibility_state(notification: Notification, now: datetime) -> str:
     return "expired" if now >= _as_aware_utc(notification.visible_until) else "active"
 
 
-def _notification_to_read(notification: Notification, current_trainer_id: int, now: datetime) -> NotificationRead:
+def _notification_to_read(notification: Notification, viewer: Viewer, now: datetime) -> NotificationRead:
     hide_after = _hide_after(notification)
+    can_delete = viewer.kind == "trainer" and notification.author_trainer_id == viewer.trainer_id
     return NotificationRead(
         id=notification.id,
         title=notification.title,
         body=notification.body,
         author_trainer_id=notification.author_trainer_id,
-        visible_until=notification.visible_until,
+        visible_until=_as_aware_utc(notification.visible_until),
         hide_after=hide_after,
         visibility_state=_visibility_state(notification, now),
-        created_at=notification.created_at,
-        updated_at=notification.updated_at,
+        created_at=_as_aware_utc(notification.created_at),
+        updated_at=_as_aware_utc(notification.updated_at),
+        last_activity_at=_as_aware_utc(notification.last_activity_at),
         author_trainer=(
             TrainerBrief.model_validate(notification.author_trainer, from_attributes=True)
             if notification.author_trainer is not None
             else None
         ),
         targets=[_target_to_read(target) for target in notification.targets],
-        can_delete=notification.author_trainer_id == current_trainer_id,
+        can_delete=can_delete,
+        unread=_is_unread(notification, viewer),
+        has_read=_has_read(notification, viewer),
+        comment_count=len(notification.comments),
     )
 
 
-def _visible_to_trainer(notification: Notification, trainer_id: int) -> bool:
-    if notification.author_trainer_id == trainer_id:
-        return True
-    for target in notification.targets:
-        if target.audience != NotificationAudience.trainer:
+def _parent_matches_target(viewer: Viewer, target: NotificationTarget) -> bool:
+    for branch_ids, age_group in viewer.children:
+        if target.branch_id is not None and target.branch_id not in branch_ids:
             continue
-        if target.trainer_id is None or target.trainer_id == trainer_id:
+        if target.age_group is not None and target.age_group != age_group:
+            continue
+        return True
+    return False
+
+
+def _visible_to_viewer(notification: Notification, viewer: Viewer) -> bool:
+    if viewer.kind == "trainer":
+        if notification.author_trainer_id == viewer.trainer_id:
+            return True
+        for target in notification.targets:
+            if target.audience != NotificationAudience.trainer:
+                continue
+            if target.branch_id is None or target.branch_id in viewer.branch_ids:
+                return True
+        return False
+
+    for target in notification.targets:
+        if target.audience != NotificationAudience.parent:
+            continue
+        if _parent_matches_target(viewer, target):
             return True
     return False
 
@@ -109,25 +260,19 @@ def _visible_on_board(notification: Notification, now: datetime) -> bool:
 
 async def _validate_targets(db: AsyncSession, payload: NotificationCreate) -> None:
     for target in payload.targets:
-        if target.trainer_id is not None:
-            await _get_trainer_or_404(db, target.trainer_id)
-        if target.parent_id is not None:
-            await _get_parent_or_404(db, target.parent_id)
+        if target.branch_id is not None:
+            await _get_branch_or_404(db, target.branch_id)
 
 
 def _target_rows(payload: NotificationCreate) -> list[NotificationTarget]:
-    targets: list[NotificationTarget] = []
-    for audience in payload.audiences:
-        targets.append(NotificationTarget(audience=audience))
-    targets.extend(_individual_target_row(target) for target in payload.targets)
-    return targets
+    return [_target_row(target) for target in payload.targets]
 
 
-def _individual_target_row(target: NotificationTargetCreate) -> NotificationTarget:
+def _target_row(target: NotificationTargetCreate) -> NotificationTarget:
     return NotificationTarget(
         audience=target.audience,
-        trainer_id=target.trainer_id,
-        parent_id=target.parent_id,
+        branch_id=target.branch_id,
+        age_group=target.age_group,
     )
 
 
@@ -155,10 +300,16 @@ def _resolve_visible_until(payload: NotificationCreate, now: datetime) -> dateti
     return now + DEFAULT_VISIBLE_FOR
 
 
+def _resolve_grace_seconds(payload: NotificationCreate) -> int:
+    if not payload.keep_after_expiry or payload.grace_amount is None or payload.grace_unit is None:
+        return 0
+    return int(_duration_delta(payload.grace_amount, payload.grace_unit).total_seconds())
+
+
 @router.get("", response_model=list[NotificationRead])
 async def list_notifications(
     db: AsyncSession = Depends(get_db),
-    trainer_id: int = Depends(require_trainer_token),
+    viewer: Viewer = Depends(get_viewer),
     now: datetime = Depends(notification_now),
 ) -> list[NotificationRead]:
     result = await db.execute(
@@ -167,12 +318,21 @@ async def list_notifications(
         .order_by(Notification.created_at.desc(), Notification.id.desc()),
     )
     notifications = result.scalars().unique().all()
+
+    stale = [row for row in notifications if now >= _hide_after(row)]
+    if stale:
+        for row in stale:
+            await db.delete(row)
+        await db.commit()
+        stale_ids = {row.id for row in stale}
+        notifications = [row for row in notifications if row.id not in stale_ids]
+
     visible = [
         row
         for row in notifications
-        if _visible_to_trainer(row, trainer_id) and _visible_on_board(row, now)
+        if _visible_to_viewer(row, viewer) and _visible_on_board(row, now)
     ]
-    return [_notification_to_read(row, trainer_id, now) for row in visible]
+    return [_notification_to_read(row, viewer, now) for row in visible]
 
 
 @router.post("", response_model=NotificationRead, status_code=status.HTTP_201_CREATED)
@@ -190,7 +350,10 @@ async def create_notification(
         body=payload.body,
         author_trainer_id=trainer_id,
         visible_until=_resolve_visible_until(payload, now),
+        grace_seconds=_resolve_grace_seconds(payload),
+        last_activity_at=now,
         targets=_target_rows(payload),
+        reads=[NotificationReadReceipt(trainer_id=trainer_id, last_read_at=now)],
     )
     db.add(notification)
     await db.commit()
@@ -198,7 +361,7 @@ async def create_notification(
     result = await db.execute(
         select(Notification).where(Notification.id == notification.id).options(*_notification_options()),
     )
-    return _notification_to_read(result.scalar_one(), trainer_id, now)
+    return _notification_to_read(result.scalar_one(), Viewer(kind="trainer", trainer_id=trainer_id), now)
 
 
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -213,4 +376,125 @@ async def delete_notification(
     if notification.author_trainer_id != trainer_id:
         raise HTTPException(status_code=403, detail="Only the author can delete this notification.")
     await db.delete(notification)
+    await db.commit()
+
+
+@router.post("/{notification_id}/read", response_model=NotificationRead)
+async def mark_notification_read(
+    notification_id: int,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+    now: datetime = Depends(notification_now),
+) -> NotificationRead:
+    notification = await _get_visible_notification_or_404(db, notification_id, viewer, now)
+
+    _touch_read_receipt(notification, viewer, now)
+    await db.commit()
+
+    return _notification_to_read(notification, viewer, now)
+
+
+_COMMENT_AUTHOR_OPTIONS = (
+    selectinload(NotificationComment.author_trainer),
+    selectinload(NotificationComment.author_parent),
+)
+
+
+@router.get("/{notification_id}/comments", response_model=list[NotificationCommentRead])
+async def list_comments(
+    notification_id: int,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+    now: datetime = Depends(notification_now),
+) -> list[NotificationCommentRead]:
+    await _get_visible_notification_or_404(db, notification_id, viewer, now)
+
+    result = await db.execute(
+        select(NotificationComment)
+        .where(NotificationComment.notification_id == notification_id)
+        .options(*_COMMENT_AUTHOR_OPTIONS)
+        .order_by(NotificationComment.created_at.asc(), NotificationComment.id.asc()),
+    )
+    comments = result.scalars().all()
+    return [_comment_to_read(comment, viewer) for comment in comments]
+
+
+@router.post(
+    "/{notification_id}/comments",
+    response_model=NotificationCommentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_comment(
+    notification_id: int,
+    payload: NotificationCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+    now: datetime = Depends(notification_now),
+) -> NotificationCommentRead:
+    notification = await _get_visible_notification_or_404(db, notification_id, viewer, now)
+    if _visibility_state(notification, now) == "expired":
+        raise HTTPException(status_code=409, detail="Notification expired; reactions are closed.")
+
+    comment = NotificationComment(
+        notification_id=notification_id,
+        author_trainer_id=viewer.trainer_id if viewer.kind == "trainer" else None,
+        author_parent_id=viewer.parent_id if viewer.kind == "parent" else None,
+        body=payload.body,
+    )
+    db.add(comment)
+    notification.last_activity_at = now
+    _touch_read_receipt(notification, viewer, now)
+    await db.commit()
+
+    result = await db.execute(
+        select(NotificationComment)
+        .where(NotificationComment.id == comment.id)
+        .options(*_COMMENT_AUTHOR_OPTIONS),
+    )
+    return _comment_to_read(result.scalar_one(), viewer)
+
+
+@router.patch("/{notification_id}/comments/{comment_id}", response_model=NotificationCommentRead)
+async def update_comment(
+    notification_id: int,
+    comment_id: int,
+    payload: NotificationCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+    now: datetime = Depends(notification_now),
+) -> NotificationCommentRead:
+    comment = await db.get(NotificationComment, comment_id, options=list(_COMMENT_AUTHOR_OPTIONS))
+    if comment is None or comment.notification_id != notification_id:
+        raise HTTPException(status_code=404, detail="Comment not found.")
+    if not _authored_by_viewer(comment, viewer):
+        raise HTTPException(status_code=403, detail="Only the author can edit this comment.")
+
+    comment.body = payload.body
+    notification = await db.get(Notification, notification_id, options=[selectinload(Notification.reads)])
+    if notification is not None:
+        notification.last_activity_at = now
+        _touch_read_receipt(notification, viewer, now)
+    await db.commit()
+
+    result = await db.execute(
+        select(NotificationComment)
+        .where(NotificationComment.id == comment.id)
+        .options(*_COMMENT_AUTHOR_OPTIONS),
+    )
+    return _comment_to_read(result.scalar_one(), viewer)
+
+
+@router.delete("/{notification_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    notification_id: int,
+    comment_id: int,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+) -> None:
+    comment = await db.get(NotificationComment, comment_id)
+    if comment is None or comment.notification_id != notification_id:
+        raise HTTPException(status_code=404, detail="Comment not found.")
+    if not _authored_by_viewer(comment, viewer):
+        raise HTTPException(status_code=403, detail="Only the author can delete this comment.")
+    await db.delete(comment)
     await db.commit()

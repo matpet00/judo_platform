@@ -122,6 +122,8 @@ class Parent(Base):
     last_name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(320), unique=True)
     phone: Mapped[str] = mapped_column(String(32))
+    username: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -229,6 +231,8 @@ class Notification(Base):
     body: Mapped[str] = mapped_column(String(4000))
     author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
     visible_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    grace_seconds: Mapped[int] = mapped_column(Integer, server_default="0")
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -238,6 +242,14 @@ class Notification(Base):
 
     author_trainer: Mapped[Trainer | None] = relationship(back_populates="authored_notifications")
     targets: Mapped[list["NotificationTarget"]] = relationship(
+        back_populates="notification",
+        cascade="all, delete-orphan",
+    )
+    comments: Mapped[list["NotificationComment"]] = relationship(
+        back_populates="notification",
+        cascade="all, delete-orphan",
+    )
+    reads: Mapped[list["NotificationReadReceipt"]] = relationship(
         back_populates="notification",
         cascade="all, delete-orphan",
     )
@@ -251,12 +263,50 @@ class NotificationTarget(Base):
     audience: Mapped[NotificationAudience] = mapped_column(
         Enum(NotificationAudience, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=16),
     )
-    trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True)
-    parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="CASCADE"), nullable=True)
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"), nullable=True)
+    age_group: Mapped[AgeGroup | None] = mapped_column(
+        Enum(AgeGroup, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
+        nullable=True,
+    )
 
     notification: Mapped[Notification] = relationship(back_populates="targets")
-    trainer: Mapped[Trainer | None] = relationship()
-    parent: Mapped[Parent | None] = relationship()
+    branch: Mapped[Branch | None] = relationship()
+
+
+class NotificationComment(Base):
+    __tablename__ = "notification_comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id", ondelete="CASCADE"))
+    author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    author_parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="SET NULL"), nullable=True)
+    body: Mapped[str] = mapped_column(String(4000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    notification: Mapped[Notification] = relationship(back_populates="comments")
+    author_trainer: Mapped[Trainer | None] = relationship()
+    author_parent: Mapped[Parent | None] = relationship()
+
+
+class NotificationReadReceipt(Base):
+    __tablename__ = "notification_reads"
+    __table_args__ = (
+        UniqueConstraint("notification_id", "trainer_id", name="uq_notification_read_trainer"),
+        UniqueConstraint("notification_id", "parent_id", name="uq_notification_read_parent"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id", ondelete="CASCADE"))
+    trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="CASCADE"), nullable=True)
+    last_read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    notification: Mapped[Notification] = relationship(back_populates="reads")
 
 
 class AttendanceRecord(Base):

@@ -1,10 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Parent
-from app.schemas import ParentCreate, ParentPatch, ParentRead
+from app.models import Parent, Student
+from app.schemas import (
+    ParentAuthToken,
+    ParentCreate,
+    ParentLogin,
+    ParentPatch,
+    ParentRead,
+    ParentSelf,
+)
+from app.security import create_parent_token, require_parent_token, verify_pin
 
 router = APIRouter(prefix="/parents", tags=["parents"])
 
@@ -32,6 +41,36 @@ async def create_parent(
     db.add(parent)
     await db.commit()
     await db.refresh(parent)
+    return parent
+
+
+@router.post("/login", response_model=ParentAuthToken)
+async def parent_login(
+    payload: ParentLogin,
+    db: AsyncSession = Depends(get_db),
+) -> ParentAuthToken:
+    result = await db.execute(select(Parent).where(Parent.username == payload.username))
+    parent = result.scalar_one_or_none()
+    if parent is None or not verify_pin(payload.password, parent.password_hash):
+        raise HTTPException(status_code=401, detail="Neplatné přihlašovací údaje.")
+
+    token, expires_at = create_parent_token(parent.id)
+    return ParentAuthToken(access_token=token, expires_at=expires_at, parent_id=parent.id)
+
+
+@router.get("/me", response_model=ParentSelf)
+async def parent_me(
+    parent_id: int = Depends(require_parent_token),
+    db: AsyncSession = Depends(get_db),
+) -> Parent:
+    result = await db.execute(
+        select(Parent)
+        .where(Parent.id == parent_id)
+        .options(selectinload(Parent.children).selectinload(Student.branches)),
+    )
+    parent = result.scalar_one_or_none()
+    if parent is None:
+        raise HTTPException(status_code=404, detail="Parent not found.")
     return parent
 
 

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { api, todayIso } from "../api/client";
+import { AuthLanding } from "../components/AuthLanding";
 import { TrainerLoginFlow } from "../components/TrainerSwitcher";
+import { useParent } from "../context/ParentContext";
 import { useTrainer } from "../context/TrainerContext";
 import { useTodayAttendance } from "../hooks/useTodayAttendance";
 import { formatTime, resolveBootDecision } from "../lib/sessionRouting";
@@ -18,6 +20,11 @@ export function BootPage() {
     isError: trainersError,
     error: trainersLoadError,
   } = useTrainer();
+  const { isAuthenticated: parentAuthenticated } = useParent();
+
+  if (!isAuthenticated && parentAuthenticated) {
+    return <Navigate to="/parent" replace />;
+  }
 
   if (trainersLoading) {
     return (
@@ -43,7 +50,7 @@ export function BootPage() {
   if (!isAuthenticated || !trainer) {
     return (
       <div className="boot-screen app-shell">
-        <TrainerLoginFlow />
+        <AuthLanding />
       </div>
     );
   }

@@ -21,3 +21,27 @@ export function clearTrainerAuth(): void {
   sessionStorage.removeItem(TRAINER_ID_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
 }
+
+const PARENT_TOKEN_KEY = "judo-parent-token";
+const PARENT_ID_KEY = "judo-parent-id";
+
+export function getParentToken(): string | null {
+  return sessionStorage.getItem(PARENT_TOKEN_KEY);
+}
+
+export function getStoredParentId(): number | null {
+  const raw = sessionStorage.getItem(PARENT_ID_KEY);
+  if (!raw) return null;
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+export function setParentAuth(parentId: number, token: string): void {
+  sessionStorage.setItem(PARENT_ID_KEY, String(parentId));
+  sessionStorage.setItem(PARENT_TOKEN_KEY, token);
+}
+
+export function clearParentAuth(): void {
+  sessionStorage.removeItem(PARENT_ID_KEY);
+  sessionStorage.removeItem(PARENT_TOKEN_KEY);
+}

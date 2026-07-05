@@ -166,6 +166,47 @@ class ParentRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ParentLogin(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def normalize_username(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+
+class ParentAuthToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+    parent_id: int
+
+
+class ParentChildRead(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    age_group: AgeGroup
+    branches: list[BranchRead]
+
+    model_config = {"from_attributes": True}
+
+
+class ParentSelf(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    email: str
+    phone: str
+    username: str | None = None
+    children: list[ParentChildRead]
+
+    model_config = {"from_attributes": True}
+
+
 class ParentPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -514,19 +555,16 @@ class AttendanceRecordWithSessionRead(AttendanceRecordRead):
 
 class NotificationTargetCreate(BaseModel):
     audience: NotificationAudience
-    trainer_id: int | None = Field(default=None, ge=1)
-    parent_id: int | None = Field(default=None, ge=1)
+    branch_id: int | None = Field(default=None, ge=1, description="Konkrétní pobočka; None = všechny pobočky.")
+    age_group: AgeGroup | None = Field(
+        default=None,
+        description="Jen pro rodiče: konkrétní kategorie; None = všechny kategorie.",
+    )
 
     @model_validator(mode="after")
-    def validate_target(self) -> "NotificationTargetCreate":
-        has_trainer = self.trainer_id is not None
-        has_parent = self.parent_id is not None
-        if has_trainer and has_parent:
-            raise ValueError("Use either trainer_id or parent_id, not both.")
-        if self.audience == NotificationAudience.trainer and self.parent_id is not None:
-            raise ValueError("Trainer target cannot use parent_id.")
-        if self.audience == NotificationAudience.parent and self.trainer_id is not None:
-            raise ValueError("Parent target cannot use trainer_id.")
+    def validate_age_group(self) -> "NotificationTargetCreate":
+        if self.age_group is not None and self.audience != NotificationAudience.parent:
+            raise ValueError("age_group can only be set for parent targets.")
         return self
 
 
@@ -542,11 +580,13 @@ class NotificationDurationUnit(str):
 class NotificationCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     body: str = Field(min_length=1, max_length=4000)
-    audiences: list[NotificationAudience] = Field(default_factory=list)
     targets: list[NotificationTargetCreate] = Field(default_factory=list)
     visible_until: datetime | None = None
     duration_amount: int | None = Field(default=None, ge=1)
     duration_unit: str | None = Field(default=None, pattern="^(seconds|minutes|hours|days|weeks|months)$")
+    keep_after_expiry: bool = False
+    grace_amount: int | None = Field(default=None, ge=1)
+    grace_unit: str | None = Field(default=None, pattern="^(seconds|minutes|hours|days|weeks|months)$")
 
     @field_validator("title", "body", mode="before")
     @classmethod
@@ -555,28 +595,62 @@ class NotificationCreate(BaseModel):
             return v.strip()
         return v
 
-    @field_validator("audiences", mode="after")
-    @classmethod
-    def unique_audiences(cls, v: list[NotificationAudience]) -> list[NotificationAudience]:
-        return list(dict.fromkeys(v))
-
     @model_validator(mode="after")
     def require_any_target(self) -> "NotificationCreate":
-        if not self.audiences and not self.targets:
-            raise ValueError("Notification needs at least one audience or individual target.")
+        if not self.targets:
+            raise ValueError("Notification needs at least one target.")
         has_duration = self.duration_amount is not None or self.duration_unit is not None
         if self.visible_until is not None and has_duration:
             raise ValueError("Use either visible_until or duration_amount/duration_unit, not both.")
         if (self.duration_amount is None) != (self.duration_unit is None):
             raise ValueError("duration_amount and duration_unit must be provided together.")
+        if (self.grace_amount is None) != (self.grace_unit is None):
+            raise ValueError("grace_amount and grace_unit must be provided together.")
+        if self.keep_after_expiry and self.grace_amount is None:
+            raise ValueError("grace_amount and grace_unit are required when keep_after_expiry is true.")
         return self
 
 
 class NotificationTargetRead(BaseModel):
     id: int
     audience: NotificationAudience
-    trainer_id: int | None = None
-    parent_id: int | None = None
+    branch_id: int | None = None
+    age_group: AgeGroup | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def strip_comment_body(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class ParentBrief(BaseModel):
+    id: int = Field(examples=[1])
+    first_name: str = Field(examples=["Marie"])
+    last_name: str = Field(examples=["Nováková"])
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationCommentRead(BaseModel):
+    id: int
+    notification_id: int
+    author_trainer_id: int | None = None
+    author_parent_id: int | None = None
+    body: str
+    created_at: datetime
+    updated_at: datetime
+    author_trainer: TrainerBrief | None = None
+    author_parent: ParentBrief | None = None
+    can_delete: bool = False
+    can_edit: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -589,8 +663,12 @@ class NotificationRead(BaseModel):
     visible_until: datetime
     hide_after: datetime
     visibility_state: str
+    last_activity_at: datetime
     created_at: datetime
     updated_at: datetime
     author_trainer: TrainerBrief | None = None
     targets: list[NotificationTargetRead] = Field(default_factory=list)
     can_delete: bool = False
+    unread: bool = True
+    has_read: bool = False
+    comment_count: int = 0

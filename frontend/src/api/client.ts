@@ -1,11 +1,13 @@
 import type { AttendanceStatus, AttendanceSummary, NotificationCreate } from "./types";
 import { parseApiError } from "../lib/apiError";
-import { getTrainerToken } from "../lib/auth";
+import { getParentToken, getTrainerToken } from "../lib/auth";
 
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
 const WRITE_KEY = import.meta.env.VITE_API_WRITE_KEY ?? "";
 
-function buildHeaders(mutating: boolean, authenticated = false): HeadersInit {
+type Role = "trainer" | "parent";
+
+function buildHeaders(mutating: boolean, authenticated = false, role: Role = "trainer"): HeadersInit {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -13,7 +15,7 @@ function buildHeaders(mutating: boolean, authenticated = false): HeadersInit {
     headers["X-API-Key"] = WRITE_KEY;
   }
   if (mutating || authenticated) {
-    const token = getTrainerToken();
+    const token = role === "parent" ? getParentToken() : getTrainerToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
   return headers;
@@ -24,12 +26,13 @@ async function request<T>(
   init?: RequestInit,
   mutating = false,
   authenticated = false,
+  role: Role = "trainer",
 ): Promise<T> {
   const attempt = async () => {
     const res = await fetch(`${BASE}${path}`, {
       ...init,
       headers: {
-        ...buildHeaders(mutating, authenticated),
+        ...buildHeaders(mutating, authenticated, role),
         ...(init?.headers as Record<string, string> | undefined),
       },
     });
@@ -55,6 +58,13 @@ export const api = {
   health: () => request<{ status: string }>("/health"),
   trainers: () => request<import("./types").Trainer[]>("/trainers"),
   parents: () => request<import("./types").Parent[]>("/parents"),
+  parentLogin: (username: string, password: string) =>
+    request<import("./types").ParentAuthToken>("/parents/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }, true),
+  parentMe: () => request<import("./types").ParentSelf>("/parents/me", undefined, false, true, "parent"),
+  branches: () => request<import("./types").BranchBrief[]>("/branches"),
   verifyPin: (trainerId: number, pin: string) =>
     request<import("./types").TrainerAuthToken>(`/trainers/${trainerId}/verify-pin`, {
       method: "POST",
@@ -119,8 +129,8 @@ export const api = {
       return toSummary(record);
     }
   },
-  notifications: () =>
-    request<import("./types").Notification[]>("/notifications", undefined, false, true),
+  notifications: (role: Role = "trainer") =>
+    request<import("./types").Notification[]>("/notifications", undefined, false, true, role),
   createNotification: (payload: NotificationCreate) =>
     request<import("./types").Notification>("/notifications", {
       method: "POST",
@@ -128,6 +138,22 @@ export const api = {
     }, true),
   deleteNotification: (id: number) =>
     request<void>(`/notifications/${id}`, { method: "DELETE" }, true),
+  markNotificationRead: (id: number, role: Role = "trainer") =>
+    request<import("./types").Notification>(`/notifications/${id}/read`, { method: "POST" }, true, false, role),
+  notificationComments: (id: number, role: Role = "trainer") =>
+    request<import("./types").NotificationComment[]>(`/notifications/${id}/comments`, undefined, false, true, role),
+  addNotificationComment: (id: number, body: string, role: Role = "trainer") =>
+    request<import("./types").NotificationComment>(`/notifications/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }, true, false, role),
+  updateNotificationComment: (notificationId: number, commentId: number, body: string, role: Role = "trainer") =>
+    request<import("./types").NotificationComment>(`/notifications/${notificationId}/comments/${commentId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    }, true, false, role),
+  deleteNotificationComment: (notificationId: number, commentId: number, role: Role = "trainer") =>
+    request<void>(`/notifications/${notificationId}/comments/${commentId}`, { method: "DELETE" }, true, false, role),
 };
 
 function toSummary(record: import("./types").AttendanceRecordRead): AttendanceSummary {

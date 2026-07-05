@@ -32,6 +32,31 @@ export interface TrainerAuthToken {
   trainer_id: number;
 }
 
+export interface ParentAuthToken {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+  parent_id: number;
+}
+
+export interface ParentChild {
+  id: number;
+  first_name: string;
+  last_name: string;
+  age_group: AgeGroup;
+  branches: BranchBrief[];
+}
+
+export interface ParentSelf {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  username: string | null;
+  children: ParentChild[];
+}
+
 export interface AttendanceRecordRead {
   id: number;
   session_id: number;
@@ -128,8 +153,8 @@ export interface SessionWithProgress extends TrainingSessionSummary {
 export interface NotificationTarget {
   id: number;
   audience: NotificationAudience;
-  trainer_id: number | null;
-  parent_id: number | null;
+  branch_id: number | null;
+  age_group: AgeGroup | null;
 }
 
 export interface Notification {
@@ -140,25 +165,51 @@ export interface Notification {
   visible_until: string;
   hide_after: string;
   visibility_state: NotificationVisibilityState;
+  last_activity_at: string;
   created_at: string;
   updated_at: string;
   author_trainer: TrainerBrief | null;
   targets: NotificationTarget[];
   can_delete: boolean;
+  unread: boolean;
+  has_read: boolean;
+  comment_count: number;
+}
+
+export interface ParentBrief {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
+export interface NotificationComment {
+  id: number;
+  notification_id: number;
+  author_trainer_id: number | null;
+  author_parent_id: number | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  author_trainer: TrainerBrief | null;
+  author_parent: ParentBrief | null;
+  can_delete: boolean;
+  can_edit: boolean;
 }
 
 export interface NotificationTargetCreate {
   audience: NotificationAudience;
-  trainer_id?: number | null;
-  parent_id?: number | null;
+  branch_id?: number | null;
+  age_group?: AgeGroup | null;
 }
 
 export interface NotificationCreate {
   title: string;
   body: string;
-  audiences: NotificationAudience[];
   targets: NotificationTargetCreate[];
   visible_until?: string | null;
   duration_amount?: number | null;
   duration_unit?: NotificationDurationUnit | null;
+  keep_after_expiry?: boolean;
+  grace_amount?: number | null;
+  grace_unit?: NotificationDurationUnit | null;
 }

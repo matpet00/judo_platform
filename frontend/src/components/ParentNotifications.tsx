@@ -1,0 +1,246 @@
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../api/client";
+import type { Notification } from "../api/types";
+
+type NotificationState = "new" | "reply" | "soon" | "read";
+
+function notificationState(notification: Notification): NotificationState {
+  if (notification.unread) return notification.has_read ? "reply" : "new";
+  const created = new Date(notification.created_at).getTime();
+  const hide = new Date(notification.hide_after).getTime();
+  const total = hide - created;
+  if (total > 0 && hide - Date.now() <= 0.2 * total) return "soon";
+  return "read";
+}
+
+const stateBadge: Record<NotificationState, { label: string; className: string }> = {
+  new: { label: "Nové", className: "notification-badge--new" },
+  reply: { label: "Nová odpověď ve vlákně", className: "notification-badge--reply" },
+  soon: { label: "Brzy bude smazáno", className: "notification-badge--soon" },
+  read: { label: "Přečteno", className: "notification-badge--read" },
+};
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function ParentNotifications({ parentId }: { parentId: number }) {
+  const notificationsQuery = useQuery({
+    queryKey: ["parent-notifications", parentId],
+    queryFn: () => api.notifications("parent"),
+  });
+
+  const notifications = notificationsQuery.data ?? [];
+  const pending = notifications.filter((n) => n.unread).length;
+
+  return (
+    <section className="notification-list parent-notifications">
+      <h2 className="parent-notifications__title">
+        Notifikace
+        {pending > 0 && <span className="notification-pending">{pending}</span>}
+      </h2>
+      {notificationsQuery.isLoading && <div className="loading">Načítám…</div>}
+      {notificationsQuery.isError && (
+        <div className="error-box">Notifikace se nepodařilo načíst.</div>
+      )}
+      {notifications.map((notification) => (
+        <ParentNotificationCard key={notification.id} notification={notification} parentId={parentId} />
+      ))}
+      {!notificationsQuery.isLoading && notifications.length === 0 && (
+        <div className="loading">Zatím tu nejsou žádné notifikace pro tvoje děti.</div>
+      )}
+    </section>
+  );
+}
+
+function ParentNotificationCard({ notification, parentId }: { notification: Notification; parentId: number }) {
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [reply, setReply] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["parent-notification-comments", notification.id] });
+    queryClient.invalidateQueries({ queryKey: ["parent-notifications"] });
+  };
+
+  const commentsQuery = useQuery({
+    queryKey: ["parent-notification-comments", notification.id, parentId],
+    queryFn: () => api.notificationComments(notification.id, "parent"),
+    enabled: expanded,
+  });
+
+  const markRead = useMutation({
+    mutationFn: () => api.markNotificationRead(notification.id, "parent"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["parent-notifications"] }),
+  });
+
+  const addComment = useMutation({
+    mutationFn: (body: string) => api.addNotificationComment(notification.id, body, "parent"),
+    onSuccess: () => {
+      setReply("");
+      invalidate();
+    },
+  });
+
+  const deleteComment = useMutation({
+    mutationFn: (commentId: number) => api.deleteNotificationComment(notification.id, commentId, "parent"),
+    onSuccess: invalidate,
+  });
+
+  const updateComment = useMutation({
+    mutationFn: ({ commentId, body }: { commentId: number; body: string }) =>
+      api.updateNotificationComment(notification.id, commentId, body, "parent"),
+    onSuccess: () => {
+      setEditingId(null);
+      setEditText("");
+      invalidate();
+    },
+  });
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && notification.unread) markRead.mutate();
+  };
+
+  const badge = stateBadge[notificationState(notification)];
+  const comments = commentsQuery.data ?? [];
+  const isExpired = notification.visibility_state === "expired";
+
+  return (
+    <article className={`notification-card${isExpired ? " notification-card--expired" : ""}`}>
+      <button type="button" className="notification-card__head" onClick={toggle}>
+        <div>
+          <span className="notification-card__meta">
+            {formatDate(notification.created_at)}
+            {notification.author_trainer
+              ? ` · ${notification.author_trainer.first_name} ${notification.author_trainer.last_name}`
+              : ""}
+          </span>
+          <h3>{notification.title}</h3>
+          <p>{notification.body}</p>
+          <small>
+            {isExpired ? "expirováno" : `platí do ${formatDate(notification.visible_until)}`}
+          </small>
+        </div>
+        <div className="notification-card__side">
+          <span className={`notification-badge ${badge.className}`}>{badge.label}</span>
+          <span className="notification-card__comments">
+            {notification.comment_count > 0 ? `${notification.comment_count} 💬` : ""}
+          </span>
+          <span className="notification-card__chevron">{expanded ? "▲" : "▼"}</span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="notification-thread">
+          {commentsQuery.isLoading && <div className="loading">Načítám…</div>}
+          {comments.map((comment) => (
+            <div className="notification-comment" key={comment.id}>
+              <span className="notification-comment__meta">
+                {comment.author_trainer
+                  ? `${comment.author_trainer.first_name} ${comment.author_trainer.last_name}`
+                  : comment.author_parent
+                    ? `${comment.author_parent.first_name} ${comment.author_parent.last_name} (rodič)`
+                    : "Neznámý"}
+                {" · "}
+                {formatDate(comment.created_at)}
+                {comment.updated_at !== comment.created_at ? " · upraveno" : ""}
+              </span>
+              {editingId === comment.id ? (
+                <div className="notification-comment__edit">
+                  <textarea value={editText} onChange={(event) => setEditText(event.target.value)} rows={2} />
+                  <div className="notification-comment__edit-actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditText("");
+                      }}
+                    >
+                      Zrušit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={!editText.trim() || updateComment.isPending}
+                      onClick={() => updateComment.mutate({ commentId: comment.id, body: editText })}
+                    >
+                      {updateComment.isPending ? "Ukládám…" : "Uložit"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p>{comment.body}</p>
+                  {(comment.can_edit || comment.can_delete) && (
+                    <div className="notification-comment__actions">
+                      {comment.can_edit && (
+                        <button
+                          type="button"
+                          className="notification-comment__edit-btn"
+                          onClick={() => {
+                            setEditingId(comment.id);
+                            setEditText(comment.body);
+                          }}
+                        >
+                          Upravit
+                        </button>
+                      )}
+                      {comment.can_delete && (
+                        <button
+                          type="button"
+                          className="notification-comment__delete"
+                          disabled={deleteComment.isPending}
+                          onClick={() => deleteComment.mutate(comment.id)}
+                        >
+                          Smazat
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+          {!commentsQuery.isLoading && comments.length === 0 && (
+            <div className="notification-thread__empty">Zatím žádné reakce.</div>
+          )}
+
+          {isExpired ? (
+            <div className="notification-thread__closed">
+              Notifikace expirovala – reakce už nelze přidávat.
+            </div>
+          ) : (
+            <div className="notification-thread__reply">
+              <textarea
+                value={reply}
+                onChange={(event) => setReply(event.target.value)}
+                placeholder="Napiš reakci…"
+                rows={2}
+              />
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={!reply.trim() || addComment.isPending}
+                onClick={() => addComment.mutate(reply)}
+              >
+                {addComment.isPending ? "Odesílám…" : "Odeslat"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}

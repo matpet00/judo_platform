@@ -3,10 +3,12 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useParams } from "react-router-dom";
 import { TrainerProvider } from "./context/TrainerContext";
+import { ParentProvider } from "./context/ParentContext";
 import { AttendanceBootPage, BootPage } from "./pages/BootPage";
 import { BoardPage } from "./pages/BoardPage";
 import { TodayPage } from "./pages/TodayPage";
 import { SessionSwipePage } from "./pages/SessionSwipePage";
+import { ParentHomePage } from "./pages/ParentHomePage";
 import "./index.css";
 import "./components/StudentSwipeDeck.css";
 
@@ -27,15 +29,18 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <TrainerProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<BootPage />} />
-            <Route path="/attendance" element={<AttendanceBootPage />} />
-            <Route path="/board" element={<BoardPage />} />
-            <Route path="/today" element={<TodayPage />} />
-            <Route path="/session/:id" element={<SessionRoute />} />
-          </Routes>
-        </BrowserRouter>
+        <ParentProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<BootPage />} />
+              <Route path="/attendance" element={<AttendanceBootPage />} />
+              <Route path="/board" element={<BoardPage />} />
+              <Route path="/today" element={<TodayPage />} />
+              <Route path="/session/:id" element={<SessionRoute />} />
+              <Route path="/parent" element={<ParentHomePage />} />
+            </Routes>
+          </BrowserRouter>
+        </ParentProvider>
       </TrainerProvider>
     </QueryClientProvider>
   </StrictMode>,
