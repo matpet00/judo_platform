@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api, todayIso } from "../api/client";
 import { AuthLanding } from "../components/AuthLanding";
+import { ClubLogo } from "../components/ClubLogo";
 import { trainerNotificationsKey } from "../api/queryKeys";
 import { countUnreadBoard, countUnreadPlanner } from "../lib/notificationNavigation";
 import { TrainerLoginFlow } from "../components/TrainerSwitcher";
@@ -51,7 +52,7 @@ export function BootPage() {
   if (trainersLoading) {
     return (
       <div className="boot-screen">
-        <div className="boot-screen__logo">JUDO</div>
+        <ClubLogo variant="splash" />
         <p className="page-header__sub">Načítám trenéry…</p>
       </div>
     );
@@ -80,6 +81,7 @@ export function BootPage() {
   return (
     <div className="boot-screen app-shell">
       <div className="hub-card">
+        <ClubLogo variant="header" />
         <p className="page-header__eyebrow">Menu</p>
         <h1 className="trainer-picker__title">Kam chceš jít?</h1>
         <p className="trainer-picker__sub">
@@ -187,7 +189,7 @@ export function AttendanceBootPage() {
   if (trainersLoading) {
     return (
       <div className="boot-screen">
-        <div className="boot-screen__logo">JUDO</div>
+        <ClubLogo variant="splash" />
         <p className="page-header__sub">Načítám trenéry…</p>
       </div>
     );
@@ -267,7 +269,7 @@ export function AttendanceBootPage() {
 
   return (
     <div className="boot-screen">
-      <div className="boot-screen__logo">JUDO</div>
+      <ClubLogo variant="splash" />
       <p className="page-header__sub">Načítám dnešní trénink…</p>
     </div>
   );

@@ -11,6 +11,7 @@ from app.models import (
     NotificationAudience,
     RsvpStatus,
 )
+from app.phone import validate_e164_phone
 
 _EX_BRANCH_NAME, _EX_BRANCH_ADDR = DEFAULT_BRANCHES[0]
 
@@ -156,9 +157,9 @@ class ParentCreate(BaseModel):
 
     @field_validator("phone", mode="before")
     @classmethod
-    def strip_phone(cls, v: object) -> object:
+    def normalize_parent_phone(cls, v: object) -> object:
         if isinstance(v, str):
-            return v.strip()
+            return validate_e164_phone(v)
         return v
 
 
@@ -198,6 +199,7 @@ class ParentChildRead(BaseModel):
     first_name: str
     last_name: str
     age_group: AgeGroup
+    birth_date: date | None = None
     branches: list[BranchRead]
 
     model_config = {"from_attributes": True}
@@ -232,9 +234,11 @@ class ParentPatch(BaseModel):
 
     @field_validator("phone", mode="before")
     @classmethod
-    def strip_optional_phone(cls, v: object) -> object:
+    def normalize_optional_parent_phone(cls, v: object) -> object:
+        if v is None:
+            return v
         if isinstance(v, str):
-            return v.strip()
+            return validate_e164_phone(v)
         return v
 
 
@@ -255,9 +259,9 @@ class StudentParentInput(BaseModel):
 
     @field_validator("phone", mode="before")
     @classmethod
-    def strip_student_parent_phone(cls, v: object) -> object:
+    def normalize_student_parent_phone(cls, v: object) -> object:
         if isinstance(v, str):
-            return v.strip()
+            return validate_e164_phone(v)
         return v
 
 
@@ -265,6 +269,7 @@ class StudentCreate(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     age_group: AgeGroup
+    birth_date: date | None = None
     branch_ids: list[int] = Field(min_length=1, description="Jedna nebo více poboček (M:N).")
     parents: list[StudentParentInput] = Field(default_factory=list, max_length=2)
 
@@ -278,11 +283,69 @@ class StudentCreate(BaseModel):
         return v
 
 
+class ChildRegistrationInput(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    birth_date: date
+    branch_ids: list[int] = Field(min_length=1)
+
+    @field_validator("branch_ids", mode="after")
+    @classmethod
+    def unique_branch_ids(cls, v: list[int]) -> list[int]:
+        if len(set(v)) != len(v):
+            raise ValueError("Duplicate branch_ids are not allowed.")
+        if any(bid < 1 for bid in v):
+            raise ValueError("branch_ids must be >= 1.")
+        return v
+
+
+class ClubRegistrationCreate(BaseModel):
+    """Registrace rodiče a jednoho či více dětí do klubu."""
+
+    parent_first_name: str = Field(min_length=1, max_length=100)
+    parent_last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    phone: str = Field(min_length=1, max_length=32)
+    second_guardian: StudentParentInput | None = None
+    children: list[ChildRegistrationInput] = Field(min_length=1, max_length=5)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_registration_phone(cls, v: object) -> object:
+        if isinstance(v, str):
+            return validate_e164_phone(v)
+        return v
+
+    @model_validator(mode="after")
+    def validate_guardians(self) -> "ClubRegistrationCreate":
+        if self.second_guardian is not None:
+            primary = str(self.email).strip().lower()
+            secondary = str(self.second_guardian.email).strip().lower()
+            if primary == secondary:
+                raise ValueError("E-mail druhého zástupce musí být jiný než u prvního.")
+        return self
+
+
+class AgeGroupPreview(BaseModel):
+    birth_date: date
+    reference_year: int
+    age_at_year_end: int
+    age_group: AgeGroup
+
+
 class StudentRead(BaseModel):
     id: int = Field(examples=[1])
     first_name: str = Field(examples=["Pepa"])
     last_name: str = Field(examples=["Zelený"])
     age_group: AgeGroup = Field(examples=[AgeGroup.U10])
+    birth_date: date | None = None
     created_at: datetime
     updated_at: datetime
     branches: list[BranchRead]
@@ -291,12 +354,46 @@ class StudentRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class GuardianCredentialsRead(BaseModel):
+    parent_id: int
+    first_name: str
+    last_name: str
+    email: str
+    username: str
+    password: str | None = None
+    credentials_created: bool = False
+
+
+class ClubRegistrationRead(BaseModel):
+    parent_id: int
+    students: list[StudentRead]
+    existing_parent: bool
+    username: str | None = None
+    password: str | None = Field(
+        default=None,
+        description="Vygenerované heslo 1. zástupce (uložené i v DB).",
+    )
+    credentials_created: bool = False
+    second_guardian: GuardianCredentialsRead | None = None
+    access_token: str | None = None
+    token_type: str | None = None
+    expires_at: datetime | None = None
+    parent_id_token: int | None = None
+    message: str | None = None
+
+
+class ParentEmailStatus(BaseModel):
+    exists: bool
+    has_login: bool = False
+
+
 class StudentPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     age_group: AgeGroup | None = None
+    birth_date: date | None = None
     branch_ids: list[int] | None = Field(default=None, min_length=1)
     parents: list[StudentParentInput] | None = Field(default=None, max_length=2)
 

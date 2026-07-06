@@ -1,4 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
+import { ClubLogo } from "../components/ClubLogo";
 import { useParent } from "../context/ParentContext";
 import { ParentNotifications } from "../components/ParentNotifications";
 
@@ -12,7 +13,7 @@ export function ParentBoardPage() {
   if (isLoading || !parent) {
     return (
       <div className="boot-screen">
-        <div className="boot-screen__logo">JUDO</div>
+        <ClubLogo variant="splash" />
         <p className="page-header__sub">Načítám profil…</p>
       </div>
     );

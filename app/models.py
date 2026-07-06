@@ -152,6 +152,7 @@ class Parent(Base):
     phone: Mapped[str] = mapped_column(String(32))
     username: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    password_plain: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -174,6 +175,7 @@ class Student(Base):
     age_group: Mapped[AgeGroup] = mapped_column(
         Enum(AgeGroup, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
     )
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

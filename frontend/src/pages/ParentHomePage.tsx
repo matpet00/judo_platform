@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { countUnreadBoard, countUnreadPlanner } from "../lib/notificationNavigation";
 import { parentNotificationsKey } from "../api/queryKeys";
+import { ClubLogo } from "../components/ClubLogo";
 import { useParent } from "../context/ParentContext";
 
 export function ParentHomePage() {
@@ -27,7 +28,7 @@ export function ParentHomePage() {
   if (isLoading || !parent) {
     return (
       <div className="boot-screen">
-        <div className="boot-screen__logo">JUDO</div>
+        <ClubLogo variant="splash" />
         <p className="page-header__sub">Načítám profil…</p>
       </div>
     );
@@ -41,6 +42,7 @@ export function ParentHomePage() {
   return (
     <div className="boot-screen app-shell">
       <div className="hub-card">
+        <ClubLogo variant="header" />
         <p className="page-header__eyebrow">Rodič</p>
         <h1 className="trainer-picker__title">
           {parent.first_name} {parent.last_name}
@@ -49,7 +51,12 @@ export function ParentHomePage() {
 
         <ul className="parent-children">
           {parent.children.length === 0 && (
-            <li className="parent-children__empty">Zatím nemáš přiřazené žádné dítě.</li>
+            <li className="parent-children__empty">
+              Zatím nemáš přiřazené žádné dítě.{" "}
+              <button type="button" className="btn btn--ghost register-inline-link" onClick={() => navigate("/register")}>
+                Registrovat dítě
+              </button>
+            </li>
           )}
           {parent.children.map((child) => (
             <li key={child.id} className="parent-child">
@@ -78,6 +85,9 @@ export function ParentHomePage() {
         <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/events")}>
           Akce
           {unreadEvents > 0 && <span className="trainer-card__badge">{unreadEvents}</span>}
+        </button>
+        <button type="button" className="btn btn--ghost auth-back" onClick={() => navigate("/register")}>
+          Registrovat další dítě
         </button>
         <button type="button" className="btn btn--ghost auth-back" onClick={logout}>
           Odhlásit

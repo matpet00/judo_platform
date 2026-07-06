@@ -16,6 +16,7 @@ from app.routers import (
     mail,
     notifications,
     parents,
+    registration,
     students,
     trainers,
     training_groups,
@@ -39,7 +40,7 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="Judo club", lifespan=lifespan)
+app = FastAPI(title="Judo klub Orlová", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +64,7 @@ async def api_write_key_middleware(request: Request, call_next):
 app.include_router(trainers.router)
 app.include_router(branches.router)
 app.include_router(parents.router)
+app.include_router(registration.router)
 app.include_router(students.router)
 app.include_router(mail.router)
 app.include_router(training_groups.router)

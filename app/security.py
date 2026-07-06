@@ -10,7 +10,7 @@ from app.config import settings
 
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-PUBLIC_WRITE_SUFFIXES = ("/verify-pin", "/parents/login")
+PUBLIC_WRITE_SUFFIXES = ("/verify-pin", "/parents/login", "/register")
 
 
 def hash_pin(pin: str) -> str:

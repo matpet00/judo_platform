@@ -97,6 +97,20 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }, true),
   parentMe: () => request<import("./types").ParentSelf>("/parents/me", undefined, false, true, "parent"),
+  parentEmailStatus: (email: string) =>
+    request<import("./types").ParentEmailStatus>(
+      `/register/parent-status?email=${encodeURIComponent(email)}`,
+    ),
+  registerToClub: (payload: import("./types").ClubRegistrationCreate) =>
+    request<import("./types").ClubRegistrationRead>("/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true),
+  previewAgeGroup: (birthDate: string, referenceYear?: number) => {
+    const params = new URLSearchParams({ birth_date: birthDate });
+    if (referenceYear) params.set("reference_year", String(referenceYear));
+    return request<import("./types").AgeGroupPreview>(`/age-group?${params}`);
+  },
   branches: () => request<import("./types").BranchBrief[]>("/branches"),
   verifyPin: (trainerId: number, pin: string) =>
     request<import("./types").TrainerAuthToken>(`/trainers/${trainerId}/verify-pin`, {

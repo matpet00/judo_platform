@@ -1,4 +1,5 @@
 import type { Trainer } from "../api/types";
+import { ClubLogo } from "./ClubLogo";
 
 function trainerLabel(trainer: Trainer): string {
   return `${trainer.first_name} ${trainer.last_name}`;
@@ -34,7 +35,7 @@ export function TrainerPicker({
   return (
     <div className="trainer-picker">
       <header className="trainer-picker__header">
-        <p className="page-header__eyebrow">Přihlášení</p>
+        <ClubLogo variant="header" />
         <h1 className="trainer-picker__title">{title}</h1>
         <p className="trainer-picker__sub">{subtitle}</p>
       </header>

@@ -929,6 +929,168 @@ textarea {
   font-size: 0.85rem;
 }
 
+.register-inline-link {
+  display: inline;
+  min-height: unset;
+  padding: 0;
+  margin-left: 4px;
+  font-size: inherit;
+  color: var(--gold);
+  text-decoration: underline;
+}
+
+.register-guardian {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: grid;
+  gap: 10px;
+}
+
+.register-guardian .register-section__title {
+  padding: 0 0 4px;
+}
+
+.register-card {
+  max-width: 440px;
+}
+
+.register-form {
+  margin-top: 14px;
+}
+
+.register-section {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  border: none;
+}
+
+.register-section + .register-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.register-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.register-section__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--cream);
+}
+
+.register-child {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(18, 18, 22, 0.5);
+  display: grid;
+  gap: 10px;
+}
+
+.register-child__legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 4px 6px;
+  font-size: 0.85rem;
+  color: var(--gold);
+}
+
+.register-child__remove {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 0.75rem;
+}
+
+.register-child__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.register-add-child {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.8rem;
+}
+
+.register-age-preview {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.register-age-preview strong {
+  color: var(--gold);
+}
+
+.register-age-error {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+
+.register-hint {
+  margin: -4px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.register-hint--info {
+  color: #9ec8e8;
+}
+
+.register-success {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(120, 200, 140, 0.35);
+  background: rgba(40, 80, 50, 0.25);
+  color: #a8e0b8;
+  font-size: 0.85rem;
+}
+
+.register-credentials-list {
+  display: grid;
+  gap: 12px;
+}
+
+.register-credentials {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--gold-dim);
+  background: rgba(40, 34, 18, 0.35);
+}
+
+.register-credentials__title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.register-credentials strong {
+  color: var(--cream);
+  font-family: ui-monospace, monospace;
+}
+
+@media (max-width: 420px) {
+  .register-child__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .parent-board {
   width: 100%;
   max-width: 760px;

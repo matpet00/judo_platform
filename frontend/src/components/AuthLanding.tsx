@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ClubLogo } from "../components/ClubLogo";
 import { useParent } from "../context/ParentContext";
 import { TrainerLoginFlow } from "./TrainerSwitcher";
 
@@ -28,6 +29,7 @@ function ParentLoginForm({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="auth-card">
+      <ClubLogo variant="header" />
       <header className="trainer-picker__header">
         <p className="page-header__eyebrow">Rodič</p>
         <h1 className="trainer-picker__title">Přihlášení pro rodiče</h1>
@@ -83,6 +85,7 @@ function ParentLoginForm({ onBack }: { onBack: () => void }) {
 }
 
 export function AuthLanding() {
+  const navigate = useNavigate();
   const [role, setRole] = useState<Role | null>(null);
 
   if (role === "trainer") {
@@ -102,7 +105,7 @@ export function AuthLanding() {
 
   return (
     <div className="hub-card">
-      <p className="page-header__eyebrow">Judo klub</p>
+      <ClubLogo variant="header" />
       <h1 className="trainer-picker__title">Přihlášení</h1>
       <p className="trainer-picker__sub">Vyber, jak se chceš přihlásit</p>
       <div className="hub-card__actions">
@@ -113,6 +116,10 @@ export function AuthLanding() {
         <button type="button" className="trainer-card" onClick={() => setRole("parent")}>
           <span className="trainer-card__name">Rodič</span>
           <span className="trainer-card__branch">Přihlášení pro rodiče</span>
+        </button>
+        <button type="button" className="trainer-card" onClick={() => navigate("/register")}>
+          <span className="trainer-card__name">Registrace</span>
+          <span className="trainer-card__branch">Přihlásit dítě do klubu</span>
         </button>
       </div>
     </div>

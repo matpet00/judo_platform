@@ -60,6 +60,7 @@ def _student_to_read(student: Student) -> StudentRead:
         first_name=student.first_name,
         last_name=student.last_name,
         age_group=student.age_group,
+        birth_date=student.birth_date,
         created_at=student.created_at,
         updated_at=student.updated_at,
         branches=[BranchRead.model_validate(b, from_attributes=True) for b in branches_sorted],
@@ -91,6 +92,7 @@ async def create_student(
         first_name=payload.first_name,
         last_name=payload.last_name,
         age_group=payload.age_group,
+        birth_date=payload.birth_date,
     )
     student.branches.extend(branches_list)
     student.parents.extend(parents)
@@ -171,6 +173,8 @@ async def patch_student(
         student.last_name = data["last_name"]
     if "age_group" in data:
         student.age_group = data["age_group"]
+    if "birth_date" in data:
+        student.birth_date = data["birth_date"]
 
     await db.commit()
     await db.refresh(student, attribute_names=["parents", "branches"])

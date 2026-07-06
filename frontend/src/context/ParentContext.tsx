@@ -9,6 +9,7 @@ type ParentContextValue = {
   isAuthenticated: boolean;
   isLoading: boolean;
   loginParent: (username: string, password: string) => Promise<void>;
+  setParentSession: (parentId: number, token: string) => void;
   clearParent: () => void;
 };
 
@@ -32,6 +33,12 @@ export function ParentProvider({ children }: { children: ReactNode }) {
     setToken(auth.access_token);
   }, []);
 
+  const setParentSession = useCallback((id: number, authToken: string) => {
+    setParentAuth(id, authToken);
+    setParentId(id);
+    setToken(authToken);
+  }, []);
+
   const clearParent = useCallback(() => {
     setParentId(null);
     setToken(null);
@@ -47,9 +54,10 @@ export function ParentProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isLoading: isAuthenticated && meQuery.isLoading,
       loginParent,
+      setParentSession,
       clearParent,
     }),
-    [parent, isAuthenticated, meQuery.isLoading, loginParent, clearParent],
+    [parent, isAuthenticated, meQuery.isLoading, loginParent, setParentSession, clearParent],
   );
 
   return <ParentContext.Provider value={value}>{children}</ParentContext.Provider>;

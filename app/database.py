@@ -144,12 +144,19 @@ async def migrate_schema() -> None:
             )
             await conn.execute(text("DROP TABLE event_rsvps_old"))
 
+        result = await conn.execute(text("PRAGMA table_info(students)"))
+        student_columns = {row[1] for row in result.fetchall()}
+        if student_columns and "birth_date" not in student_columns:
+            await conn.execute(text("ALTER TABLE students ADD COLUMN birth_date DATE"))
+
         result = await conn.execute(text("PRAGMA table_info(parents)"))
         parent_columns = {row[1] for row in result.fetchall()}
         if parent_columns and "username" not in parent_columns:
             await conn.execute(text("ALTER TABLE parents ADD COLUMN username VARCHAR(64)"))
         if parent_columns and "password_hash" not in parent_columns:
             await conn.execute(text("ALTER TABLE parents ADD COLUMN password_hash VARCHAR(128)"))
+        if parent_columns and "password_plain" not in parent_columns:
+            await conn.execute(text("ALTER TABLE parents ADD COLUMN password_plain VARCHAR(128)"))
 
         result = await conn.execute(text("PRAGMA table_info(notification_reads)"))
         read_columns = {row[1] for row in result.fetchall()}

@@ -9,6 +9,7 @@ import { BoardPage } from "./pages/BoardPage";
 import { TodayPage } from "./pages/TodayPage";
 import { SessionSwipePage } from "./pages/SessionSwipePage";
 import { ParentHomePage } from "./pages/ParentHomePage";
+import { RegisterPage } from "./pages/RegisterPage";
 import { ParentBoardPage } from "./pages/ParentBoardPage";
 import { ChatPage } from "./pages/ChatPage";
 import { EventsPage } from "./pages/EventsPage";
@@ -67,6 +68,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/session/:id" element={<SessionRoute />} />
               <Route path="/chat" element={<TrainerChatRoute />} />
               <Route path="/events" element={<TrainerEventsRoute />} />
+              <Route path="/register" element={<RegisterPage />} />
               <Route path="/parent" element={<ParentHomePage />} />
               <Route path="/parent/board" element={<ParentBoardPage />} />
               <Route path="/parent/chat" element={<ParentChatRoute />} />

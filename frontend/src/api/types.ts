@@ -418,3 +418,61 @@ export interface EventCreate {
   ends_at?: string | null;
   targets: EventTargetCreate[];
 }
+
+export interface ChildRegistrationInput {
+  first_name: string;
+  last_name: string;
+  birth_date: string;
+  branch_ids: number[];
+}
+
+export interface ClubRegistrationCreate {
+  parent_first_name: string;
+  parent_last_name: string;
+  email: string;
+  phone: string;
+  second_guardian?: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+  } | null;
+  children: ChildRegistrationInput[];
+}
+
+export interface GuardianCredentialsRead {
+  parent_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  username: string;
+  password: string | null;
+  credentials_created: boolean;
+}
+
+export interface ClubRegistrationRead {
+  parent_id: number;
+  students: StudentWithBranches[];
+  existing_parent: boolean;
+  username: string | null;
+  password: string | null;
+  credentials_created: boolean;
+  second_guardian: GuardianCredentialsRead | null;
+  access_token: string | null;
+  token_type: string | null;
+  expires_at: string | null;
+  parent_id_token: number | null;
+  message: string | null;
+}
+
+export interface ParentEmailStatus {
+  exists: boolean;
+  has_login: boolean;
+}
+
+export interface AgeGroupPreview {
+  birth_date: string;
+  reference_year: number;
+  age_at_year_end: number;
+  age_group: AgeGroup;
+}
