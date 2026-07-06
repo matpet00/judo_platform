@@ -1489,7 +1489,7 @@ textarea {
 .notif-bell {
   position: fixed;
   right: 18px;
-  bottom: 18px;
+  bottom: calc(76px + var(--safe-bottom));
   z-index: 1200;
 }
 
