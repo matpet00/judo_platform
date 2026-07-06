@@ -106,9 +106,13 @@ export const api = {
   trainingGroups: (branchId?: number) =>
     request<import("./types").TrainingGroup[]>(
       branchId ? `/training-groups?branch_id=${branchId}` : "/training-groups",
+      undefined,
+      false,
+      true,
     ),
   students: () => request<import("./types").StudentWithBranches[]>("/students"),
-  trainingGroup: (id: number) => request<import("./types").TrainingGroup>(`/training-groups/${id}`),
+  trainingGroup: (id: number) =>
+    request<import("./types").TrainingGroup>(`/training-groups/${id}`, undefined, false, true),
   createTrainingGroup: (payload: import("./types").TrainingGroupCreate) =>
     request<import("./types").TrainingGroup>("/training-groups", {
       method: "POST",
@@ -146,6 +150,7 @@ export const api = {
     request<import("./types").AttendanceMonthlyReport>(
       `/training-groups/${groupId}/attendance-report?month=${month}`,
       undefined,
+      false,
       true,
     ),
   listSessions: (sessionDate: string, branchId?: number) => {

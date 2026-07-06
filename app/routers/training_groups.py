@@ -32,6 +32,7 @@ from app.schemas import (
     TrainingOccurrence,
     TrainingSessionRead,
 )
+from app.training_notify import notify_training_series_deleted
 from app.routers.training_sessions import _session_to_read, create_session_for_group
 from app.security import require_trainer_token
 
@@ -227,8 +228,6 @@ async def list_training_occurrences(
         roster_count = len(group.students)
         for occ_date in _occurrence_dates(group, from_date, to_date):
             session = session_by_group_date.get((group.id, occ_date))
-            if session is not None and session.canceled:
-                continue
             occurrences.append(
                 TrainingOccurrence(
                     group_id=group.id,
@@ -364,9 +363,9 @@ async def delete_training_group(
     db: AsyncSession = Depends(get_db),
     _trainer_id: int = Depends(require_trainer_token),
 ) -> None:
-    group = await db.get(TrainingGroup, group_id)
-    if group is None:
-        raise HTTPException(status_code=404, detail="Training group not found.")
+    group = await _get_group_or_404(db, group_id)
+
+    await notify_training_series_deleted(db, group, trainer_id=_trainer_id)
 
     # Cascade-delete the whole series: attendance records, then sessions, then the group.
     # (SQLite doesn't enforce ON DELETE CASCADE, so we clear children explicitly.)

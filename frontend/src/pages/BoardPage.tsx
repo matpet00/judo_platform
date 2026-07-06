@@ -4,6 +4,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { AgeGroup, Notification, NotificationDurationUnit, NotificationTargetCreate } from "../api/types";
 import { TrainerSwitcher } from "../components/TrainerSwitcher";
+import { trainerNotificationsKey } from "../api/queryKeys";
+import { isBoardNotification } from "../lib/notificationNavigation";
 import { useTrainer } from "../context/TrainerContext";
 
 type NotificationState = "new" | "reply" | "soon" | "read";
@@ -87,10 +89,11 @@ export function BoardPage() {
     enabled: isAuthenticated,
   });
   const notificationsQuery = useQuery({
-    queryKey: ["notifications", trainer?.id],
+    queryKey: trainerNotificationsKey(trainer?.id),
     queryFn: () => api.notifications(),
     enabled: isAuthenticated,
-    refetchInterval: 30_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
 
   const branches = branchesQuery.data ?? [];
@@ -418,7 +421,7 @@ export function BoardPage() {
         <h2>Existující notifikace</h2>
         {notificationsQuery.isLoading && <div className="loading">Načítám…</div>}
         {notificationsQuery.isError && <div className="error-box">{String(notificationsQuery.error)}</div>}
-        {(notificationsQuery.data ?? []).filter((n) => n.event_id == null).map((notification) => (
+        {(notificationsQuery.data ?? []).filter(isBoardNotification).map((notification) => (
           <NotificationCard
             key={notification.id}
             notification={notification}
@@ -429,7 +432,7 @@ export function BoardPage() {
             autoOpen={notification.id === highlightId}
           />
         ))}
-        {!notificationsQuery.isLoading && (notificationsQuery.data ?? []).filter((n) => n.event_id == null).length === 0 && (
+        {!notificationsQuery.isLoading && (notificationsQuery.data ?? []).filter(isBoardNotification).length === 0 && (
           <div className="loading">Zatím tu nejsou žádné notifikace.</div>
         )}
       </section>

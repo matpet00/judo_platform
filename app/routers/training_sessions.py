@@ -25,6 +25,7 @@ from app.schemas import (
     StudentBrief,
 )
 from app.security import require_trainer_token
+from app.training_notify import notify_training_term_canceled
 
 router = APIRouter(prefix="/training-sessions", tags=["training-sessions"])
 
@@ -163,6 +164,7 @@ async def _get_session_or_404(db: AsyncSession, session_id: int) -> TrainingSess
         .where(TrainingSession.id == session_id)
         .options(
             *_session_load_options(),
+            selectinload(TrainingSession.training_group).selectinload(TrainingGroup.branch),
             selectinload(TrainingSession.training_group).selectinload(TrainingGroup.students),
         ),
     )
@@ -384,7 +386,15 @@ async def set_training_session_canceled(
     _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingSessionRead:
     session = await _get_session_or_404(db, session_id)
+    was_canceled = bool(session.canceled)
     session.canceled = canceled
+    if canceled and not was_canceled:
+        await notify_training_term_canceled(
+            db,
+            session.training_group,
+            _session_date_from_starts_at(session.starts_at),
+            trainer_id=_trainer_id,
+        )
     await db.commit()
     return _session_to_read(await _get_session_or_404(db, session_id))
 

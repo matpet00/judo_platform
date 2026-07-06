@@ -778,6 +778,8 @@ class NotificationRead(BaseModel):
     body: str
     author_trainer_id: int | None = None
     event_id: int | None = None
+    training_group_id: int | None = None
+    training_date: date | None = None
     visible_until: datetime
     hide_after: datetime
     visibility_state: str

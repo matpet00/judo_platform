@@ -1504,7 +1504,86 @@ textarea {
 .events-list {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+.events-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.events-list-section__handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--evt-other);
+  border-radius: var(--radius);
+  background: var(--surface-2, var(--surface));
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.events-list-section__handle--training { border-left-color: var(--evt-training); }
+.events-list-section__handle--canceled { border-left-color: #dc2626; }
+.events-list-section__handle--tournament { border-left-color: var(--evt-tournament); }
+.events-list-section__handle--other { border-left-color: var(--evt-other); }
+
+.events-list-section__title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.events-list-section__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.events-list-section__hint {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.events-list-section__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.events-list-section__count {
+  min-width: 1.6rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.events-list-section__chevron {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.events-list-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .event-card {
@@ -1521,8 +1600,47 @@ textarea {
 .event-type--seminar { border-left-color: var(--evt-seminar); }
 .event-type--other { border-left-color: var(--evt-other); }
 
+.event-card--highlight {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+  box-shadow: 0 0 18px rgba(212, 175, 55, 0.28);
+}
+
 .event-card--today {
   box-shadow: 0 0 0 1px var(--gold), 0 0 18px rgba(212, 175, 55, 0.25);
+}
+
+.event-card--canceled {
+  border-left-color: #dc2626 !important;
+  border-color: rgba(220, 38, 38, 0.42);
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.event-card--canceled.event-card--today {
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.55), 0 0 14px rgba(220, 38, 38, 0.18);
+}
+
+.event-card--canceled .event-card__head h3 {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.event-type-dot--canceled { background: #dc2626; }
+
+.event-type-badge--canceled {
+  background: rgba(220, 38, 38, 0.16);
+  color: #dc2626;
+}
+
+.event-cancel-banner {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.14);
+  color: #dc2626;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .event-card__head {
@@ -2163,7 +2281,9 @@ textarea {
 
 .event-calendar__pill.is-canceled {
   text-decoration: line-through;
-  opacity: 0.55;
+  opacity: 0.72;
+  border: 1px solid rgba(220, 38, 38, 0.45);
+  color: #dc2626;
 }
 
 .event-detail--occurrence {

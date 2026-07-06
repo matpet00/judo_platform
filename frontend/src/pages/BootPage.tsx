@@ -3,6 +3,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api, todayIso } from "../api/client";
 import { AuthLanding } from "../components/AuthLanding";
+import { trainerNotificationsKey } from "../api/queryKeys";
+import { countUnreadBoard, countUnreadPlanner } from "../lib/notificationNavigation";
 import { TrainerLoginFlow } from "../components/TrainerSwitcher";
 import { useParent } from "../context/ParentContext";
 import { useTrainer } from "../context/TrainerContext";
@@ -25,10 +27,11 @@ export function BootPage() {
 
   const menuActive = isAuthenticated && !!trainer;
   const notificationsQuery = useQuery({
-    queryKey: ["notifications", trainer?.id],
+    queryKey: trainerNotificationsKey(trainer?.id),
     queryFn: () => api.notifications(),
     enabled: menuActive,
-    refetchInterval: 30_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
   const conversationsQuery = useQuery({
     queryKey: ["chat-conversations", "trainer", trainer?.id],
@@ -37,8 +40,8 @@ export function BootPage() {
     refetchInterval: 30_000,
   });
   const notifications = notificationsQuery.data ?? [];
-  const unreadBoard = notifications.filter((n) => n.unread && n.event_id == null).length;
-  const unreadEvents = notifications.filter((n) => n.unread && n.event_id != null).length;
+  const unreadBoard = countUnreadBoard(notifications);
+  const unreadEvents = countUnreadPlanner(notifications);
   const unreadChat = (conversationsQuery.data ?? []).reduce((sum, c) => sum + c.unread_count, 0);
 
   if (!isAuthenticated && parentAuthenticated) {
@@ -105,7 +108,7 @@ export function BootPage() {
             {unreadEvents > 0 && <span className="trainer-card__badge">{unreadEvents}</span>}
             <span className="trainer-card__name">Akce</span>
             <span className="trainer-card__branch">
-              {unreadEvents > 0 ? `${unreadEvents} nových akcí` : "Plánovač akcí"}
+              {unreadEvents > 0 ? `${unreadEvents} novinek v plánovači` : "Akce a tréninky"}
             </span>
           </button>
         </div>

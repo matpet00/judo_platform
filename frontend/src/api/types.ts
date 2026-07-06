@@ -224,6 +224,8 @@ export interface Notification {
   body: string;
   author_trainer_id: number | null;
   event_id: number | null;
+  training_group_id: number | null;
+  training_date: string | null;
   visible_until: string;
   hide_after: string;
   visibility_state: NotificationVisibilityState;

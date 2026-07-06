@@ -118,6 +118,91 @@ async def test_enrollment_notifies_parent(client):
 
 
 @pytest.mark.asyncio
+async def test_cancel_occurrence_notifies_parent(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)
+    today = date.today()
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+    session = (
+        await client.post(
+            f"/training-groups/{group_id}/sessions",
+            json={"session_date": today.isoformat()},
+            headers=write_headers(trainer),
+        )
+    ).json()
+
+    resp = await client.post(
+        f"/training-sessions/{session['id']}/cancel?canceled=true",
+        headers=write_headers(trainer),
+    )
+    assert resp.status_code == 200
+
+    notifs = (await client.get("/notifications", headers=_bearer(parent))).json()
+    cancel_notifs = [n for n in notifs if n["title"] == "Zrušený trénink"]
+    assert len(cancel_notifs) == 1
+    cancel_notif = cancel_notifs[0]
+    assert cancel_notif["training_group_id"] == group_id
+    assert cancel_notif["training_date"] == today.isoformat()
+
+    trainer_notifs = (await client.get("/notifications", headers=write_headers(trainer))).json()
+    assert not any(n["title"] == "Zrušený trénink" for n in trainer_notifs)
+
+    other_trainer = await login_trainer(client, trainer_id=2)
+    other_trainer_notifs = (await client.get("/notifications", headers=write_headers(other_trainer))).json()
+    assert any(n["title"] == "Zrušený trénink" for n in other_trainer_notifs)
+
+    other = _parent_token(999)
+    other_notifs = (await client.get("/notifications", headers=_bearer(other))).json()
+    assert not any(n["title"] == "Zrušený trénink" for n in other_notifs)
+
+
+@pytest.mark.asyncio
+async def test_delete_training_group_notifies_parent(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+
+    resp = await client.delete(f"/training-groups/{group_id}", headers=write_headers(trainer))
+    assert resp.status_code == 204
+
+    notifs = (await client.get("/notifications", headers=_bearer(parent))).json()
+    assert any(n["title"] == "Trénink zrušen" for n in notifs)
+
+    other_trainer = await login_trainer(client, trainer_id=2)
+    other_trainer_notifs = (await client.get("/notifications", headers=write_headers(other_trainer))).json()
+    assert any(n["title"] == "Trénink zrušen" for n in other_trainer_notifs)
+
+    trainer_notifs = (await client.get("/notifications", headers=write_headers(trainer))).json()
+    assert not any(n["title"] == "Trénink zrušen" for n in trainer_notifs)
+
+
+@pytest.mark.asyncio
+async def test_cancel_occurrence_visible_to_parent_in_list_window(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)
+    today = date.today()
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+    session = (
+        await client.post(
+            f"/training-groups/{group_id}/sessions",
+            json={"session_date": today.isoformat()},
+            headers=write_headers(trainer),
+        )
+    ).json()
+    await client.post(
+        f"/training-sessions/{session['id']}/cancel?canceled=true",
+        headers=write_headers(trainer),
+    )
+
+    frm = (today - timedelta(days=7)).isoformat()
+    to = (today + timedelta(days=90)).isoformat()
+    occ = (await client.get(f"/training-groups/occurrences?from={frm}&to={to}", headers=_bearer(parent))).json()
+    match = [o for o in occ if o["group_id"] == group_id and o["date"] == today.isoformat()]
+    assert len(match) == 1
+    assert match[0]["canceled"] is True
+
+
+@pytest.mark.asyncio
 async def test_cancel_occurrence(client):
     trainer = await login_trainer(client)
     today = date.today()
@@ -137,7 +222,8 @@ async def test_cancel_occurrence(client):
     frm = today.isoformat()
     occ = (await client.get(f"/training-groups/occurrences?from={frm}&to={frm}", headers=write_headers(trainer))).json()
     match = [o for o in occ if o["group_id"] == group_id]
-    assert match == []
+    assert len(match) == 1
+    assert match[0]["canceled"] is True
 
     restore = await client.post(f"/training-sessions/{session['id']}/cancel?canceled=false", headers=write_headers(trainer))
     assert restore.status_code == 200
@@ -170,6 +256,18 @@ async def test_delete_training_group_cascades_sessions(client):
 
     assert (await client.get(f"/training-groups/{group_id}", headers=write_headers(trainer))).status_code == 404
     assert (await client.get(f"/training-sessions/{session['id']}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_training_group_requires_trainer_token(client):
+    trainer = await login_trainer(client)
+    group_id = (await _create_daily_group(client, trainer)).json()["id"]
+
+    assert (await client.get(f"/training-groups/{group_id}")).status_code == 401
+    assert (await client.get(f"/training-groups", headers=write_headers())).status_code == 401
+
+    assert (await client.get(f"/training-groups/{group_id}", headers=write_headers(trainer))).status_code == 200
+    assert (await client.get("/training-groups", headers=write_headers(trainer))).status_code == 200
 
 
 @pytest.mark.asyncio

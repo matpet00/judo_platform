@@ -10,6 +10,7 @@ from app.deps import Viewer, get_viewer, viewer_can_see_targets
 from app.models import (
     Branch,
     Notification,
+    NotificationAudience,
     NotificationComment,
     NotificationReadReceipt,
     NotificationTarget,
@@ -26,6 +27,7 @@ from app.schemas import (
     TrainerBrief,
 )
 from app.security import require_trainer_token
+from app.training_notify import TRAINING_SCHEDULE_ALERT_TITLES
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -189,6 +191,8 @@ def _notification_to_read(notification: Notification, viewer: Viewer, now: datet
         body=notification.body,
         author_trainer_id=notification.author_trainer_id,
         event_id=notification.event_id,
+        training_group_id=notification.training_group_id,
+        training_date=notification.training_date,
         visible_until=_as_aware_utc(notification.visible_until),
         hide_after=hide_after,
         visibility_state=_visibility_state(notification, now),
@@ -210,8 +214,26 @@ def _notification_to_read(notification: Notification, viewer: Viewer, now: datet
     )
 
 
+def _is_parent_only_personal(notification: Notification) -> bool:
+    if not notification.targets:
+        return False
+    return all(
+        target.audience == NotificationAudience.parent and target.parent_id is not None
+        for target in notification.targets
+    )
+
+
+def _is_training_schedule_alert(notification: Notification) -> bool:
+    return notification.title in TRAINING_SCHEDULE_ALERT_TITLES
+
+
 def _visible_to_viewer(notification: Notification, viewer: Viewer) -> bool:
-    if viewer.kind == "trainer" and notification.author_trainer_id == viewer.trainer_id:
+    if (
+        viewer.kind == "trainer"
+        and notification.author_trainer_id == viewer.trainer_id
+        and not _is_training_schedule_alert(notification)
+        and not _is_parent_only_personal(notification)
+    ):
         return True
     return viewer_can_see_targets(viewer, notification.targets)
 

@@ -1,6 +1,8 @@
 import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { countUnreadBoard, countUnreadPlanner } from "../lib/notificationNavigation";
+import { parentNotificationsKey } from "../api/queryKeys";
 import { useParent } from "../context/ParentContext";
 
 export function ParentHomePage() {
@@ -8,14 +10,15 @@ export function ParentHomePage() {
   const { parent, isAuthenticated, isLoading, clearParent } = useParent();
 
   const notificationsQuery = useQuery({
-    queryKey: ["parent-notifications", parent?.id],
+    queryKey: parentNotificationsKey(parent?.id),
     queryFn: () => api.notifications("parent"),
     enabled: isAuthenticated && !!parent,
-    refetchInterval: 30_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
   const notifs = notificationsQuery.data ?? [];
-  const unreadBoard = notifs.filter((n) => n.unread && n.event_id == null).length;
-  const unreadEvents = notifs.filter((n) => n.unread && n.event_id != null).length;
+  const unreadBoard = countUnreadBoard(notifs);
+  const unreadEvents = countUnreadPlanner(notifs);
 
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;

@@ -78,6 +78,12 @@ async def migrate_schema() -> None:
             await conn.execute(text("UPDATE notifications SET grace_seconds = 604800 WHERE grace_seconds IS NULL"))
         if notification_columns and "event_id" not in notification_columns:
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN event_id INTEGER REFERENCES events(id)"))
+        if notification_columns and "training_group_id" not in notification_columns:
+            await conn.execute(
+                text("ALTER TABLE notifications ADD COLUMN training_group_id INTEGER REFERENCES training_groups(id)"),
+            )
+        if notification_columns and "training_date" not in notification_columns:
+            await conn.execute(text("ALTER TABLE notifications ADD COLUMN training_date DATE"))
 
         result = await conn.execute(text("PRAGMA table_info(events)"))
         event_columns = {row[1] for row in result.fetchall()}

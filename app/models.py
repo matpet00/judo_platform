@@ -263,6 +263,11 @@ class Notification(Base):
     body: Mapped[str] = mapped_column(String(4000))
     author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=True)
+    training_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("training_groups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    training_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     visible_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     grace_seconds: Mapped[int] = mapped_column(Integer, server_default="0")
     last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

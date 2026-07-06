@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import {
+  isBoardNotification,
+  isTrainingCancelNotification,
+  trainingOccurrenceEventsPath,
+} from "../lib/notificationNavigation";
+import { parentNotificationsKey } from "../api/queryKeys";
 import type { Notification } from "../api/types";
 
 type NotificationState = "new" | "reply" | "soon" | "read";
@@ -35,13 +41,14 @@ function formatDate(value: string): string {
 export function ParentNotifications({ parentId }: { parentId: number }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const notificationsQuery = useQuery({
-    queryKey: ["parent-notifications", parentId],
+    queryKey: parentNotificationsKey(parentId),
     queryFn: () => api.notifications("parent"),
-    refetchInterval: 30_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
 
   const notifications = notificationsQuery.data ?? [];
-  const boardNotifications = notifications.filter((n) => n.event_id == null);
+  const boardNotifications = notifications.filter(isBoardNotification);
   const pending = boardNotifications.filter((n) => n.unread).length;
 
   const [highlightId, setHighlightId] = useState<number | null>(null);
@@ -191,6 +198,27 @@ function ParentNotificationCard({
             }}
           >
             Otevřít akci a potvrdit účast
+          </button>
+        </div>
+      )}
+
+      {isTrainingCancelNotification(notification) && (
+        <div className="notification-card__event-action">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              if (notification.unread) markRead.mutate();
+              navigate(
+                trainingOccurrenceEventsPath(
+                  "parent",
+                  notification.training_group_id as number,
+                  notification.training_date as string,
+                ),
+              );
+            }}
+          >
+            Zobrazit zrušený trénink
           </button>
         </div>
       )}

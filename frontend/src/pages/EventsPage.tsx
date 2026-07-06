@@ -17,6 +17,7 @@ import type {
 } from "../api/types";
 import { RecipientTargets, recipientLabel } from "../components/RecipientTargets";
 import { AttendanceOverview } from "../components/AttendanceOverview";
+import { occurrenceListKey as trainingOccurrenceKey } from "../lib/notificationNavigation";
 
 type Role = "trainer" | "parent";
 
@@ -392,6 +393,31 @@ function countdownLabel(startsAt: string): { text: string; today: boolean } | nu
   return { text: `za ${diffDays} dní`, today: false };
 }
 
+const LIST_OCCURRENCE_HORIZON_DAYS = 90;
+const LIST_CANCELED_LOOKBACK_DAYS = 30;
+
+function occurrenceIsoDate(dateStr: string): string {
+  return dateStr.split("T")[0];
+}
+
+function occurrenceStartsAt(occ: TrainingOccurrence): string {
+  return `${occurrenceIsoDate(occ.date)}T${occ.start_time}`;
+}
+
+function occurrenceListKey(occ: TrainingOccurrence): string {
+  return trainingOccurrenceKey(occ.group_id, occ.date);
+}
+
+function formatOccurrenceWhen(occ: TrainingOccurrence): string {
+  const [y, m, d] = occurrenceIsoDate(occ.date).split("-").map(Number);
+  const day = new Date(y, m - 1, d);
+  return `${day.toLocaleDateString("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  })} · ${occ.start_time.slice(0, 5)}–${occ.end_time.slice(0, 5)}`;
+}
+
 type CalView = "month" | "week" | "day";
 
 function addDays(date: Date, days: number): Date {
@@ -421,6 +447,51 @@ function computeVisibleDays(view: CalView, anchor: Date): Date[] {
   return Array.from({ length: 42 }, (_, i) => addDays(start, i));
 }
 
+type ListSectionId = "trainings" | "canceled_trainings" | "tournaments" | "other";
+
+const DEFAULT_OPEN_SECTIONS: ListSectionId[] = ["tournaments", "other"];
+
+function EventsListSection({
+  title,
+  count,
+  open,
+  onToggle,
+  accentClass,
+  hint,
+  children,
+}: {
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  accentClass: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  if (count === 0) return null;
+
+  return (
+    <section className={`events-list-section${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className={`events-list-section__handle ${accentClass}`}
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className="events-list-section__head">
+          <span className="events-list-section__title">{title}</span>
+          {hint && <span className="events-list-section__hint">{hint}</span>}
+        </span>
+        <span className="events-list-section__meta">
+          <span className="events-list-section__count">{count}</span>
+          <span className="events-list-section__chevron" aria-hidden>{open ? "▲" : "▼"}</span>
+        </span>
+      </button>
+      {open && <div className="events-list-section__body">{children}</div>}
+    </section>
+  );
+}
+
 export function EventsPage({ role, selfId, homePath }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -431,7 +502,11 @@ export function EventsPage({ role, selfId, homePath }: Props) {
   const [calView, setCalView] = useState<CalView>("month");
   const [calAnchor, setCalAnchor] = useState(() => startOfDay(new Date()));
   const [activeOccurrence, setActiveOccurrence] = useState<TrainingOccurrence | null>(null);
+  const [openSections, setOpenSections] = useState<Set<ListSectionId>>(
+    () => new Set(DEFAULT_OPEN_SECTIONS),
+  );
   const [scrollToEventId, setScrollToEventId] = useState<number | null>(null);
+  const [highlightOccurrenceKey, setHighlightOccurrenceKey] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -447,6 +522,20 @@ export function EventsPage({ role, selfId, homePath }: Props) {
     setSearchParams(searchParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  useEffect(() => {
+    const groupId = Number(searchParams.get("training"));
+    const date = searchParams.get("date");
+    if (!Number.isFinite(groupId) || groupId <= 0 || !date) return;
+    const key = trainingOccurrenceKey(groupId, date);
+    setHighlightOccurrenceKey(key);
+    setView("list");
+    setActiveOccurrence(null);
+    setActiveId(null);
+    searchParams.delete("training");
+    searchParams.delete("date");
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const eventsQuery = useQuery({
     queryKey: ["events", role, selfId],
     queryFn: () => api.events(role),
@@ -456,15 +545,115 @@ export function EventsPage({ role, selfId, homePath }: Props) {
   const visibleDays = useMemo(() => computeVisibleDays(calView, calAnchor), [calView, calAnchor]);
   const rangeFrom = visibleDays[0];
   const rangeTo = visibleDays[visibleDays.length - 1];
+  const listRangeFrom = startOfDay(new Date());
+  const listRangeTo = addDays(listRangeFrom, LIST_OCCURRENCE_HORIZON_DAYS);
+  const listCanceledFrom = addDays(listRangeFrom, -LIST_CANCELED_LOOKBACK_DAYS);
+  const occurrenceFrom = view === "calendar" ? rangeFrom : listRangeFrom;
+  const occurrenceTo = view === "calendar" ? rangeTo : listRangeTo;
   const occurrencesQuery = useQuery({
-    queryKey: ["occurrences", role, selfId, toDateInputValue(rangeFrom), toDateInputValue(rangeTo)],
-    queryFn: () => api.trainingOccurrences(toDateInputValue(rangeFrom), toDateInputValue(rangeTo), role),
-    enabled: view === "calendar",
+    queryKey: ["occurrences", role, selfId, toDateInputValue(occurrenceFrom), toDateInputValue(occurrenceTo)],
+    queryFn: () =>
+      api.trainingOccurrences(toDateInputValue(occurrenceFrom), toDateInputValue(occurrenceTo), role),
     refetchInterval: 60_000,
   });
 
   const events = eventsQuery.data ?? [];
   const occurrences = occurrencesQuery.data ?? [];
+  const todayIso = toDateInputValue(listRangeFrom);
+  const listOccurrences = useMemo(() => {
+    const horizonEnd = toDateInputValue(listRangeTo);
+    const canceledFrom = toDateInputValue(listCanceledFrom);
+    return occurrences.filter((occ) => {
+      const d = occurrenceIsoDate(occ.date);
+      if (d > horizonEnd) return false;
+      if (occ.canceled) return d >= canceledFrom;
+      return d >= todayIso;
+    });
+  }, [occurrences, todayIso, listRangeTo, listCanceledFrom]);
+  const listGroups = useMemo(() => {
+    const tournaments = events
+      .filter((e) => e.event_type === "tournament")
+      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+    const other = events
+      .filter((e) => e.event_type !== "tournament")
+      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+    const byDate = (a: TrainingOccurrence, b: TrainingOccurrence) =>
+      new Date(occurrenceStartsAt(a)).getTime() - new Date(occurrenceStartsAt(b)).getTime();
+    const trainingsActive = listOccurrences.filter((o) => !o.canceled).sort(byDate);
+    const trainingsCanceled = listOccurrences.filter((o) => o.canceled).sort(byDate);
+    return { trainingsActive, trainingsCanceled, tournaments, other };
+  }, [events, listOccurrences]);
+  const listCount =
+    listGroups.trainingsActive.length
+    + listGroups.trainingsCanceled.length
+    + listGroups.tournaments.length
+    + listGroups.other.length;
+
+  const toggleListSection = (id: ListSectionId) => {
+    setOpenSections((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (activeId == null) return;
+    const event = events.find((e) => e.id === activeId);
+    if (!event) return;
+    const section: ListSectionId = event.event_type === "tournament" ? "tournaments" : "other";
+    setOpenSections((cur) => new Set(cur).add(section));
+  }, [activeId, events]);
+
+  useEffect(() => {
+    if (activeOccurrence == null) return;
+    const section: ListSectionId = activeOccurrence.canceled ? "canceled_trainings" : "trainings";
+    setOpenSections((cur) => new Set(cur).add(section));
+  }, [activeOccurrence]);
+
+  useEffect(() => {
+    if (!highlightOccurrenceKey) return;
+    const inCanceled = listGroups.trainingsCanceled.some(
+      (o) => occurrenceListKey(o) === highlightOccurrenceKey,
+    );
+    const section: ListSectionId = inCanceled ? "canceled_trainings" : "trainings";
+    setOpenSections((cur) => new Set(cur).add(section));
+    const timer = window.setTimeout(() => setHighlightOccurrenceKey(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [highlightOccurrenceKey, listGroups.trainingsCanceled]);
+
+  useEffect(() => {
+    if (!highlightOccurrenceKey || occurrencesQuery.isLoading) return;
+    const el = document.getElementById(`occ-${highlightOccurrenceKey}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightOccurrenceKey, occurrencesQuery.isLoading, listGroups]);
+
+  const openTrainingOccurrence = (occurrence: TrainingOccurrence) => {
+    setActiveId(null);
+    const section: ListSectionId = occurrence.canceled ? "canceled_trainings" : "trainings";
+    setOpenSections((cur) => new Set(cur).add(section));
+    setActiveOccurrence((cur) =>
+      cur != null && occurrenceListKey(cur) === occurrenceListKey(occurrence) ? null : occurrence,
+    );
+  };
+
+  const renderTrainingRows = (items: TrainingOccurrence[]) =>
+    items.map((occurrence) => (
+      <TrainingOccurrenceRow
+        key={occurrenceListKey(occurrence)}
+        occurrence={occurrence}
+        role={role}
+        highlight={highlightOccurrenceKey === occurrenceListKey(occurrence)}
+        expanded={
+          activeOccurrence != null &&
+          occurrenceListKey(activeOccurrence) === occurrenceListKey(occurrence)
+        }
+        onToggle={() => openTrainingOccurrence(occurrence)}
+        onChanged={() => queryClient.invalidateQueries({ queryKey: ["occurrences"] })}
+      />
+    ));
 
   return (
     <div className="app-shell notification-board events-page">
@@ -533,7 +722,7 @@ export function EventsPage({ role, selfId, homePath }: Props) {
 
       {eventsQuery.isLoading && <div className="loading">Načítám…</div>}
       {eventsQuery.isError && <div className="error-box">{String(eventsQuery.error)}</div>}
-      {view === "calendar" && occurrencesQuery.isError && (
+      {occurrencesQuery.isError && (
         <div className="error-box">Tréninky se nepodařilo načíst: {String(occurrencesQuery.error)}</div>
       )}
 
@@ -567,24 +756,87 @@ export function EventsPage({ role, selfId, homePath }: Props) {
         />
       ) : (
         <section className="events-list">
-          {!eventsQuery.isLoading && events.length === 0 && (
+          {!eventsQuery.isLoading && !occurrencesQuery.isLoading && listCount === 0 && (
             <div className="loading">Zatím tu nejsou žádné akce.</div>
           )}
-          {events.map((event) => (
-            <EventRow
-              key={event.id}
-              event={event}
-              role={role}
-              selfId={selfId}
-              expanded={activeId === event.id}
-              scrollTo={scrollToEventId === event.id}
-              onScrolled={() => {
-                if (scrollToEventId === event.id) setScrollToEventId(null);
-              }}
-              onToggle={() => setActiveId((cur) => (cur === event.id ? null : event.id))}
-              onDeleted={() => setActiveId(null)}
-            />
-          ))}
+
+          <EventsListSection
+            title="Tréninky"
+            hint={`Nadcházející termíny na ${LIST_OCCURRENCE_HORIZON_DAYS} dní`}
+            count={listGroups.trainingsActive.length}
+            open={openSections.has("trainings")}
+            onToggle={() => toggleListSection("trainings")}
+            accentClass="events-list-section__handle--training"
+          >
+            {renderTrainingRows(listGroups.trainingsActive)}
+          </EventsListSection>
+
+          <EventsListSection
+            title="Zrušené tréninky"
+            hint={`Zrušené termíny z posledních ${LIST_CANCELED_LOOKBACK_DAYS} dní`}
+            count={listGroups.trainingsCanceled.length}
+            open={openSections.has("canceled_trainings")}
+            onToggle={() => toggleListSection("canceled_trainings")}
+            accentClass="events-list-section__handle--canceled"
+          >
+            {renderTrainingRows(listGroups.trainingsCanceled)}
+          </EventsListSection>
+
+          <EventsListSection
+            title="Turnaje"
+            count={listGroups.tournaments.length}
+            open={openSections.has("tournaments")}
+            onToggle={() => toggleListSection("tournaments")}
+            accentClass="events-list-section__handle--tournament"
+          >
+            {listGroups.tournaments.map((event) => (
+              <EventRow
+                key={event.id}
+                event={event}
+                role={role}
+                selfId={selfId}
+                expanded={activeId === event.id}
+                scrollTo={scrollToEventId === event.id}
+                onScrolled={() => {
+                  if (scrollToEventId === event.id) setScrollToEventId(null);
+                }}
+                onToggle={() => {
+                  setActiveOccurrence(null);
+                  setOpenSections((cur) => new Set(cur).add("tournaments"));
+                  setActiveId((cur) => (cur === event.id ? null : event.id));
+                }}
+                onDeleted={() => setActiveId(null)}
+              />
+            ))}
+          </EventsListSection>
+
+          <EventsListSection
+            title="Schůzky a další"
+            count={listGroups.other.length}
+            open={openSections.has("other")}
+            onToggle={() => toggleListSection("other")}
+            accentClass="events-list-section__handle--other"
+          >
+            {listGroups.other.map((event) => (
+              <EventRow
+                key={event.id}
+                event={event}
+                role={role}
+                selfId={selfId}
+                expanded={activeId === event.id}
+                scrollTo={scrollToEventId === event.id}
+                onScrolled={() => {
+                  if (scrollToEventId === event.id) setScrollToEventId(null);
+                }}
+                onToggle={() => {
+                  setActiveOccurrence(null);
+                  setOpenSections((cur) => new Set(cur).add("other"));
+                  setActiveId((cur) => (cur === event.id ? null : event.id));
+                }}
+                onDeleted={() => setActiveId(null)}
+              />
+            ))}
+          </EventsListSection>
         </section>
       )}
 
@@ -992,6 +1244,73 @@ type RowProps = {
   onToggle: () => void;
   onDeleted: () => void;
 };
+
+function TrainingOccurrenceRow({
+  occurrence,
+  role,
+  highlight = false,
+  expanded,
+  onToggle,
+  onChanged,
+}: {
+  occurrence: TrainingOccurrence;
+  role: Role;
+  highlight?: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onChanged: () => void;
+}) {
+  const countdown = occurrence.canceled ? null : countdownLabel(occurrenceStartsAt(occurrence));
+  const rowKey = occurrenceListKey(occurrence);
+
+  return (
+    <article
+      id={`occ-${rowKey}`}
+      className={`event-card event-type--training${occurrence.canceled ? " event-card--canceled" : ""}${highlight ? " event-card--highlight" : ""}${countdown?.today ? " event-card--today" : ""}`}
+    >
+      <button type="button" className="event-card__head" onClick={onToggle}>
+        <span
+          className={`event-type-dot${occurrence.canceled ? " event-type-dot--canceled" : " event-type-dot--training"}`}
+          aria-hidden
+        />
+        <div className="event-card__main">
+          <span className="event-card__meta">
+            <span className={`event-type-badge${occurrence.canceled ? " event-type-badge--canceled" : " event-type-badge--training"}`}>
+              {occurrence.canceled ? "Zrušeno" : "Trénink"}
+            </span>
+            {formatOccurrenceWhen(occurrence)}
+          </span>
+          <h3>{occurrence.name}</h3>
+          <small>
+            {occurrence.canceled
+              ? "Termín zrušen trenérem"
+              : `${occurrence.roster_count} ${occurrence.roster_count === 1 ? "dítě" : "dětí"}${occurrence.marked_count > 0 ? ` · ${occurrence.marked_count} zapsáno` : ""}`}
+          </small>
+        </div>
+        <div className="event-card__side">
+          {occurrence.canceled ? (
+            <span className="event-cancel-banner">Zrušeno</span>
+          ) : countdown ? (
+            <span className={`event-countdown${countdown.today ? " event-countdown--today" : ""}`}>
+              {countdown.text}
+            </span>
+          ) : null}
+          <span className="notification-card__chevron">{expanded ? "▲" : "▼"}</span>
+        </div>
+      </button>
+      {expanded && (
+        <div className="event-detail">
+          <TrainingOccurrencePanel
+            occurrence={occurrence}
+            role={role}
+            onClose={onToggle}
+            onChanged={onChanged}
+          />
+        </div>
+      )}
+    </article>
+  );
+}
 
 function EventRow({ event, role, selfId, expanded, scrollTo = false, onScrolled, onToggle, onDeleted }: RowProps) {
   const countdown = countdownLabel(event.starts_at);
@@ -1782,6 +2101,12 @@ function TrainingOccurrencePanel({
   const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteChoice, setDeleteChoice] = useState<"term" | "series" | null>(null);
+
+  const closeDeleteFlow = () => {
+    setConfirmingDelete(false);
+    setDeleteChoice(null);
+  };
 
   const openSession = useMutation({
     mutationFn: () => api.openGroupSession(occurrence.group_id, occurrence.date),
@@ -1865,6 +2190,58 @@ function TrainingOccurrencePanel({
     );
   }
 
+  if (confirmingDelete && deleteChoice === "term") {
+    return (
+      <div className="event-detail">
+        <div className="event-detail__confirm">
+          <span className="event-detail__confirm-text">
+            Zrušit termín {dateLabel} („{occurrence.name}")? Rodiče a ostatní trenéři dostanou notifikaci.
+          </span>
+          <div className="event-detail__confirm-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setDeleteChoice(null)}>
+              Ne
+            </button>
+            <button
+              type="button"
+              className="notification-delete"
+              disabled={deleteTerm.isPending}
+              onClick={() => deleteTerm.mutate()}
+            >
+              {deleteTerm.isPending ? "Ruším…" : "Ano, zrušit"}
+            </button>
+          </div>
+        </div>
+        {deleteTerm.isError && <div className="error-box">{String(deleteTerm.error)}</div>}
+      </div>
+    );
+  }
+
+  if (confirmingDelete && deleteChoice === "series") {
+    return (
+      <div className="event-detail">
+        <div className="event-detail__confirm">
+          <span className="event-detail__confirm-text">
+            Smazat celou sérii „{occurrence.name}"? Smažou se všechny termíny i zaznamenaná docházka.
+          </span>
+          <div className="event-detail__confirm-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setDeleteChoice(null)}>
+              Ne
+            </button>
+            <button
+              type="button"
+              className="notification-delete"
+              disabled={deleteSeries.isPending}
+              onClick={() => deleteSeries.mutate()}
+            >
+              {deleteSeries.isPending ? "Mažu…" : "Ano, smazat"}
+            </button>
+          </div>
+        </div>
+        {deleteSeries.isError && <div className="error-box">{String(deleteSeries.error)}</div>}
+      </div>
+    );
+  }
+
   if (confirmingDelete) {
     return (
       <div className="event-detail">
@@ -1873,8 +2250,7 @@ function TrainingOccurrencePanel({
           <button
             type="button"
             className="occurrence-delete-choice__btn"
-            disabled={deleteTerm.isPending}
-            onClick={() => deleteTerm.mutate()}
+            onClick={() => setDeleteChoice("term")}
           >
             <strong>Jen tento termín</strong>
             <small>{dateLabel} — ostatní termíny zůstanou</small>
@@ -1882,29 +2258,17 @@ function TrainingOccurrencePanel({
           <button
             type="button"
             className="occurrence-delete-choice__btn occurrence-delete-choice__btn--danger"
-            disabled={deleteSeries.isPending}
-            onClick={() => {
-              if (
-                window.confirm(
-                  `Smazat celou sérii „${occurrence.name}"? Smažou se všechny termíny i zaznamenaná docházka.`,
-                )
-              ) {
-                deleteSeries.mutate();
-              }
-            }}
+            onClick={() => setDeleteChoice("series")}
           >
             <strong>Celou sérii</strong>
             <small>Všechny termíny + docházka</small>
           </button>
         </div>
         <div className="notification-compose__actions notification-compose__actions--single">
-          <button type="button" className="btn btn--ghost" onClick={() => setConfirmingDelete(false)}>
+          <button type="button" className="btn btn--ghost" onClick={closeDeleteFlow}>
             Zpět
           </button>
         </div>
-        {(deleteTerm.isError || deleteSeries.isError) && (
-          <div className="error-box">{String(deleteTerm.error ?? deleteSeries.error)}</div>
-        )}
       </div>
     );
   }

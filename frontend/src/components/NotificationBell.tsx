@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { notificationDestination } from "../lib/notificationNavigation";
+import { parentNotificationsKey, trainerNotificationsKey } from "../api/queryKeys";
 import { useTrainer } from "../context/TrainerContext";
 import { useParent } from "../context/ParentContext";
 import type { Notification } from "../api/types";
@@ -26,13 +28,15 @@ export function NotificationBell() {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const role: Role | null = trainerAuth && trainer ? "trainer" : parentAuth && parent ? "parent" : null;
-  const queryKey = role === "parent" ? ["parent-notifications", parent?.id] : ["notifications"];
+  const queryKey =
+    role === "parent" ? parentNotificationsKey(parent?.id) : trainerNotificationsKey(trainer?.id);
 
   const notificationsQuery = useQuery({
     queryKey,
     queryFn: () => api.notifications(role ?? "trainer"),
-    enabled: role != null,
-    refetchInterval: 30_000,
+    enabled: role != null && (role === "parent" ? parent != null : trainer != null),
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
 
   const markRead = useMutation({
@@ -74,11 +78,7 @@ export function NotificationBell() {
   const openItem = (n: Notification) => {
     if (n.unread) markRead.mutate(n.id);
     setOpen(false);
-    if (n.event_id != null) {
-      navigate(`${role === "parent" ? "/parent/events" : "/events"}?event=${n.event_id}`);
-    } else {
-      navigate(`${role === "parent" ? "/parent/board" : "/board"}?notif=${n.id}`);
-    }
+    navigate(notificationDestination(n, role));
   };
 
   return (
