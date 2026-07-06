@@ -290,8 +290,14 @@ async def list_training_occurrences(
     occurrences: list[TrainingOccurrence] = []
     for group in groups:
         roster_count = len(group.students)
+        roster_ids = {student.id for student in group.students}
         for occ_date in _occurrence_dates(group, from_date, to_date):
             session = session_by_group_date.get((group.id, occ_date))
+            guest_count = (
+                sum(1 for record in session.attendance_records if record.student_id not in roster_ids)
+                if session is not None
+                else 0
+            )
             occurrences.append(
                 TrainingOccurrence(
                     group_id=group.id,
@@ -304,6 +310,7 @@ async def list_training_occurrences(
                     canceled=bool(session.canceled) if session is not None else False,
                     roster_count=roster_count,
                     marked_count=len(session.attendance_records) if session is not None else 0,
+                    guest_count=guest_count,
                 ),
             )
     occurrences.sort(key=lambda o: (o.date, o.start_time, o.group_id))

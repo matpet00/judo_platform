@@ -20,6 +20,18 @@ function occTime(occ: TrainingOccurrence): string {
   return `${occ.start_time.slice(0, 5)} – ${occ.end_time.slice(0, 5)}`;
 }
 
+function guestPlural(count: number): string {
+  if (count === 1) return "host";
+  if (count >= 2 && count <= 4) return "hosté";
+  return "hostů";
+}
+
+function rosterLabel(occ: TrainingOccurrence): string {
+  const base = `${occ.roster_count} žáků`;
+  if (occ.guest_count > 0) return `${base} + ${occ.guest_count} ${guestPlural(occ.guest_count)}`;
+  return base;
+}
+
 function isActiveNow(occ: TrainingOccurrence, now = new Date()): boolean {
   const [sh, sm] = occ.start_time.split(":").map(Number);
   const [eh, em] = occ.end_time.split(":").map(Number);
@@ -175,9 +187,9 @@ export function TodayPage() {
                   <SessionPickerCard
                     key={`${occ.group_id}-${occ.date}`}
                     title={occ.name}
-                    subtitle={occTime(occ)}
+                    subtitle={occ.guest_count > 0 ? `${occTime(occ)} · ${rosterLabel(occ)}` : occTime(occ)}
                     marked={occ.marked_count}
-                    total={occ.roster_count}
+                    total={occ.roster_count + occ.guest_count}
                     highlight={isActiveNow(occ)}
                     pending={openOrCreate.isPending}
                     onClick={() => openOccurrence(occ)}
@@ -203,9 +215,9 @@ export function TodayPage() {
                       <SessionPickerCard
                         key={`${occ.group_id}-${occ.date}`}
                         title={occ.name}
-                        subtitle={`${occTime(occ)} · ${occ.roster_count} žáků`}
+                        subtitle={`${occTime(occ)} · ${rosterLabel(occ)}`}
                         marked={occ.session_id != null ? occ.marked_count : undefined}
-                        total={occ.session_id != null ? occ.roster_count : undefined}
+                        total={occ.session_id != null ? occ.roster_count + occ.guest_count : undefined}
                         pending={openOrCreate.isPending}
                         onClick={() => openOccurrence(occ)}
                       />
@@ -227,7 +239,7 @@ export function TodayPage() {
                       <SessionPickerCard
                         key={`${occ.group_id}-${occ.date}`}
                         title={occ.name}
-                        subtitle={`${occTime(occ)} · ${occ.roster_count} žáků`}
+                        subtitle={`${occTime(occ)} · ${rosterLabel(occ)}`}
                         pending={openOrCreate.isPending}
                         onClick={() => openOccurrence(occ)}
                       />

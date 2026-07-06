@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AttendanceOverview } from "../components/AttendanceOverview";
+import { TrainingGuestPicker } from "../components/TrainingGuestPicker";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { TrainerSwitcher } from "../components/TrainerSwitcher";
 import { useTrainer } from "../context/TrainerContext";
@@ -93,6 +94,64 @@ export function SessionSwipePage({ sessionId }: { sessionId: number }) {
   const showOverview = useCallback(() => setView("overview"), []);
   const isSaving = (studentId: number) => pendingStudentIds.has(studentId);
 
+  const refreshSession = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+    queryClient.invalidateQueries({ queryKey: ["training-sessions"] });
+    queryClient.invalidateQueries({ queryKey: ["today-sessions-progress"] });
+  }, [queryClient, sessionId]);
+
+  const addGuest = useCallback(
+    async (studentId: number) => {
+      if (!online) {
+        setToast("Jsi offline — nelze uložit");
+        setTimeout(() => setToast(null), 3000);
+        throw new Error("offline");
+      }
+      setPendingStudentIds((prev) => new Set(prev).add(studentId));
+      try {
+        await api.setAttendance(sessionId, studentId, "present", undefined, trainer?.id);
+        refreshSession();
+      } catch (err) {
+        setToast(String(err));
+        setTimeout(() => setToast(null), 4000);
+        throw err;
+      } finally {
+        setPendingStudentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(studentId);
+          return next;
+        });
+      }
+    },
+    [online, sessionId, trainer?.id, refreshSession],
+  );
+
+  const removeGuest = useCallback(
+    async (studentId: number, attendanceId: number) => {
+      if (!online) {
+        setToast("Jsi offline — nelze uložit");
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
+      setPendingStudentIds((prev) => new Set(prev).add(studentId));
+      try {
+        await api.deleteAttendance(sessionId, attendanceId);
+        setStudents((prev) => prev.filter((s) => s.id !== studentId));
+        refreshSession();
+      } catch (err) {
+        setToast(String(err));
+        setTimeout(() => setToast(null), 4000);
+      } finally {
+        setPendingStudentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(studentId);
+          return next;
+        });
+      }
+    },
+    [online, sessionId, refreshSession],
+  );
+
   if (isLoading) {
     return (
       <div className="boot-screen">
@@ -182,7 +241,9 @@ export function SessionSwipePage({ sessionId }: { sessionId: number }) {
             onStatus={handleStatus}
             disabled={actionsDisabled}
             isSaving={isSaving}
+            onRemoveGuest={removeGuest}
           />
+          <TrainingGuestPicker existingIds={students.map((s) => s.id)} onAdd={addGuest} />
           <div className="session-overview-footer">
             <Link to="/today" className="btn btn--ghost session-overview-footer__back">
               ← Dnešní přehled

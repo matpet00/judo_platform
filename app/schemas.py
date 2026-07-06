@@ -700,6 +700,7 @@ class TrainingOccurrence(BaseModel):
     canceled: bool = False
     roster_count: int = 0
     marked_count: int = 0
+    guest_count: int = 0
 
 
 class AttendanceMonthlyReportRow(BaseModel):

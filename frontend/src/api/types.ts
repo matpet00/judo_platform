@@ -112,6 +112,7 @@ export interface TrainingOccurrence {
   canceled: boolean;
   roster_count: number;
   marked_count: number;
+  guest_count: number;
 }
 
 export interface TrainingOccurrenceComment {
