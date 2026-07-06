@@ -5,6 +5,10 @@ function trainerLabel(trainer: Trainer): string {
   return `${trainer.first_name} ${trainer.last_name}`;
 }
 
+function trainerRoleLabel(trainer: Trainer): string {
+  return `${trainerLabel(trainer)} (trenér)`;
+}
+
 function branchNames(trainer: Trainer): string {
   return trainer.branches.map((b) => b.name).join(", ");
 }
@@ -61,4 +65,4 @@ export function TrainerPicker({
   );
 }
 
-export { trainerLabel };
+export { trainerLabel, trainerRoleLabel };

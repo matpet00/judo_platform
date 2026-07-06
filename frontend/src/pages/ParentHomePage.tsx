@@ -45,7 +45,7 @@ export function ParentHomePage() {
         <ClubLogo variant="header" />
         <p className="page-header__eyebrow">Rodič</p>
         <h1 className="trainer-picker__title">
-          {parent.first_name} {parent.last_name}
+          {parent.first_name} {parent.last_name} (rodič)
         </h1>
         <p className="trainer-picker__sub">Moje děti</p>
 

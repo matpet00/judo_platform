@@ -7,6 +7,7 @@ import { ClubLogo } from "../components/ClubLogo";
 import { trainerNotificationsKey } from "../api/queryKeys";
 import { countUnreadBoard, countUnreadPlanner } from "../lib/notificationNavigation";
 import { TrainerLoginFlow } from "../components/TrainerSwitcher";
+import { trainerRoleLabel } from "../components/TrainerPicker";
 import { useParent } from "../context/ParentContext";
 import { useTrainer } from "../context/TrainerContext";
 import { useTodayAttendance } from "../hooks/useTodayAttendance";
@@ -85,7 +86,7 @@ export function BootPage() {
         <p className="page-header__eyebrow">Menu</p>
         <h1 className="trainer-picker__title">Kam chceš jít?</h1>
         <p className="trainer-picker__sub">
-          {trainer.first_name} {trainer.last_name}
+          {trainerRoleLabel(trainer)}
         </p>
         <div className="hub-card__actions">
           <button type="button" className="trainer-card" onClick={() => navigate("/board")}>

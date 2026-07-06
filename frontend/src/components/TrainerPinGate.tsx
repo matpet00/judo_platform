@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Trainer } from "../api/types";
-import { trainerLabel } from "./TrainerPicker";
+import { trainerRoleLabel } from "./TrainerPicker";
 
 type TrainerPinGateProps = {
   trainer: Trainer;
@@ -17,8 +17,8 @@ export function TrainerPinGate({ trainer, onSubmit, onCancel, error, pending }: 
     <div className="trainer-pin-gate">
       <header className="trainer-picker__header">
         <p className="page-header__eyebrow">PIN</p>
-        <h1 className="trainer-picker__title">{trainerLabel(trainer)}</h1>
-        <p className="trainer-picker__sub">Zadej svůj PIN pro docházku</p>
+        <h1 className="trainer-picker__title">{trainerRoleLabel(trainer)}</h1>
+        <p className="trainer-picker__sub">Zadej svůj PIN</p>
       </header>
 
       <input
