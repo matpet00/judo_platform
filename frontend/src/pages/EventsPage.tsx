@@ -14,6 +14,7 @@ import type {
   NotificationTargetCreate,
   RsvpStatus,
   TrainingOccurrence,
+  TrainingOccurrenceComment,
 } from "../api/types";
 import { RecipientTargets, recipientLabel } from "../components/RecipientTargets";
 import { AttendanceOverview } from "../components/AttendanceOverview";
@@ -507,6 +508,7 @@ export function EventsPage({ role, selfId, homePath }: Props) {
   );
   const [scrollToEventId, setScrollToEventId] = useState<number | null>(null);
   const [highlightOccurrenceKey, setHighlightOccurrenceKey] = useState<string | null>(null);
+  const highlightScrolledKeyRef = useRef<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -612,23 +614,38 @@ export function EventsPage({ role, selfId, homePath }: Props) {
     setOpenSections((cur) => new Set(cur).add(section));
   }, [activeOccurrence]);
 
+  // Clear the highlight after a short time. Kept independent of `listGroups` so a
+  // re-render (e.g. periodic refetch) can't keep resetting the timer and leave the
+  // highlight stuck — which previously made the list keep scrolling back up.
+  useEffect(() => {
+    if (!highlightOccurrenceKey) return;
+    const timer = window.setTimeout(() => setHighlightOccurrenceKey(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [highlightOccurrenceKey]);
+
   useEffect(() => {
     if (!highlightOccurrenceKey) return;
     const inCanceled = listGroups.trainingsCanceled.some(
       (o) => occurrenceListKey(o) === highlightOccurrenceKey,
     );
     const section: ListSectionId = inCanceled ? "canceled_trainings" : "trainings";
-    setOpenSections((cur) => new Set(cur).add(section));
-    const timer = window.setTimeout(() => setHighlightOccurrenceKey(null), 3000);
-    return () => window.clearTimeout(timer);
+    setOpenSections((cur) => (cur.has(section) ? cur : new Set(cur).add(section)));
   }, [highlightOccurrenceKey, listGroups.trainingsCanceled]);
 
+  // Scroll to the highlighted occurrence only once per highlight, otherwise every
+  // re-render would re-trigger scrollIntoView and fight the user's own scrolling.
   useEffect(() => {
     if (!highlightOccurrenceKey || occurrencesQuery.isLoading) return;
+    if (highlightScrolledKeyRef.current === highlightOccurrenceKey) return;
     const el = document.getElementById(`occ-${highlightOccurrenceKey}`);
     if (!el) return;
+    highlightScrolledKeyRef.current = highlightOccurrenceKey;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [highlightOccurrenceKey, occurrencesQuery.isLoading, listGroups]);
+
+  useEffect(() => {
+    if (!highlightOccurrenceKey) highlightScrolledKeyRef.current = null;
+  }, [highlightOccurrenceKey]);
 
   const openTrainingOccurrence = (occurrence: TrainingOccurrence) => {
     setActiveId(null);
@@ -2170,6 +2187,29 @@ function TrainingOccurrencePanel({
     }
   };
 
+  const removeGuest = async (studentId: number, attendanceId: number) => {
+    if (sessionId == null) return;
+    setSavingIds((cur) => new Set(cur).add(studentId));
+    try {
+      await api.deleteAttendance(sessionId, attendanceId);
+      queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      onChanged();
+    } finally {
+      setSavingIds((cur) => {
+        const next = new Set(cur);
+        next.delete(studentId);
+        return next;
+      });
+    }
+  };
+
+  const addGuest = async (studentId: number) => {
+    if (sessionId == null) return;
+    await api.setAttendance(sessionId, studentId, "present");
+    queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+    onChanged();
+  };
+
   const dateLabel = new Date(occurrenceDateKey(occurrence.date)).toLocaleDateString("cs-CZ", {
     weekday: "long",
     day: "numeric",
@@ -2320,6 +2360,11 @@ function TrainingOccurrencePanel({
             students={detailQuery.data.students}
             onStatus={setStatus}
             isSaving={(id) => savingIds.has(id)}
+            onRemoveGuest={removeGuest}
+          />
+          <TrainingGuestPicker
+            existingIds={detailQuery.data.students.map((s) => s.id)}
+            onAdd={addGuest}
           />
           <div className="event-detail__owner-actions">
             <button
@@ -2333,6 +2378,213 @@ function TrainingOccurrencePanel({
           </div>
         </>
       ) : null}
+
+      <TrainingOccurrenceComments occurrence={occurrence} role={role} />
+    </div>
+  );
+}
+
+function TrainingGuestPicker({
+  existingIds,
+  onAdd,
+}: {
+  existingIds: number[];
+  onAdd: (studentId: number) => Promise<void>;
+}) {
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState<number | null>(null);
+  const studentsQuery = useQuery({ queryKey: ["students"], queryFn: () => api.students() });
+
+  const q = query.trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!q) return [];
+    const existing = new Set(existingIds);
+    return (studentsQuery.data ?? [])
+      .filter((s) => !existing.has(s.id))
+      .filter((s) => {
+        const a = `${s.first_name} ${s.last_name}`.toLowerCase();
+        const b = `${s.last_name} ${s.first_name}`.toLowerCase();
+        return a.includes(q) || b.includes(q);
+      })
+      .slice(0, 6);
+  }, [studentsQuery.data, q, existingIds]);
+
+  const handleAdd = async (id: number) => {
+    setAdding(id);
+    try {
+      await onAdd(id);
+      setQuery("");
+    } finally {
+      setAdding(null);
+    }
+  };
+
+  return (
+    <div className="guest-picker">
+      <label className="notification-field guest-picker__field">
+        Přidat hosta (dítě z jiné pobočky / skupiny)
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Začni psát jméno dítěte…"
+          autoComplete="off"
+        />
+      </label>
+      {q && (
+        <div className="guest-picker__list">
+          {studentsQuery.isLoading && <div className="guest-picker__empty">Načítám…</div>}
+          {!studentsQuery.isLoading && matches.length === 0 && (
+            <div className="guest-picker__empty">Nikdo nenalezen.</div>
+          )}
+          {matches.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className="guest-picker__item"
+              disabled={adding != null}
+              onClick={() => handleAdd(s.id)}
+            >
+              <span className="guest-picker__name">
+                {s.first_name} {s.last_name}
+              </span>
+              <span className="guest-picker__meta">
+                {s.age_group}
+                {s.branches?.length ? ` · ${s.branches.map((b) => b.name).join(", ")}` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TrainingOccurrenceComments({ occurrence, role }: { occurrence: TrainingOccurrence; role: Role }) {
+  const queryClient = useQueryClient();
+  const [reply, setReply] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const queryKey = ["training-occurrence-comments", occurrence.group_id, occurrence.date, role];
+
+  const commentsQuery = useQuery({
+    queryKey,
+    queryFn: () => api.trainingOccurrenceComments(occurrence.group_id, occurrence.date, role),
+  });
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  };
+
+  const addComment = useMutation({
+    mutationFn: (body: string) =>
+      api.addTrainingOccurrenceComment(occurrence.group_id, occurrence.date, body, role),
+    onSuccess: () => {
+      setReply("");
+      refresh();
+    },
+  });
+  const updateComment = useMutation({
+    mutationFn: ({ commentId, body }: { commentId: number; body: string }) =>
+      api.updateTrainingOccurrenceComment(occurrence.group_id, occurrence.date, commentId, body, role),
+    onSuccess: () => {
+      setEditingId(null);
+      setEditText("");
+      refresh();
+    },
+  });
+  const deleteComment = useMutation({
+    mutationFn: (commentId: number) =>
+      api.deleteTrainingOccurrenceComment(occurrence.group_id, occurrence.date, commentId, role),
+    onSuccess: refresh,
+  });
+
+  const comments = commentsQuery.data ?? [];
+
+  return (
+    <div className="notification-thread">
+      <h4 className="event-detail__subtitle">Dotazy a připomínky</h4>
+      {commentsQuery.isLoading && <div className="loading">Načítám poznámky…</div>}
+      {commentsQuery.isError && <div className="error-box">{String(commentsQuery.error)}</div>}
+      {comments.map((comment: TrainingOccurrenceComment) => (
+        <div className="notification-comment" key={comment.id}>
+          <span className="notification-comment__meta">
+            {comment.author_trainer
+              ? `${comment.author_trainer.first_name} ${comment.author_trainer.last_name}`
+              : comment.author_parent
+                ? `${comment.author_parent.first_name} ${comment.author_parent.last_name} (rodič)`
+                : "Neznámý"}
+            {" · "}
+            {formatDateTime(comment.created_at)}
+            {comment.updated_at !== comment.created_at ? " · upraveno" : ""}
+          </span>
+          {editingId === comment.id ? (
+            <div className="notification-comment__edit">
+              <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={2} />
+              <div className="notification-comment__edit-actions">
+                <button type="button" className="btn btn--ghost" onClick={() => setEditingId(null)}>Zrušit</button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={!editText.trim() || updateComment.isPending}
+                  onClick={() => updateComment.mutate({ commentId: comment.id, body: editText })}
+                >
+                  {updateComment.isPending ? "Ukládám…" : "Uložit"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p>{comment.body}</p>
+              {(comment.can_edit || comment.can_delete) && (
+                <div className="notification-comment__actions">
+                  {comment.can_edit && (
+                    <button
+                      type="button"
+                      className="notification-comment__edit-btn"
+                      onClick={() => {
+                        setEditingId(comment.id);
+                        setEditText(comment.body);
+                      }}
+                    >
+                      Upravit
+                    </button>
+                  )}
+                  {comment.can_delete && (
+                    <button
+                      type="button"
+                      className="notification-comment__delete"
+                      disabled={deleteComment.isPending}
+                      onClick={() => deleteComment.mutate(comment.id)}
+                    >
+                      Smazat
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ))}
+      {!commentsQuery.isLoading && comments.length === 0 && (
+        <div className="notification-thread__empty">Zatím žádné poznámky.</div>
+      )}
+      <div className="notification-thread__reply">
+        <textarea
+          value={reply}
+          onChange={(e) => setReply(e.target.value)}
+          placeholder="Napiš poznámku nebo dotaz…"
+          rows={2}
+        />
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={!reply.trim() || addComment.isPending}
+          onClick={() => addComment.mutate(reply)}
+        >
+          {addComment.isPending ? "Odesílám…" : "Odeslat"}
+        </button>
+      </div>
     </div>
   );
 }

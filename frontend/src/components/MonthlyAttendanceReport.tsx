@@ -53,8 +53,11 @@ export function MonthlyAttendanceReport() {
             </thead>
             <tbody>
               {reportQuery.data.rows.map((row) => (
-                <tr key={row.student_id}>
-                  <td>{row.name}</td>
+                <tr key={`${row.is_guest ? "guest" : "member"}-${row.student_id}`}>
+                  <td>
+                    {row.name}
+                    {row.is_guest && <span className="attendance-guest-badge">Host</span>}
+                  </td>
                   <td>{row.present}</td>
                   <td>{row.absent}</td>
                   <td>{row.excused}</td>

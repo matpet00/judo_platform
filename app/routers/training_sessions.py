@@ -35,7 +35,9 @@ def _session_load_options():
         selectinload(TrainingSession.branch),
         selectinload(TrainingSession.training_group),
         selectinload(TrainingSession.trainer),
-        selectinload(TrainingSession.attendance_records).selectinload(AttendanceRecord.student),
+        selectinload(TrainingSession.attendance_records)
+        .selectinload(AttendanceRecord.student)
+        .selectinload(Student.branches),
         selectinload(TrainingSession.attendance_records).selectinload(AttendanceRecord.recorded_by),
     )
 
@@ -106,15 +108,22 @@ def _session_to_read(session: TrainingSession) -> TrainingSessionRead:
     )
 
 
+def _guest_home_branch(student: Student) -> str | None:
+    branches = getattr(student, "branches", None) or []
+    names = sorted(b.name for b in branches)
+    return ", ".join(names) if names else None
+
+
 def _session_students_with_attendance(session: TrainingSession) -> list[SessionStudentWithAttendance]:
     if session.training_group is None:
         raise HTTPException(status_code=500, detail="Training group not loaded for session.")
     by_student_id = {r.student_id: r for r in session.attendance_records}
+    roster_ids = {s.id for s in session.training_group.students}
     students_sorted = sorted(
         session.training_group.students,
         key=lambda s: (s.last_name, s.first_name, s.id),
     )
-    return [
+    rows = [
         SessionStudentWithAttendance(
             id=student.id,
             first_name=student.first_name,
@@ -125,9 +134,27 @@ def _session_students_with_attendance(session: TrainingSession) -> list[SessionS
                 if student.id in by_student_id
                 else None
             ),
+            is_guest=False,
         )
         for student in students_sorted
     ]
+
+    # Guests: children marked on this session who are not on the group's standing roster.
+    guest_records = [r for r in session.attendance_records if r.student_id not in roster_ids]
+    guest_records.sort(key=lambda r: (r.student.last_name, r.student.first_name, r.student_id))
+    rows.extend(
+        SessionStudentWithAttendance(
+            id=record.student.id,
+            first_name=record.student.first_name,
+            last_name=record.student.last_name,
+            age_group=record.student.age_group,
+            attendance=_attendance_to_summary(record),
+            is_guest=True,
+            home_branch=_guest_home_branch(record.student),
+        )
+        for record in guest_records
+    )
+    return rows
 
 
 def _session_to_detail(session: TrainingSession) -> TrainingSessionDetailRead:
@@ -246,20 +273,11 @@ async def _get_student_with_branches_or_404(db: AsyncSession, student_id: int) -
 
 
 def _validate_student_for_session(student: Student, session: TrainingSession) -> None:
-    branch_ids = {b.id for b in student.branches}
-    if session.branch_id not in branch_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Student is not assigned to the session branch.",
-        )
+    # Any existing club child may be marked on a session. Roster children are the
+    # standard case; children from other branches/groups are allowed as one-off
+    # guests for this specific day (they still count into attendance metrics).
     if session.training_group is None:
         raise HTTPException(status_code=500, detail="Training group not loaded for session.")
-    group_student_ids = {s.id for s in session.training_group.students}
-    if student.id not in group_student_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Student is not a member of the session training group.",
-        )
 
 
 @router.get("", response_model=list[TrainingSessionRead])

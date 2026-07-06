@@ -114,6 +114,21 @@ export interface TrainingOccurrence {
   marked_count: number;
 }
 
+export interface TrainingOccurrenceComment {
+  id: number;
+  training_group_id: number;
+  training_date: string;
+  author_trainer_id: number | null;
+  author_parent_id: number | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  author_trainer: TrainerBrief | null;
+  author_parent: ParentBrief | null;
+  can_delete: boolean;
+  can_edit: boolean;
+}
+
 export interface AttendanceMonthlyReportRow {
   student_id: number;
   name: string;
@@ -121,6 +136,7 @@ export interface AttendanceMonthlyReportRow {
   absent: number;
   excused: number;
   sessions: number;
+  is_guest?: boolean;
 }
 
 export interface AttendanceMonthlyReport {
@@ -165,6 +181,8 @@ export interface SessionStudent {
   last_name: string;
   age_group: AgeGroup;
   attendance: AttendanceSummary | null;
+  is_guest?: boolean;
+  home_branch?: string | null;
 }
 
 export interface TrainingSessionSummary {

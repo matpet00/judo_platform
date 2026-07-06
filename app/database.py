@@ -102,6 +102,20 @@ async def migrate_schema() -> None:
         if session_columns and "canceled" not in session_columns:
             await conn.execute(text("ALTER TABLE training_sessions ADD COLUMN canceled BOOLEAN DEFAULT 0"))
 
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS training_occurrence_comments ("
+                "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                "training_group_id INTEGER NOT NULL REFERENCES training_groups(id) ON DELETE CASCADE, "
+                "training_date DATE NOT NULL, "
+                "author_trainer_id INTEGER REFERENCES trainers(id) ON DELETE SET NULL, "
+                "author_parent_id INTEGER REFERENCES parents(id) ON DELETE SET NULL, "
+                "body VARCHAR(4000) NOT NULL, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+            ),
+        )
+
         result = await conn.execute(text("PRAGMA table_info(notification_targets)"))
         target_columns = {row[1] for row in result.fetchall()}
         if target_columns and "branch_id" not in target_columns:

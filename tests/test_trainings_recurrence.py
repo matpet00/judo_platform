@@ -157,6 +157,78 @@ async def test_cancel_occurrence_notifies_parent(client):
 
 
 @pytest.mark.asyncio
+async def test_training_occurrence_comments_for_trainer_and_parent(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)
+    other_parent = _parent_token(999)
+    today = date.today()
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+    comments_url = f"/training-groups/{group_id}/occurrences/{today.isoformat()}/comments"
+
+    trainer_comment = await client.post(
+        comments_url,
+        json={"body": " Vezměte si pití navíc. "},
+        headers=write_headers(trainer),
+    )
+    assert trainer_comment.status_code == 201, trainer_comment.text
+    assert trainer_comment.json()["body"] == "Vezměte si pití navíc."
+    assert trainer_comment.json()["can_edit"] is True
+
+    parent_view = (await client.get(comments_url, headers=_bearer(parent))).json()
+    assert len(parent_view) == 1
+    assert parent_view[0]["author_trainer"]["first_name"]
+    assert parent_view[0]["can_edit"] is False
+
+    parent_comment = await client.post(
+        comments_url,
+        json={"body": "Díky, dorazíme rovnou na místo."},
+        headers=write_headers(parent),
+    )
+    assert parent_comment.status_code == 201, parent_comment.text
+    parent_comment_id = parent_comment.json()["id"]
+    assert parent_comment.json()["author_parent_id"] == 1
+    assert parent_comment.json()["can_edit"] is True
+
+    trainer_view = (await client.get(comments_url, headers=write_headers(trainer))).json()
+    assert [comment["body"] for comment in trainer_view] == [
+        "Vezměte si pití navíc.",
+        "Díky, dorazíme rovnou na místo.",
+    ]
+    assert trainer_view[1]["author_parent"]["first_name"]
+    assert trainer_view[1]["can_edit"] is False
+
+    denied = await client.get(comments_url, headers=_bearer(other_parent))
+    assert denied.status_code == 404
+
+    # Author of the comment must NOT receive a notification about their own comment.
+    trainer_notifs = (await client.get("/notifications", headers=write_headers(trainer))).json()
+    assert not any(
+        n["title"] == "Poznámka k tréninku" and "Vezměte si pití" in n["body"]
+        for n in trainer_notifs
+    )
+
+    # Parent on the roster is notified about the trainer's comment.
+    parent_notifs = (await client.get("/notifications", headers=_bearer(parent))).json()
+    assert any(
+        n["title"] == "Poznámka k tréninku"
+        and n["training_group_id"] == group_id
+        and n["training_date"] == today.isoformat()
+        for n in parent_notifs
+    )
+
+    edit = await client.patch(
+        f"{comments_url}/{parent_comment_id}",
+        json={"body": "Díky, dorazíme na místo."},
+        headers=write_headers(parent),
+    )
+    assert edit.status_code == 200
+    assert edit.json()["body"] == "Díky, dorazíme na místo."
+
+    delete = await client.delete(f"{comments_url}/{parent_comment_id}", headers=write_headers(parent))
+    assert delete.status_code == 204
+
+
+@pytest.mark.asyncio
 async def test_delete_training_group_notifies_parent(client):
     trainer = await login_trainer(client)
     parent = _parent_token(1)
@@ -317,3 +389,59 @@ async def test_reminder_sweep_notifies_participants_once(client):
         if n["event_id"] == event_id and n["title"].startswith("Připomínka")
     ]
     assert len(reminders_after) == 1
+
+
+@pytest.mark.asyncio
+async def test_guest_attendance_is_flagged_and_counts(client):
+    trainer = await login_trainer(client)
+    today = date.today()
+    # Group roster only has child 1; child 2 is a guest (not on this roster).
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+    session = (
+        await client.post(
+            f"/training-groups/{group_id}/sessions",
+            json={"session_date": today.isoformat()},
+            headers=write_headers(trainer),
+        )
+    ).json()
+    session_id = session["id"]
+
+    roster_mark = await client.post(
+        f"/training-sessions/{session_id}/attendance",
+        json={"student_id": 1, "status": "present"},
+        headers=write_headers(trainer),
+    )
+    assert roster_mark.status_code == 201, roster_mark.text
+
+    guest_mark = await client.post(
+        f"/training-sessions/{session_id}/attendance",
+        json={"student_id": 2, "status": "present"},
+        headers=write_headers(trainer),
+    )
+    assert guest_mark.status_code == 201, guest_mark.text
+    guest_attendance_id = guest_mark.json()["id"]
+
+    detail = (await client.get(f"/training-sessions/{session_id}")).json()
+    by_id = {s["id"]: s for s in detail["students"]}
+    assert by_id[1]["is_guest"] is False
+    assert by_id[2]["is_guest"] is True
+
+    month = f"{today.year}-{today.month:02d}"
+    report = (
+        await client.get(
+            f"/training-groups/{group_id}/attendance-report?month={month}",
+            headers=write_headers(trainer),
+        )
+    ).json()
+    rows = {(r["student_id"], r["is_guest"]): r for r in report["rows"]}
+    assert rows[(1, False)]["present"] == 1
+    assert rows[(2, True)]["present"] == 1
+
+    # Removing the guest attendance drops them from the session view again.
+    delete = await client.delete(
+        f"/training-sessions/{session_id}/attendance/{guest_attendance_id}",
+        headers=write_headers(trainer),
+    )
+    assert delete.status_code == 204
+    detail_after = (await client.get(f"/training-sessions/{session_id}")).json()
+    assert all(s["id"] != 2 for s in detail_after["students"])

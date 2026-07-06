@@ -9,9 +9,17 @@ type AttendanceOverviewProps = {
   disabled?: boolean;
   isSaving?: (studentId: number) => boolean;
   compact?: boolean;
+  onRemoveGuest?: (studentId: number, attendanceId: number) => void;
 };
 
-export function AttendanceOverview({ students, onStatus, disabled, isSaving, compact }: AttendanceOverviewProps) {
+export function AttendanceOverview({
+  students,
+  onStatus,
+  disabled,
+  isSaving,
+  compact,
+  onRemoveGuest,
+}: AttendanceOverviewProps) {
   const counts = countByStatus(students);
   const sorted = sortStudentsByName(students);
 
@@ -47,12 +55,19 @@ export function AttendanceOverview({ students, onStatus, disabled, isSaving, com
           const current = student.attendance?.status ?? null;
           const saving = isSaving?.(student.id) ?? false;
           return (
-            <div key={student.id} className={`attendance-row${saving ? " attendance-row--saving" : ""}`}>
+            <div
+              key={student.id}
+              className={`attendance-row${saving ? " attendance-row--saving" : ""}${student.is_guest ? " attendance-row--guest" : ""}`}
+            >
               <div className="attendance-row__info">
                 <span className="attendance-row__name">
                   {student.first_name} {student.last_name}
+                  {student.is_guest && <span className="attendance-guest-badge">Host</span>}
                 </span>
-                <span className="attendance-row__age">{student.age_group}</span>
+                <span className="attendance-row__age">
+                  {student.age_group}
+                  {student.is_guest && student.home_branch ? ` · ${student.home_branch}` : ""}
+                </span>
               </div>
               <div className="attendance-row__actions" role="group" aria-label={`Docházka ${student.first_name}`}>
                 {STATUSES.map((status) => (
@@ -72,6 +87,18 @@ export function AttendanceOverview({ students, onStatus, disabled, isSaving, com
                     {STATUS_SHORT[status]}
                   </button>
                 ))}
+                {student.is_guest && onRemoveGuest && student.attendance?.id != null && (
+                  <button
+                    type="button"
+                    className="attendance-guest-remove"
+                    disabled={disabled || saving}
+                    aria-label={`Odebrat hosta ${student.first_name}`}
+                    title="Odebrat hosta z tréninku"
+                    onClick={() => onRemoveGuest(student.id, student.attendance!.id)}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             </div>
           );

@@ -257,6 +257,27 @@ class TrainingSession(Base):
     )
 
 
+class TrainingOccurrenceComment(Base):
+    __tablename__ = "training_occurrence_comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    training_group_id: Mapped[int] = mapped_column(ForeignKey("training_groups.id", ondelete="CASCADE"))
+    training_date: Mapped[date] = mapped_column(Date)
+    author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    author_parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="SET NULL"), nullable=True)
+    body: Mapped[str] = mapped_column(String(4000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    training_group: Mapped[TrainingGroup] = relationship()
+    author_trainer: Mapped[Trainer | None] = relationship()
+    author_parent: Mapped[Parent | None] = relationship()
+
+
 class Notification(Base):
     __tablename__ = "notifications"
 

@@ -656,6 +656,10 @@ class SessionStudentWithAttendance(BaseModel):
     last_name: str
     age_group: AgeGroup
     attendance: AttendanceSummary | None = None
+    # True for children marked on this session who are not on the group's standing roster
+    # (e.g. a child from another branch dropping in as a guest).
+    is_guest: bool = False
+    home_branch: str | None = None
 
 
 class AttendanceBulkItem(BaseModel):
@@ -705,6 +709,7 @@ class AttendanceMonthlyReportRow(BaseModel):
     absent: int = 0
     excused: int = 0
     sessions: int = 0
+    is_guest: bool = False
 
 
 class AttendanceMonthlyReport(BaseModel):
@@ -802,6 +807,32 @@ class ParentBrief(BaseModel):
     last_name: str = Field(examples=["Nováková"])
 
     model_config = {"from_attributes": True}
+
+
+class TrainingOccurrenceCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("body", mode="before")
+    @classmethod
+    def strip_training_comment_body(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class TrainingOccurrenceCommentRead(BaseModel):
+    id: int
+    training_group_id: int
+    training_date: date
+    author_trainer_id: int | None = None
+    author_parent_id: int | None = None
+    body: str
+    created_at: datetime
+    updated_at: datetime
+    author_trainer: TrainerBrief | None = None
+    author_parent: ParentBrief | None = None
+    can_delete: bool = False
+    can_edit: bool = False
 
 
 class NotificationCommentRead(BaseModel):

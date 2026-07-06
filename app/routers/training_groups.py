@@ -15,14 +15,18 @@ from app.models import (
     NotificationTarget,
     Parent,
     Student,
+    Trainer,
     TrainingGroup,
+    TrainingOccurrenceComment,
     TrainingSession,
 )
 from app.schemas import (
     AttendanceMonthlyReport,
     AttendanceMonthlyReportRow,
     BranchRead,
+    ParentBrief,
     StudentBrief,
+    TrainerBrief,
     TrainingGroupCreate,
     TrainingGroupDetailRead,
     TrainingGroupPatch,
@@ -30,9 +34,16 @@ from app.schemas import (
     TrainingGroupSessionCreate,
     TrainingGroupStudentsReplace,
     TrainingOccurrence,
+    TrainingOccurrenceCommentCreate,
+    TrainingOccurrenceCommentRead,
     TrainingSessionRead,
 )
-from app.training_notify import notify_training_series_deleted
+from app.training_notify import (
+    _format_training_when,
+    _other_trainers_on_branch,
+    _parents_on_roster,
+    notify_training_series_deleted,
+)
 from app.routers.training_sessions import _session_to_read, create_session_for_group
 from app.security import require_trainer_token
 
@@ -101,6 +112,45 @@ def _group_to_detail(group: TrainingGroup) -> TrainingGroupDetailRead:
     )
 
 
+def _viewer_can_access_group(group: TrainingGroup, viewer: Viewer) -> bool:
+    if viewer.kind == "trainer":
+        return True
+    child_ids = {child.id for child in viewer.children}
+    return bool(child_ids & {student.id for student in group.students})
+
+
+def _comment_authored_by_viewer(comment: TrainingOccurrenceComment, viewer: Viewer) -> bool:
+    if viewer.kind == "trainer":
+        return comment.author_trainer_id is not None and comment.author_trainer_id == viewer.trainer_id
+    return comment.author_parent_id is not None and comment.author_parent_id == viewer.parent_id
+
+
+def _training_comment_to_read(comment: TrainingOccurrenceComment, viewer: Viewer) -> TrainingOccurrenceCommentRead:
+    mine = _comment_authored_by_viewer(comment, viewer)
+    return TrainingOccurrenceCommentRead(
+        id=comment.id,
+        training_group_id=comment.training_group_id,
+        training_date=comment.training_date,
+        author_trainer_id=comment.author_trainer_id,
+        author_parent_id=comment.author_parent_id,
+        body=comment.body,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+        author_trainer=(
+            TrainerBrief.model_validate(comment.author_trainer, from_attributes=True)
+            if comment.author_trainer is not None
+            else None
+        ),
+        author_parent=(
+            ParentBrief.model_validate(comment.author_parent, from_attributes=True)
+            if comment.author_parent is not None
+            else None
+        ),
+        can_delete=mine,
+        can_edit=mine,
+    )
+
+
 async def _get_branch_or_404(db: AsyncSession, branch_id: int) -> Branch:
     branch = await db.get(Branch, branch_id)
     if branch is None:
@@ -115,6 +165,20 @@ async def _get_group_or_404(db: AsyncSession, group_id: int) -> TrainingGroup:
     group = result.scalar_one_or_none()
     if group is None:
         raise HTTPException(status_code=404, detail="Training group not found.")
+    return group
+
+
+async def _get_visible_occurrence_group_or_404(
+    db: AsyncSession,
+    group_id: int,
+    training_date: date,
+    viewer: Viewer,
+) -> TrainingGroup:
+    group = await _get_group_or_404(db, group_id)
+    if not _viewer_can_access_group(group, viewer):
+        raise HTTPException(status_code=404, detail="Training occurrence not found.")
+    if training_date not in _occurrence_dates(group, training_date, training_date):
+        raise HTTPException(status_code=404, detail="Training occurrence not found.")
     return group
 
 
@@ -244,6 +308,171 @@ async def list_training_occurrences(
             )
     occurrences.sort(key=lambda o: (o.date, o.start_time, o.group_id))
     return occurrences
+
+
+_TRAINING_COMMENT_OPTIONS = (
+    selectinload(TrainingOccurrenceComment.author_trainer),
+    selectinload(TrainingOccurrenceComment.author_parent),
+)
+
+
+async def _notify_training_comment(
+    db: AsyncSession,
+    group: TrainingGroup,
+    training_date: date,
+    comment: TrainingOccurrenceComment,
+    viewer: Viewer,
+) -> None:
+    parents = await _parents_on_roster(db, group)
+    other_trainers = await _other_trainers_on_branch(
+        db,
+        group.branch_id,
+        exclude_trainer_id=viewer.trainer_id if viewer.kind == "trainer" else None,
+    )
+    if viewer.kind == "parent":
+        parents = [parent for parent in parents if parent.id != viewer.parent_id]
+
+    targets = [
+        NotificationTarget(audience=NotificationAudience.parent, parent_id=parent.id)
+        for parent in parents
+    ]
+    targets.extend(
+        NotificationTarget(audience=NotificationAudience.trainer, trainer_id=trainer.id)
+        for trainer in other_trainers
+    )
+    if not targets:
+        return
+
+    if viewer.kind == "parent":
+        author = await db.get(Parent, viewer.parent_id)
+        who = f"{author.first_name} {author.last_name}" if author is not None else "Rodič"
+    else:
+        author = await db.get(Trainer, viewer.trainer_id)
+        who = f"{author.first_name} {author.last_name}" if author is not None else "Trenér"
+
+    snippet = comment.body.strip()
+    if len(snippet) > 180:
+        snippet = snippet[:179] + "…"
+
+    now = datetime.now(UTC)
+    when = _format_training_when(training_date, group.start_time, group.end_time)
+    db.add(
+        Notification(
+            # No author_trainer_id: the comment author must not receive a notification
+            # about their own comment (delivery is handled purely via targets below).
+            title="Poznámka k tréninku",
+            body=f"{who} přidal(a) poznámku k tréninku {group.name} dne {when}:\n{snippet}",
+            author_trainer_id=None,
+            training_group_id=group.id,
+            training_date=training_date,
+            visible_until=now + timedelta(days=ENROLLMENT_NOTICE_DAYS),
+            grace_seconds=0,
+            last_activity_at=now,
+            targets=targets,
+        ),
+    )
+
+
+@router.get("/{group_id}/occurrences/{training_date}/comments", response_model=list[TrainingOccurrenceCommentRead])
+async def list_training_occurrence_comments(
+    group_id: int,
+    training_date: date,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+) -> list[TrainingOccurrenceCommentRead]:
+    await _get_visible_occurrence_group_or_404(db, group_id, training_date, viewer)
+    result = await db.execute(
+        select(TrainingOccurrenceComment)
+        .where(
+            TrainingOccurrenceComment.training_group_id == group_id,
+            TrainingOccurrenceComment.training_date == training_date,
+        )
+        .options(*_TRAINING_COMMENT_OPTIONS)
+        .order_by(TrainingOccurrenceComment.created_at.asc(), TrainingOccurrenceComment.id.asc()),
+    )
+    return [_training_comment_to_read(comment, viewer) for comment in result.scalars().all()]
+
+
+@router.post(
+    "/{group_id}/occurrences/{training_date}/comments",
+    response_model=TrainingOccurrenceCommentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_training_occurrence_comment(
+    group_id: int,
+    training_date: date,
+    payload: TrainingOccurrenceCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+) -> TrainingOccurrenceCommentRead:
+    group = await _get_visible_occurrence_group_or_404(db, group_id, training_date, viewer)
+    comment = TrainingOccurrenceComment(
+        training_group_id=group_id,
+        training_date=training_date,
+        author_trainer_id=viewer.trainer_id if viewer.kind == "trainer" else None,
+        author_parent_id=viewer.parent_id if viewer.kind == "parent" else None,
+        body=payload.body,
+    )
+    db.add(comment)
+    await db.flush()
+    await _notify_training_comment(db, group, training_date, comment, viewer)
+    await db.commit()
+
+    result = await db.execute(
+        select(TrainingOccurrenceComment)
+        .where(TrainingOccurrenceComment.id == comment.id)
+        .options(*_TRAINING_COMMENT_OPTIONS),
+    )
+    return _training_comment_to_read(result.scalar_one(), viewer)
+
+
+@router.patch(
+    "/{group_id}/occurrences/{training_date}/comments/{comment_id}",
+    response_model=TrainingOccurrenceCommentRead,
+)
+async def update_training_occurrence_comment(
+    group_id: int,
+    training_date: date,
+    comment_id: int,
+    payload: TrainingOccurrenceCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+) -> TrainingOccurrenceCommentRead:
+    await _get_visible_occurrence_group_or_404(db, group_id, training_date, viewer)
+    comment = await db.get(TrainingOccurrenceComment, comment_id, options=list(_TRAINING_COMMENT_OPTIONS))
+    if comment is None or comment.training_group_id != group_id or comment.training_date != training_date:
+        raise HTTPException(status_code=404, detail="Comment not found.")
+    if not _comment_authored_by_viewer(comment, viewer):
+        raise HTTPException(status_code=403, detail="Only the author can edit this comment.")
+    comment.body = payload.body
+    await db.commit()
+    result = await db.execute(
+        select(TrainingOccurrenceComment)
+        .where(TrainingOccurrenceComment.id == comment_id)
+        .options(*_TRAINING_COMMENT_OPTIONS),
+    )
+    return _training_comment_to_read(result.scalar_one(), viewer)
+
+
+@router.delete(
+    "/{group_id}/occurrences/{training_date}/comments/{comment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_training_occurrence_comment(
+    group_id: int,
+    training_date: date,
+    comment_id: int,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+) -> None:
+    await _get_visible_occurrence_group_or_404(db, group_id, training_date, viewer)
+    comment = await db.get(TrainingOccurrenceComment, comment_id)
+    if comment is None or comment.training_group_id != group_id or comment.training_date != training_date:
+        raise HTTPException(status_code=404, detail="Comment not found.")
+    if not _comment_authored_by_viewer(comment, viewer):
+        raise HTTPException(status_code=403, detail="Only the author can delete this comment.")
+    await db.delete(comment)
+    await db.commit()
 
 
 @router.post("", response_model=TrainingGroupRead, status_code=status.HTTP_201_CREATED)
@@ -402,18 +631,28 @@ async def training_group_attendance_report(
             TrainingSession.starts_at < month_end,
             TrainingSession.canceled.is_(False),
         )
-        .options(selectinload(TrainingSession.attendance_records)),
+        .options(selectinload(TrainingSession.attendance_records).selectinload(AttendanceRecord.student)),
     )
     sessions = sessions_result.scalars().unique().all()
 
+    roster_ids = {s.id for s in group.students}
     counts: dict[int, dict[str, int]] = {
         s.id: {"present": 0, "absent": 0, "excused": 0} for s in group.students
     }
+    guest_counts: dict[int, dict[str, int]] = {}
+    guest_students: dict[int, Student] = {}
     for session in sessions:
         for record in session.attendance_records:
-            bucket = counts.get(record.student_id)
-            if bucket is not None:
+            if record.student_id in roster_ids:
+                counts[record.student_id][record.status.value] += 1
+            else:
+                bucket = guest_counts.setdefault(
+                    record.student_id,
+                    {"present": 0, "absent": 0, "excused": 0},
+                )
                 bucket[record.status.value] += 1
+                if record.student is not None:
+                    guest_students[record.student_id] = record.student
 
     rows = [
         AttendanceMonthlyReportRow(
@@ -423,9 +662,30 @@ async def training_group_attendance_report(
             absent=counts[student.id]["absent"],
             excused=counts[student.id]["excused"],
             sessions=len(sessions),
+            is_guest=False,
         )
         for student in sorted(group.students, key=lambda s: (s.last_name, s.first_name, s.id))
     ]
+
+    guest_rows = []
+    for student_id, bucket in guest_counts.items():
+        student = guest_students.get(student_id)
+        name = f"{student.first_name} {student.last_name}" if student is not None else f"#{student_id}"
+        guest_rows.append(
+            AttendanceMonthlyReportRow(
+                student_id=student_id,
+                name=name,
+                present=bucket["present"],
+                absent=bucket["absent"],
+                excused=bucket["excused"],
+                # For guests the denominator is how many times they actually dropped in.
+                sessions=bucket["present"] + bucket["absent"] + bucket["excused"],
+                is_guest=True,
+            ),
+        )
+    guest_rows.sort(key=lambda r: r.name.lower())
+    rows.extend(guest_rows)
+
     return AttendanceMonthlyReport(group_id=group_id, month=month, sessions=len(sessions), rows=rows)
 
 

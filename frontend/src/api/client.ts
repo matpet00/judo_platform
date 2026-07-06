@@ -154,6 +154,50 @@ export const api = {
       role,
     );
   },
+  trainingOccurrenceComments: (groupId: number, date: string, role: Role = "trainer") =>
+    request<import("./types").TrainingOccurrenceComment[]>(
+      `/training-groups/${groupId}/occurrences/${date}/comments`,
+      undefined,
+      false,
+      true,
+      role,
+    ),
+  addTrainingOccurrenceComment: (groupId: number, date: string, body: string, role: Role = "trainer") =>
+    request<import("./types").TrainingOccurrenceComment>(
+      `/training-groups/${groupId}/occurrences/${date}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      },
+      true,
+      false,
+      role,
+    ),
+  updateTrainingOccurrenceComment: (
+    groupId: number,
+    date: string,
+    commentId: number,
+    body: string,
+    role: Role = "trainer",
+  ) =>
+    request<import("./types").TrainingOccurrenceComment>(
+      `/training-groups/${groupId}/occurrences/${date}/comments/${commentId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ body }),
+      },
+      true,
+      false,
+      role,
+    ),
+  deleteTrainingOccurrenceComment: (groupId: number, date: string, commentId: number, role: Role = "trainer") =>
+    request<void>(
+      `/training-groups/${groupId}/occurrences/${date}/comments/${commentId}`,
+      { method: "DELETE" },
+      true,
+      false,
+      role,
+    ),
   cancelOccurrence: (sessionId: number, canceled: boolean) =>
     request<import("./types").TrainingSessionSummary>(
       `/training-sessions/${sessionId}/cancel?canceled=${canceled}`,
@@ -222,6 +266,12 @@ export const api = {
       return toSummary(record);
     }
   },
+  deleteAttendance: (sessionId: number, attendanceId: number) =>
+    request<void>(
+      `/training-sessions/${sessionId}/attendance/${attendanceId}`,
+      { method: "DELETE" },
+      true,
+    ),
   notifications: (role: Role = "trainer") =>
     request<import("./types").Notification[]>("/notifications", undefined, false, true, role),
   createNotification: (payload: NotificationCreate) =>
