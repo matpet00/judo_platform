@@ -40,6 +40,13 @@ export function NotificationBell() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
 
+  const markAllRead = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await Promise.all(ids.map((id) => api.markNotificationRead(id, role ?? "trainer")));
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -47,6 +54,14 @@ export function NotificationBell() {
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  // Opening the panel means the badge items have been seen: mark them read.
+  useEffect(() => {
+    if (!open) return;
+    const unreadIds = (notificationsQuery.data ?? []).filter((n) => n.unread).map((n) => n.id);
+    if (unreadIds.length > 0) markAllRead.mutate(unreadIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   if (role == null) return null;

@@ -648,6 +648,8 @@ async def upload_attachment(
     viewer: Viewer = Depends(get_viewer),
 ) -> EventAttachmentRead:
     event = await _get_visible_event_or_404(db, event_id, viewer)
+    if viewer.kind != "trainer":
+        raise HTTPException(status_code=403, detail="Only trainers can upload attachments.")
     # Read in chunks so an oversized body is rejected without buffering it all in memory.
     max_bytes = settings.max_upload_bytes
     chunks: list[bytes] = []

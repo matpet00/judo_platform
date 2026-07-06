@@ -957,6 +957,7 @@ textarea {
   max-width: 480px;
   display: flex;
   flex-direction: column;
+  height: min(85dvh, 900px);
   min-height: 70vh;
   animation: rise 0.5s ease-out both;
 }
@@ -997,7 +998,12 @@ textarea {
   margin: 12px 0 0;
   padding: 0;
   display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .chat-conversation-row {
@@ -1071,6 +1077,7 @@ textarea {
 
 .chat-messages {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1185,6 +1192,28 @@ textarea {
 
 .attendance-tabs {
   margin: 4px 0 16px;
+}
+
+.event-detail__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(229, 72, 77, 0.08);
+}
+
+.event-detail__confirm-text {
+  font-size: 0.9rem;
+}
+
+.event-detail__confirm-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .notification-card__event-action {

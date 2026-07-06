@@ -807,6 +807,7 @@ function EventDetailPanel({
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const detailQuery = useQuery({
     queryKey: ["event", eventId, role, selfId],
     queryFn: () => api.event(eventId, role),
@@ -904,19 +905,33 @@ function EventDetailPanel({
       <EventComments event={event} role={role} onChange={invalidate} />
 
       {event.can_edit && (
-        <div className="event-detail__owner-actions">
-          <button type="button" className="btn btn--ghost" onClick={() => setEditing(true)}>
-            Upravit akci
-          </button>
-          <button
-            type="button"
-            className="notification-delete"
-            disabled={deleteEvent.isPending}
-            onClick={() => deleteEvent.mutate()}
-          >
-            Smazat akci
-          </button>
-        </div>
+        confirmDelete ? (
+          <div className="event-detail__confirm">
+            <span className="event-detail__confirm-text">Opravdu smazat akci „{event.title}"?</span>
+            <div className="event-detail__confirm-actions">
+              <button type="button" className="btn btn--ghost" onClick={() => setConfirmDelete(false)}>
+                Ne
+              </button>
+              <button
+                type="button"
+                className="notification-delete"
+                disabled={deleteEvent.isPending}
+                onClick={() => deleteEvent.mutate()}
+              >
+                {deleteEvent.isPending ? "Mažu…" : "Ano, smazat"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="event-detail__owner-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setEditing(true)}>
+              Upravit akci
+            </button>
+            <button type="button" className="notification-delete" onClick={() => setConfirmDelete(true)}>
+              Smazat akci
+            </button>
+          </div>
+        )
       )}
     </div>
   );
@@ -1155,17 +1170,19 @@ function EventAttachments({ event, role, onChange }: { event: EventDetail; role:
           </li>
         ))}
       </ul>
-      <label className="event-attachments__upload">
-        <input
-          type="file"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) upload.mutate(file);
-            e.target.value = "";
-          }}
-        />
-        <span className="btn btn--ghost">{upload.isPending ? "Nahrávám…" : "Nahrát přílohu"}</span>
-      </label>
+      {role === "trainer" && (
+        <label className="event-attachments__upload">
+          <input
+            type="file"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) upload.mutate(file);
+              e.target.value = "";
+            }}
+          />
+          <span className="btn btn--ghost">{upload.isPending ? "Nahrávám…" : "Nahrát přílohu"}</span>
+        </label>
+      )}
       {upload.isError && <div className="error-box">{String(upload.error)}</div>}
     </div>
   );

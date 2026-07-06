@@ -252,6 +252,20 @@ async def test_attachment_upload_download_delete(client):
 
 
 @pytest.mark.asyncio
+async def test_parent_cannot_upload_attachment(client):
+    trainer = await login_trainer(client)
+    parent = _parent_token(1)
+    event_id = (await _create_event(client, trainer, [{"audience": "parent"}])).json()["id"]
+
+    resp = await client.post(
+        f"/events/{event_id}/attachments",
+        files={"file": ("propozice.txt", b"hello judo", "text/plain")},
+        headers=write_headers(parent),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_only_author_can_delete_event(client):
     trainer = await login_trainer(client)
     other = await login_trainer(client, trainer_id=2)
