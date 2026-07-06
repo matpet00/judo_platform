@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -7,6 +7,7 @@ import type {
   AttendanceStatus,
   EventCreate,
   EventDetail,
+  EventChildRsvp,
   EventItem,
   EventRsvpResponse,
   EventType,
@@ -63,6 +64,46 @@ const RSVP_LABEL: Record<RsvpStatus, string> = {
   maybe: "Možná",
 };
 
+const CHILD_RSVP_BANNER: Record<RsvpStatus, string> = {
+  yes: "Dítě přihlášeno",
+  no: "Dítě nepřihlášeno",
+  maybe: "Dítě: možná",
+};
+
+const CHILDREN_RSVP_BANNER: Record<RsvpStatus, string> = {
+  yes: "děti přihlášeny",
+  no: "děti nepřihlášeny",
+  maybe: "děti: možná",
+};
+
+function parentRsvpBanner(children: EventChildRsvp[]): { label: string; tone: "pending" | RsvpStatus | "mixed" } | null {
+  if (children.length === 0) return null;
+  const total = children.length;
+  const answered = children.filter((c) => c.status != null);
+  const pending = total - answered.length;
+
+  if (pending === total) {
+    return {
+      label: total === 1 ? "Čeká na přihlášení dítěte" : `0/${total} čeká na přihlášení`,
+      tone: "pending",
+    };
+  }
+  if (pending > 0) {
+    return {
+      label: `${answered.length}/${total} čeká na odpověď`,
+      tone: "pending",
+    };
+  }
+  if (total === 1) {
+    return { label: CHILD_RSVP_BANNER[answered[0].status!], tone: answered[0].status! };
+  }
+  const statuses = new Set(answered.map((c) => c.status));
+  if (statuses.size === 1 && answered[0].status) {
+    return { label: `${total}/${total} ${CHILDREN_RSVP_BANNER[answered[0].status]}`, tone: answered[0].status };
+  }
+  return { label: `${total}/${total} odpovězeno`, tone: "mixed" };
+}
+
 function toDatetimeLocalValue(date: Date) {
   const offsetMs = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
@@ -114,12 +155,36 @@ function TimeSegment({
   onChange: (next: number) => void;
 }) {
   const [text, setText] = useState(pad2(value));
-  useEffect(() => setText(pad2(value)), [value]);
+  const lastEmitted = useRef(value);
+
+  useEffect(() => {
+    if (value === lastEmitted.current) return;
+    lastEmitted.current = value;
+    setText(pad2(value));
+  }, [value]);
 
   const handleType = (raw: string) => {
     const digits = raw.replace(/\D/g, "").slice(0, 2);
     setText(digits);
-    if (digits !== "") onChange(Math.min(Number(digits), size - 1));
+    // Commit only when two digits are in — single digits stay local until blur.
+    if (digits.length === 2) {
+      const n = Math.min(Number(digits), size - 1);
+      lastEmitted.current = n;
+      onChange(n);
+    }
+  };
+
+  const handleBlur = () => {
+    if (text === "") {
+      lastEmitted.current = 0;
+      setText("00");
+      onChange(0);
+      return;
+    }
+    const n = Math.min(Number(text), size - 1);
+    lastEmitted.current = n;
+    setText(pad2(n));
+    onChange(n);
   };
 
   return (
@@ -128,14 +193,34 @@ function TimeSegment({
         inputMode="numeric"
         value={text}
         onChange={(e) => handleType(e.target.value)}
-        onBlur={() => setText(pad2(value))}
+        onBlur={handleBlur}
         aria-label={label}
       />
       <div className="time-field__arrows">
-        <button type="button" tabIndex={-1} aria-label={`${label} +`} onClick={() => onChange(wrap(value + step, size))}>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={`${label} +`}
+          onClick={() => {
+            const n = wrap(value + step, size);
+            lastEmitted.current = n;
+            setText(pad2(n));
+            onChange(n);
+          }}
+        >
           ▲
         </button>
-        <button type="button" tabIndex={-1} aria-label={`${label} -`} onClick={() => onChange(wrap(value - step, size))}>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={`${label} -`}
+          onClick={() => {
+            const n = wrap(value - step, size);
+            lastEmitted.current = n;
+            setText(pad2(n));
+            onChange(n);
+          }}
+        >
           ▼
         </button>
       </div>
@@ -156,11 +241,99 @@ function TimeField({ value, onChange }: { value: string; onChange: (next: string
   );
 }
 
+function parseIsoDate(value: string): { d: string; mo: string; y: string } {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || "");
+  return m ? { y: m[1], mo: m[2], d: m[3] } : { y: "", mo: "", d: "" };
+}
+
+// Czech-format date entry (den/měsíc/rok). Native <input type="date"> renders in the
+// browser locale (often mm/dd/yyyy), which we can't control, so we roll our own.
+function DateField({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  const init = parseIsoDate(value);
+  const [d, setD] = useState(init.d);
+  const [mo, setMo] = useState(init.mo);
+  const [y, setY] = useState(init.y);
+  const lastEmitted = useRef(value);
+
+  useEffect(() => {
+    if (value === lastEmitted.current) return;
+    lastEmitted.current = value;
+    const p = parseIsoDate(value);
+    setD(p.d);
+    setMo(p.mo);
+    setY(p.y);
+  }, [value]);
+
+  const commit = (dd: string, mm: string, yy: string) => {
+    if (!dd && !mm && !yy) {
+      lastEmitted.current = "";
+      onChange("");
+      return;
+    }
+    if (!dd || !mm || yy.length !== 4) return;
+    const day = pad2(Math.min(31, Math.max(1, Number(dd))));
+    const mon = pad2(Math.min(12, Math.max(1, Number(mm))));
+    const next = `${yy}-${mon}-${day}`;
+    lastEmitted.current = next;
+    onChange(next);
+  };
+
+  const blurDay = () => {
+    const nextD = d ? pad2(Math.min(31, Math.max(1, Number(d)))) : "";
+    setD(nextD);
+    commit(nextD, mo, y);
+  };
+
+  const blurMonth = () => {
+    const nextMo = mo ? pad2(Math.min(12, Math.max(1, Number(mo)))) : "";
+    setMo(nextMo);
+    commit(d, nextMo, y);
+  };
+
+  const blurYear = () => {
+    commit(d, mo, y);
+  };
+
+  return (
+    <div className="date-field">
+      <input
+        className="date-field__seg date-field__seg--day"
+        inputMode="numeric"
+        placeholder="DD"
+        value={d}
+        aria-label="Den"
+        onChange={(e) => setD(e.target.value.replace(/\D/g, "").slice(0, 2))}
+        onBlur={blurDay}
+      />
+      <span className="date-field__dot">.</span>
+      <input
+        className="date-field__seg date-field__seg--month"
+        inputMode="numeric"
+        placeholder="MM"
+        value={mo}
+        aria-label="Měsíc"
+        onChange={(e) => setMo(e.target.value.replace(/\D/g, "").slice(0, 2))}
+        onBlur={blurMonth}
+      />
+      <span className="date-field__dot">.</span>
+      <input
+        className="date-field__seg date-field__seg--year"
+        inputMode="numeric"
+        placeholder="RRRR"
+        value={y}
+        aria-label="Rok"
+        onChange={(e) => setY(e.target.value.replace(/\D/g, "").slice(0, 4))}
+        onBlur={blurYear}
+      />
+    </div>
+  );
+}
+
 function DateTimeField({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   const { date, time } = splitLocal(value);
   return (
     <div className="datetime-split">
-      <input type="date" value={date} onChange={(e) => onChange(joinLocal(e.target.value, time))} />
+      <DateField value={date} onChange={(nextDate) => onChange(joinLocal(nextDate, time))} />
       <TimeField value={time || "00:00"} onChange={(t) => onChange(joinLocal(date, t))} />
     </div>
   );
@@ -334,11 +507,17 @@ export function EventsPage({ role, selfId, homePath }: Props) {
         <EventCompose
           key={composeDate ? composeDate.toISOString() : "new"}
           initialStart={composeDate}
-          onDone={() => {
+          onDone={(createdEventId) => {
             setComposeOpen(false);
             setComposeDate(null);
             queryClient.invalidateQueries({ queryKey: ["events"] });
             queryClient.invalidateQueries({ queryKey: ["occurrences"] });
+            if (createdEventId != null) {
+              // Jump straight into the new event so the trainer can add attachments right away.
+              setView("list");
+              setActiveOccurrence(null);
+              setActiveId(createdEventId);
+            }
           }}
           onTrainingCreated={() => {
             setComposeOpen(false);
@@ -455,7 +634,7 @@ function EventCompose({
   initialStart,
   onTrainingCreated,
 }: {
-  onDone: () => void;
+  onDone: (createdEventId?: number) => void;
   initialStart?: Date | null;
   onTrainingCreated?: () => void;
 }) {
@@ -474,12 +653,13 @@ function EventCompose({
   });
   const [endsAt, setEndsAt] = useState("");
   const [targets, setTargets] = useState<NotificationTargetCreate[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const branches = branchesQuery.data ?? [];
 
   const createEvent = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const payload: EventCreate = {
         title,
         description,
@@ -489,16 +669,21 @@ function EventCompose({
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
         targets,
       };
-      return api.createEvent(payload);
+      const created = await api.createEvent(payload);
+      for (const file of pendingFiles) {
+        await api.uploadEventAttachment(created.id, file);
+      }
+      return created;
     },
-    onSuccess: onDone,
+    onSuccess: (created) => onDone(created.id),
   });
 
+  const endsBeforeStart = !!(startsAt && endsAt && new Date(endsAt) < new Date(startsAt));
   const missing: string[] = [];
   if (!title.trim()) missing.push("název");
   if (!startsAt) missing.push("začátek");
   if (targets.length === 0) missing.push("alespoň jednoho příjemce");
-  const canSend = missing.length === 0;
+  const canSend = missing.length === 0 && !endsBeforeStart;
 
   if (mode === "training") {
     return (
@@ -552,12 +737,46 @@ function EventCompose({
       </label>
 
       <div className="notification-section">
+        <h3 className="notification-section__title">Přílohy</h3>
+        {pendingFiles.length === 0 && <p className="event-attachments__empty">Zatím žádné přílohy.</p>}
+        {pendingFiles.length > 0 && (
+          <ul className="event-attachments__list">
+            {pendingFiles.map((file, index) => (
+              <li key={`${file.name}-${file.size}-${index}`} className="event-attachment">
+                <span className="event-attachment__name">📎 {file.name}</span>
+                <span className="event-attachment__size">{formatFileSize(file.size)}</span>
+                <button
+                  type="button"
+                  className="event-attachment__delete"
+                  onClick={() => setPendingFiles((files) => files.filter((_, i) => i !== index))}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <label className="event-attachments__upload">
+          <input
+            type="file"
+            multiple
+            onChange={(e) => {
+              const picked = Array.from(e.target.files ?? []);
+              if (picked.length > 0) setPendingFiles((files) => [...files, ...picked]);
+              e.target.value = "";
+            }}
+          />
+          <span className="btn btn--ghost">Přidat přílohu</span>
+        </label>
+      </div>
+
+      <div className="notification-section">
         <h3 className="notification-section__title">Komu se akce zobrazí</h3>
         <RecipientTargets branches={branches} targets={targets} onChange={setTargets} />
       </div>
 
       <div className={`notification-compose__actions${canSend ? "" : " notification-compose__actions--single"}`}>
-        <button type="button" className="btn btn--ghost" onClick={onDone}>Zrušit</button>
+        <button type="button" className="btn btn--ghost" onClick={() => onDone()}>Zrušit</button>
         {canSend && (
           <button
             type="button"
@@ -569,7 +788,10 @@ function EventCompose({
           </button>
         )}
       </div>
-      {!canSend && (
+      {endsBeforeStart && (
+        <p className="notification-compose__missing">Konec akce nemůže být před jejím začátkem.</p>
+      )}
+      {!canSend && !endsBeforeStart && missing.length > 0 && (
         <p className="notification-compose__missing">Ještě chybí: {missing.join(", ")}.</p>
       )}
       {createEvent.isError && <div className="error-box">{String(createEvent.error)}</div>}
@@ -697,11 +919,11 @@ function TrainingSetupForm({ onDone, initialStart }: { onDone: () => void; initi
         <div className="events-compose__row">
           <label className="notification-field">
             Opakovat od
-            <input type="date" value={activeFrom} onChange={(e) => setActiveFrom(e.target.value)} />
+            <DateField value={activeFrom} onChange={setActiveFrom} />
           </label>
           <label className="notification-field">
             Opakovat do
-            <input type="date" value={activeUntil} onChange={(e) => setActiveUntil(e.target.value)} />
+            <DateField value={activeUntil} onChange={setActiveUntil} />
           </label>
         </div>
       </div>
@@ -753,6 +975,7 @@ type RowProps = {
 
 function EventRow({ event, role, selfId, expanded, onToggle, onDeleted }: RowProps) {
   const countdown = countdownLabel(event.starts_at);
+  const parentBanner = role === "parent" ? parentRsvpBanner(event.my_child_rsvps) : null;
   return (
     <article className={`event-card event-type--${event.event_type}${countdown?.today ? " event-card--today" : ""}`}>
       <button type="button" className="event-card__head" onClick={onToggle}>
@@ -776,13 +999,13 @@ function EventRow({ event, role, selfId, expanded, onToggle, onDeleted }: RowPro
               {countdown.text}
             </span>
           )}
+          {parentBanner && (
+            <span className={`event-rsvp-banner event-rsvp-banner--${parentBanner.tone}`}>
+              {parentBanner.label}
+            </span>
+          )}
           {role === "trainer" && event.my_rsvp && (
             <span className={`event-rsvp-chip event-rsvp-chip--${event.my_rsvp}`}>{RSVP_LABEL[event.my_rsvp]}</span>
-          )}
-          {role === "parent" && event.my_child_rsvps.length > 0 && (
-            <span className="event-rsvp-chip event-rsvp-chip--children">
-              Děti {event.my_child_rsvps.filter((c) => c.status != null).length}/{event.my_child_rsvps.length}
-            </span>
           )}
           <span className="notification-card__chevron">{expanded ? "▲" : "▼"}</span>
         </div>
@@ -1833,11 +2056,11 @@ function TrainingEditFields({
         <div className="events-compose__row">
           <label className="notification-field">
             Opakovat od
-            <input type="date" value={activeFrom} onChange={(e) => setActiveFrom(e.target.value)} />
+            <DateField value={activeFrom} onChange={setActiveFrom} />
           </label>
           <label className="notification-field">
             Opakovat do
-            <input type="date" value={activeUntil} onChange={(e) => setActiveUntil(e.target.value)} />
+            <DateField value={activeUntil} onChange={setActiveUntil} />
           </label>
         </div>
       </div>

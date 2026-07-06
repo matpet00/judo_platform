@@ -13,7 +13,9 @@ export function ParentHomePage() {
     enabled: isAuthenticated && !!parent,
     refetchInterval: 30_000,
   });
-  const unread = (notificationsQuery.data ?? []).filter((n) => n.unread).length;
+  const notifs = notificationsQuery.data ?? [];
+  const unreadBoard = notifs.filter((n) => n.unread && n.event_id == null).length;
+  const unreadEvents = notifs.filter((n) => n.unread && n.event_id != null).length;
 
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -65,13 +67,14 @@ export function ParentHomePage() {
 
         <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/board")}>
           Nástěnka
-          {unread > 0 && <span className="trainer-card__badge">{unread}</span>}
+          {unreadBoard > 0 && <span className="trainer-card__badge">{unreadBoard}</span>}
         </button>
         <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/chat")}>
           Chat
         </button>
         <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/events")}>
           Akce
+          {unreadEvents > 0 && <span className="trainer-card__badge">{unreadEvents}</span>}
         </button>
         <button type="button" className="btn btn--ghost auth-back" onClick={logout}>
           Odhlásit

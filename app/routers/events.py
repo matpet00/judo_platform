@@ -421,13 +421,18 @@ async def create_event(
         raise HTTPException(status_code=404, detail=f"Trainer id not found: {trainer_id}")
     await _validate_targets(db, payload.targets)
 
+    starts = _as_aware_utc(payload.starts_at)
+    ends = _as_aware_utc(payload.ends_at) if payload.ends_at is not None else None
+    if ends is not None and ends < starts:
+        raise HTTPException(status_code=422, detail="ends_at must be at or after starts_at.")
+
     event = Event(
         title=payload.title,
         description=payload.description,
         event_type=payload.event_type,
         location=payload.location,
-        starts_at=_as_aware_utc(payload.starts_at),
-        ends_at=_as_aware_utc(payload.ends_at) if payload.ends_at is not None else None,
+        starts_at=starts,
+        ends_at=ends,
         author_trainer_id=trainer_id,
         targets=_event_target_rows(payload.targets),
     )

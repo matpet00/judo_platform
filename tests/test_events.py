@@ -69,6 +69,15 @@ async def test_parent_cannot_create_event(client):
 
 
 @pytest.mark.asyncio
+async def test_create_event_rejects_end_before_start(client):
+    trainer = await login_trainer(client)
+    starts = (datetime.now(UTC) + timedelta(days=3)).isoformat()
+    ends = (datetime.now(UTC) + timedelta(days=2)).isoformat()
+    resp = await _create_event(client, trainer, [{"audience": "parent"}], starts_at=starts, ends_at=ends)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_per_child_rsvp_and_organizer_summary(client):
     trainer = await login_trainer(client)
     parent = _parent_token(1)  # Marie -> child id 1 (A Novak, U8)
