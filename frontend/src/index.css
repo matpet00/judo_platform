@@ -1050,6 +1050,14 @@ textarea {
   color: #9ec8e8;
 }
 
+.register-hint--ok {
+  color: #a8e0b8;
+}
+
+.register-hint--warn {
+  color: #e3bd75;
+}
+
 .register-success {
   margin: 0;
   padding: 10px 12px;

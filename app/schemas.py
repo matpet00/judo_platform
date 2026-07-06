@@ -362,6 +362,8 @@ class GuardianCredentialsRead(BaseModel):
     username: str
     password: str | None = None
     credentials_created: bool = False
+    credentials_email_sent: bool = False
+    credentials_email_error: str | None = None
 
 
 class ClubRegistrationRead(BaseModel):
@@ -374,6 +376,8 @@ class ClubRegistrationRead(BaseModel):
         description="Vygenerované heslo 1. zástupce (uložené i v DB).",
     )
     credentials_created: bool = False
+    credentials_email_sent: bool = False
+    credentials_email_error: str | None = None
     second_guardian: GuardianCredentialsRead | None = None
     access_token: str | None = None
     token_type: str | None = None

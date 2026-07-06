@@ -386,6 +386,8 @@ export function RegisterPage() {
             username: result.username,
             password: result.password,
             credentials_created: true,
+            credentials_email_sent: result.credentials_email_sent,
+            credentials_email_error: result.credentials_email_error,
           },
         });
       }
@@ -532,6 +534,11 @@ export function RegisterPage() {
                   ) : (
                     <p className="register-hint">Účet už existuje — použij stávající heslo.</p>
                   )}
+                  {entry.guardian.credentials_email_sent ? (
+                    <p className="register-hint register-hint--ok">Odesláno e-mailem na {entry.guardian.email}.</p>
+                  ) : entry.guardian.credentials_email_error ? (
+                    <p className="register-hint register-hint--warn">{entry.guardian.credentials_email_error}</p>
+                  ) : null}
                 </div>
               ))}
               <p className="register-hint">Ulož si údaje — heslo se v aplikaci znovu nezobrazí.</p>

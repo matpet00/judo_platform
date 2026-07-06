@@ -448,6 +448,8 @@ export interface GuardianCredentialsRead {
   username: string;
   password: string | null;
   credentials_created: boolean;
+  credentials_email_sent: boolean;
+  credentials_email_error: string | null;
 }
 
 export interface ClubRegistrationRead {
@@ -457,6 +459,8 @@ export interface ClubRegistrationRead {
   username: string | null;
   password: string | null;
   credentials_created: boolean;
+  credentials_email_sent: boolean;
+  credentials_email_error: string | null;
   second_guardian: GuardianCredentialsRead | null;
   access_token: string | null;
   token_type: string | null;
