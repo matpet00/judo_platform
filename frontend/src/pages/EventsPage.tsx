@@ -1810,11 +1810,19 @@ function EventComments({ event, role, onChange }: { event: EventDetail; role: Ro
       {event.comments.map((comment) => (
         <div className="notification-comment" key={comment.id}>
           <span className="notification-comment__meta">
-            {comment.author_trainer
-              ? `${comment.author_trainer.first_name} ${comment.author_trainer.last_name}`
-              : comment.author_parent
-                ? `${comment.author_parent.first_name} ${comment.author_parent.last_name} (rodič)`
-                : "Neznámý"}
+            {comment.author_trainer ? (
+              <>
+                {comment.author_trainer.first_name} {comment.author_trainer.last_name}
+                <span className="role-badge role-badge--trainer">trenér</span>
+              </>
+            ) : comment.author_parent ? (
+              <>
+                {comment.author_parent.first_name} {comment.author_parent.last_name}
+                <span className="role-badge role-badge--parent">rodič</span>
+              </>
+            ) : (
+              "Neznámý"
+            )}
             {" · "}
             {formatDateTime(comment.created_at)}
             {comment.updated_at !== comment.created_at ? " · upraveno" : ""}
@@ -2509,11 +2517,19 @@ function TrainingOccurrenceComments({ occurrence, role }: { occurrence: Training
       {comments.map((comment: TrainingOccurrenceComment) => (
         <div className="notification-comment" key={comment.id}>
           <span className="notification-comment__meta">
-            {comment.author_trainer
-              ? `${comment.author_trainer.first_name} ${comment.author_trainer.last_name}`
-              : comment.author_parent
-                ? `${comment.author_parent.first_name} ${comment.author_parent.last_name} (rodič)`
-                : "Neznámý"}
+            {comment.author_trainer ? (
+              <>
+                {comment.author_trainer.first_name} {comment.author_trainer.last_name}
+                <span className="role-badge role-badge--trainer">trenér</span>
+              </>
+            ) : comment.author_parent ? (
+              <>
+                {comment.author_parent.first_name} {comment.author_parent.last_name}
+                <span className="role-badge role-badge--parent">rodič</span>
+              </>
+            ) : (
+              "Neznámý"
+            )}
             {" · "}
             {formatDateTime(comment.created_at)}
             {comment.updated_at !== comment.created_at ? " · upraveno" : ""}
