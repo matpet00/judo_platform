@@ -14,6 +14,7 @@ import { ParentBoardPage } from "./pages/ParentBoardPage";
 import { ChatPage } from "./pages/ChatPage";
 import { EventsPage } from "./pages/EventsPage";
 import { NotificationBell } from "./components/NotificationBell";
+import { AppFooter } from "./components/AppFooter";
 import "./index.css";
 import "./components/StudentSwipeDeck.css";
 
@@ -75,6 +76,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/parent/events" element={<ParentEventsRoute />} />
             </Routes>
             <NotificationBell />
+            <AppFooter />
           </BrowserRouter>
         </ParentProvider>
       </TrainerProvider>
