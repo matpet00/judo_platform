@@ -615,3 +615,88 @@ async def test_branch_scoped_notification_visibility(client):
     assert orlova_listing.status_code == 200
     orlova_titles = {row["title"] for row in orlova_listing.json()}
     assert {"All trainers", "Orlova only"} <= orlova_titles
+
+
+@pytest.mark.asyncio
+async def test_parent_can_write_to_all_trainers_and_thread(client):
+    trainer_token = await login_trainer(client, trainer_id=1)
+
+    create = await client.post(
+        "/notifications/to-trainers",
+        json={"title": "Dotaz na trénink", "body": "Můžeme přijít o 10 minut později?"},
+        headers={**write_headers(), **_parent_bearer(1)},
+    )
+    assert create.status_code == 201
+    created = create.json()
+    notification_id = created["id"]
+    assert created["author_parent"] is not None
+    assert created["author_parent_id"] == 1
+    assert created["targets"][0]["audience"] == "trainer"
+    assert created["targets"][0]["branch_id"] is None
+    # The author parent can edit/delete their own message.
+    assert created["can_edit"] is True
+    assert created["can_delete"] is True
+
+    # Trainers receive it and may reply in the thread + manage it.
+    trainer_list = await client.get("/notifications", headers={"Authorization": f"Bearer {trainer_token}"})
+    trainer_view = next(row for row in trainer_list.json() if row["id"] == notification_id)
+    assert trainer_view["unread"] is True
+    assert trainer_view["can_edit"] is True
+    assert trainer_view["can_delete"] is True
+
+    reply = await client.post(
+        f"/notifications/{notification_id}/comments",
+        json={"body": "Jasně, dorazte."},
+        headers=write_headers(trainer_token),
+    )
+    assert reply.status_code == 201
+
+    # Parent sees the reply in their own thread.
+    parent_list = await client.get("/notifications", headers=_parent_bearer(1))
+    parent_view = next(row for row in parent_list.json() if row["id"] == notification_id)
+    assert parent_view["comment_count"] == 1
+    assert parent_view["unread"] is True
+
+
+@pytest.mark.asyncio
+async def test_parent_message_scoped_to_branch_and_edit_permissions(client):
+    branches = await client.get("/branches")
+    branch_by_name = {row["name"]: row["id"] for row in branches.json()}
+    orlova_id = branch_by_name["Orlova"]
+    petrvald_id = branch_by_name["Petrvald"]
+
+    author_token = await login_trainer(client, trainer_id=1)
+    petrvald = await client.post(
+        "/trainers",
+        json={"first_name": "Petr", "last_name": "Vald", "branch_ids": [petrvald_id]},
+        headers=write_headers(author_token),
+    )
+    petrvald_token, _ = create_trainer_token(petrvald.json()["id"])
+
+    create = await client.post(
+        "/notifications/to-trainers",
+        json={"title": "Orlová dotaz", "body": "Jen pro Orlovou.", "branch_id": orlova_id},
+        headers={**write_headers(), **_parent_bearer(1)},
+    )
+    assert create.status_code == 201
+    notification_id = create.json()["id"]
+
+    # Petrvald trainer is out of scope and should not see it.
+    petrvald_list = await client.get("/notifications", headers={"Authorization": f"Bearer {petrvald_token}"})
+    assert notification_id not in {row["id"] for row in petrvald_list.json()}
+
+    # A trainer edits the parent message.
+    patched = await client.patch(
+        f"/notifications/{notification_id}",
+        json={"body": "Upraveno trenérem."},
+        headers=write_headers(author_token),
+    )
+    assert patched.status_code == 200
+    assert patched.json()["body"] == "Upraveno trenérem."
+
+    # The parent author can delete it.
+    deleted = await client.delete(
+        f"/notifications/{notification_id}",
+        headers={**write_headers(), **_parent_bearer(1)},
+    )
+    assert deleted.status_code == 204

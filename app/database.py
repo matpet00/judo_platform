@@ -84,6 +84,10 @@ async def migrate_schema() -> None:
             )
         if notification_columns and "training_date" not in notification_columns:
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN training_date DATE"))
+        if notification_columns and "author_parent_id" not in notification_columns:
+            await conn.execute(
+                text("ALTER TABLE notifications ADD COLUMN author_parent_id INTEGER REFERENCES parents(id)"),
+            )
 
         result = await conn.execute(text("PRAGMA table_info(events)"))
         event_columns = {row[1] for row in result.fetchall()}

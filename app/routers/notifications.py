@@ -14,19 +14,24 @@ from app.models import (
     NotificationComment,
     NotificationReadReceipt,
     NotificationTarget,
+    Parent,
     Trainer,
 )
 from app.schemas import (
     NotificationCommentCreate,
     NotificationCommentRead,
     NotificationCreate,
+    NotificationPatch,
     NotificationRead,
     NotificationTargetCreate,
     NotificationTargetRead,
     ParentBrief,
+    ParentNotificationCreate,
     TrainerBrief,
 )
 from app.security import require_trainer_token
+
+PARENT_MESSAGE_VISIBLE_FOR = timedelta(days=30)
 from app.training_notify import TRAINING_SCHEDULE_ALERT_TITLES
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -55,6 +60,7 @@ async def _get_branch_or_404(db: AsyncSession, branch_id: int) -> Branch:
 def _notification_options():
     return (
         selectinload(Notification.author_trainer),
+        selectinload(Notification.author_parent),
         selectinload(Notification.targets),
         selectinload(Notification.comments).selectinload(NotificationComment.author_trainer),
         selectinload(Notification.comments).selectinload(NotificationComment.author_parent),
@@ -183,13 +189,14 @@ def _last_comment_summary(notification: Notification) -> tuple[str | None, str |
 
 def _notification_to_read(notification: Notification, viewer: Viewer, now: datetime) -> NotificationRead:
     hide_after = _hide_after(notification)
-    can_delete = viewer.kind == "trainer" and notification.author_trainer_id == viewer.trainer_id
+    can_modify = _can_modify_notification(notification, viewer)
     last_comment_author, last_comment_preview = _last_comment_summary(notification)
     return NotificationRead(
         id=notification.id,
         title=notification.title,
         body=notification.body,
         author_trainer_id=notification.author_trainer_id,
+        author_parent_id=notification.author_parent_id,
         event_id=notification.event_id,
         training_group_id=notification.training_group_id,
         training_date=notification.training_date,
@@ -204,14 +211,33 @@ def _notification_to_read(notification: Notification, viewer: Viewer, now: datet
             if notification.author_trainer is not None
             else None
         ),
+        author_parent=(
+            ParentBrief.model_validate(notification.author_parent, from_attributes=True)
+            if notification.author_parent is not None
+            else None
+        ),
         targets=[_target_to_read(target) for target in notification.targets],
-        can_delete=can_delete,
+        can_delete=can_modify,
+        can_edit=can_modify,
         unread=_is_unread(notification, viewer),
         has_read=_has_read(notification, viewer),
         comment_count=len(notification.comments),
         last_comment_author=last_comment_author,
         last_comment_preview=last_comment_preview,
     )
+
+
+def _can_modify_notification(notification: Notification, viewer: Viewer) -> bool:
+    """Who may edit/delete a notification.
+
+    - Parent-authored ("napsat trenérům"): the author parent, or any trainer.
+    - Trainer-authored: only the author trainer (unchanged behavior).
+    """
+    if viewer.kind == "trainer":
+        if notification.author_parent_id is not None:
+            return True
+        return notification.author_trainer_id == viewer.trainer_id
+    return notification.author_parent_id is not None and notification.author_parent_id == viewer.parent_id
 
 
 def _is_parent_only_personal(notification: Notification) -> bool:
@@ -233,6 +259,14 @@ def _visible_to_viewer(notification: Notification, viewer: Viewer) -> bool:
         and notification.author_trainer_id == viewer.trainer_id
         and not _is_training_schedule_alert(notification)
         and not _is_parent_only_personal(notification)
+    ):
+        return True
+    # A parent always sees the message they sent to trainers, even though it only
+    # targets the trainer audience.
+    if (
+        viewer.kind == "parent"
+        and notification.author_parent_id is not None
+        and notification.author_parent_id == viewer.parent_id
     ):
         return True
     return viewer_can_see_targets(viewer, notification.targets)
@@ -348,17 +382,75 @@ async def create_notification(
     return _notification_to_read(result.scalar_one(), Viewer(kind="trainer", trainer_id=trainer_id), now)
 
 
+@router.post("/to-trainers", response_model=NotificationRead, status_code=status.HTTP_201_CREATED)
+async def create_parent_notification(
+    payload: ParentNotificationCreate,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+    now: datetime = Depends(notification_now),
+) -> NotificationRead:
+    if viewer.kind != "parent" or viewer.parent_id is None:
+        raise HTTPException(status_code=403, detail="Only parents can write to trainers.")
+    parent = await db.get(Parent, viewer.parent_id)
+    if parent is None:
+        raise HTTPException(status_code=404, detail="Parent not found.")
+    if payload.branch_id is not None:
+        await _get_branch_or_404(db, payload.branch_id)
+
+    notification = Notification(
+        title=payload.title,
+        body=payload.body,
+        author_parent_id=viewer.parent_id,
+        visible_until=now + PARENT_MESSAGE_VISIBLE_FOR,
+        grace_seconds=0,
+        last_activity_at=now,
+        targets=[NotificationTarget(audience=NotificationAudience.trainer, branch_id=payload.branch_id)],
+        reads=[NotificationReadReceipt(parent_id=viewer.parent_id, last_read_at=now)],
+    )
+    db.add(notification)
+    await db.commit()
+
+    result = await db.execute(
+        select(Notification).where(Notification.id == notification.id).options(*_notification_options()),
+    )
+    return _notification_to_read(result.scalar_one(), viewer, now)
+
+
+@router.patch("/{notification_id}", response_model=NotificationRead)
+async def update_notification(
+    notification_id: int,
+    payload: NotificationPatch,
+    db: AsyncSession = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+    now: datetime = Depends(notification_now),
+) -> NotificationRead:
+    notification = await _get_visible_notification_or_404(db, notification_id, viewer, now)
+    if not _can_modify_notification(notification, viewer):
+        raise HTTPException(status_code=403, detail="You cannot edit this notification.")
+
+    if payload.title is not None:
+        notification.title = payload.title
+    if payload.body is not None:
+        notification.body = payload.body
+    await db.commit()
+
+    result = await db.execute(
+        select(Notification).where(Notification.id == notification.id).options(*_notification_options()),
+    )
+    return _notification_to_read(result.scalar_one(), viewer, now)
+
+
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_notification(
     notification_id: int,
     db: AsyncSession = Depends(get_db),
-    trainer_id: int = Depends(require_trainer_token),
+    viewer: Viewer = Depends(get_viewer),
 ) -> None:
     notification = await db.get(Notification, notification_id)
     if notification is None:
         raise HTTPException(status_code=404, detail="Notification not found.")
-    if notification.author_trainer_id != trainer_id:
-        raise HTTPException(status_code=403, detail="Only the author can delete this notification.")
+    if not _can_modify_notification(notification, viewer):
+        raise HTTPException(status_code=403, detail="You cannot delete this notification.")
     await db.delete(notification)
     await db.commit()
 

@@ -40,16 +40,49 @@ function formatDate(value: string): string {
 
 export function ParentNotifications({ parentId }: { parentId: number }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const notificationsQuery = useQuery({
     queryKey: parentNotificationsKey(parentId),
     queryFn: () => api.notifications("parent"),
     refetchInterval: 5_000,
     refetchOnWindowFocus: true,
   });
+  const branchesQuery = useQuery({
+    queryKey: ["branches"],
+    queryFn: () => api.branches(),
+  });
 
   const notifications = notificationsQuery.data ?? [];
   const boardNotifications = notifications.filter(isBoardNotification);
   const pending = boardNotifications.filter((n) => n.unread).length;
+  const branches = branchesQuery.data ?? [];
+
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [scope, setScope] = useState<number | "all">("all");
+
+  const resetCompose = () => {
+    setComposeOpen(false);
+    setTitle("");
+    setBody("");
+    setScope("all");
+  };
+
+  const createMessage = useMutation({
+    mutationFn: () =>
+      api.createParentNotification({
+        title: title.trim(),
+        body: body.trim(),
+        branch_id: scope === "all" ? null : scope,
+      }),
+    onSuccess: () => {
+      resetCompose();
+      queryClient.invalidateQueries({ queryKey: ["parent-notifications"] });
+    },
+  });
+
+  const canSend = Boolean(title.trim()) && Boolean(body.trim());
 
   const [highlightId, setHighlightId] = useState<number | null>(null);
   useEffect(() => {
@@ -66,6 +99,57 @@ export function ParentNotifications({ parentId }: { parentId: number }) {
         Notifikace
         {pending > 0 && <span className="notification-pending">{pending}</span>}
       </h2>
+
+      <div className="notification-actions">
+        {composeOpen ? null : (
+          <button type="button" className="btn btn--primary" onClick={() => setComposeOpen(true)}>
+            Napsat trenérům
+          </button>
+        )}
+      </div>
+
+      {composeOpen && (
+        <section className="notification-compose">
+          <h2>Napsat trenérům</h2>
+          <label className="notification-field">
+            Předmět
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Předmět zprávy" />
+          </label>
+          <label className="notification-field">
+            Text
+            <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Text zprávy" rows={4} />
+          </label>
+          <label className="notification-field">
+            Komu
+            <select
+              value={scope === "all" ? "all" : String(scope)}
+              onChange={(event) => setScope(event.target.value === "all" ? "all" : Number(event.target.value))}
+            >
+              <option value="all">Všem trenérům</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  Trenéři – {branch.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="notification-compose__actions">
+            <button type="button" className="btn btn--ghost" onClick={resetCompose}>
+              Zrušit
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={!canSend || createMessage.isPending}
+              onClick={() => createMessage.mutate()}
+            >
+              {createMessage.isPending ? "Odesílám…" : "Odeslat"}
+            </button>
+          </div>
+          {createMessage.isError && <div className="error-box">{String(createMessage.error)}</div>}
+        </section>
+      )}
+
       {notificationsQuery.isLoading && <div className="loading">Načítám…</div>}
       {notificationsQuery.isError && (
         <div className="error-box">Notifikace se nepodařilo načíst.</div>
@@ -101,11 +185,28 @@ function ParentNotificationCard({
   const [reply, setReply] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
+  const [editingNotif, setEditingNotif] = useState(false);
+  const [notifTitle, setNotifTitle] = useState(notification.title);
+  const [notifBody, setNotifBody] = useState(notification.body);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["parent-notification-comments", notification.id] });
     queryClient.invalidateQueries({ queryKey: ["parent-notifications"] });
   };
+
+  const updateNotif = useMutation({
+    mutationFn: () =>
+      api.updateNotification(notification.id, { title: notifTitle.trim(), body: notifBody.trim() }, "parent"),
+    onSuccess: () => {
+      setEditingNotif(false);
+      queryClient.invalidateQueries({ queryKey: ["parent-notifications"] });
+    },
+  });
+
+  const deleteNotif = useMutation({
+    mutationFn: () => api.deleteNotification(notification.id, "parent"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["parent-notifications"] }),
+  });
 
   const commentsQuery = useQuery({
     queryKey: ["parent-notification-comments", notification.id, parentId],
@@ -170,7 +271,9 @@ function ParentNotificationCard({
             {formatDate(notification.created_at)}
             {notification.author_trainer
               ? ` · ${notification.author_trainer.first_name} ${notification.author_trainer.last_name}`
-              : ""}
+              : notification.author_parent
+                ? ` · ${notification.author_parent.first_name} ${notification.author_parent.last_name} (rodič)`
+                : ""}
           </span>
           <h3>{notification.title}</h3>
           <p>{notification.body}</p>
@@ -319,6 +422,64 @@ function ParentNotificationCard({
               >
                 {addComment.isPending ? "Odesílám…" : "Odeslat"}
               </button>
+            </div>
+          )}
+
+          {(notification.can_edit || notification.can_delete) && (
+            <div className="notification-owner-actions">
+              {editingNotif ? (
+                <div className="notification-owner-edit">
+                  <input value={notifTitle} onChange={(event) => setNotifTitle(event.target.value)} />
+                  <textarea value={notifBody} onChange={(event) => setNotifBody(event.target.value)} rows={3} />
+                  <div className="notification-comment__edit-actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => {
+                        setEditingNotif(false);
+                        setNotifTitle(notification.title);
+                        setNotifBody(notification.body);
+                      }}
+                    >
+                      Zrušit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={!notifTitle.trim() || !notifBody.trim() || updateNotif.isPending}
+                      onClick={() => updateNotif.mutate()}
+                    >
+                      {updateNotif.isPending ? "Ukládám…" : "Uložit"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {notification.can_edit && (
+                    <button
+                      type="button"
+                      className="notification-comment__edit-btn"
+                      onClick={() => {
+                        setEditingNotif(true);
+                        setNotifTitle(notification.title);
+                        setNotifBody(notification.body);
+                      }}
+                    >
+                      Upravit zprávu
+                    </button>
+                  )}
+                  {notification.can_delete && (
+                    <button
+                      type="button"
+                      className="notification-delete"
+                      disabled={deleteNotif.isPending}
+                      onClick={() => deleteNotif.mutate()}
+                    >
+                      Smazat zprávu
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

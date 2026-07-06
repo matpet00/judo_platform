@@ -241,6 +241,7 @@ export interface Notification {
   title: string;
   body: string;
   author_trainer_id: number | null;
+  author_parent_id: number | null;
   event_id: number | null;
   training_group_id: number | null;
   training_date: string | null;
@@ -251,8 +252,10 @@ export interface Notification {
   created_at: string;
   updated_at: string;
   author_trainer: TrainerBrief | null;
+  author_parent: ParentBrief | null;
   targets: NotificationTarget[];
   can_delete: boolean;
+  can_edit: boolean;
   unread: boolean;
   has_read: boolean;
   comment_count: number;

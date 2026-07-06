@@ -779,6 +779,39 @@ class NotificationCreate(BaseModel):
         return self
 
 
+class ParentNotificationCreate(BaseModel):
+    """Rodič píše trenérům – buď všem, nebo trenérům konkrétní pobočky."""
+
+    title: str = Field(min_length=1, max_length=160)
+    body: str = Field(min_length=1, max_length=4000)
+    branch_id: int | None = Field(default=None, ge=1, description="Konkrétní pobočka; None = všichni trenéři.")
+
+    @field_validator("title", "body", mode="before")
+    @classmethod
+    def strip_parent_notification_text(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class NotificationPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    body: str | None = Field(default=None, min_length=1, max_length=4000)
+
+    @field_validator("title", "body", mode="before")
+    @classmethod
+    def strip_notification_patch_text(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @model_validator(mode="after")
+    def require_any_field(self) -> "NotificationPatch":
+        if self.title is None and self.body is None:
+            raise ValueError("Provide title or body to update.")
+        return self
+
+
 class NotificationTargetRead(BaseModel):
     id: int
     audience: NotificationAudience
@@ -909,6 +942,7 @@ class NotificationRead(BaseModel):
     title: str
     body: str
     author_trainer_id: int | None = None
+    author_parent_id: int | None = None
     event_id: int | None = None
     training_group_id: int | None = None
     training_date: date | None = None
@@ -919,8 +953,10 @@ class NotificationRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     author_trainer: TrainerBrief | None = None
+    author_parent: ParentBrief | None = None
     targets: list[NotificationTargetRead] = Field(default_factory=list)
     can_delete: bool = False
+    can_edit: bool = False
     unread: bool = True
     has_read: bool = False
     comment_count: int = 0

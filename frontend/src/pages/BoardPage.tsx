@@ -457,6 +457,18 @@ function NotificationCard({ notification, branchName, currentTrainerId, onDelete
   const [reply, setReply] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
+  const [editingNotif, setEditingNotif] = useState(false);
+  const [notifTitle, setNotifTitle] = useState(notification.title);
+  const [notifBody, setNotifBody] = useState(notification.body);
+
+  const updateNotif = useMutation({
+    mutationFn: () =>
+      api.updateNotification(notification.id, { title: notifTitle.trim(), body: notifBody.trim() }),
+    onSuccess: () => {
+      setEditingNotif(false);
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
 
   const commentsQuery = useQuery({
     queryKey: ["notification-comments", notification.id, currentTrainerId],
@@ -529,9 +541,20 @@ function NotificationCard({ notification, branchName, currentTrainerId, onDelete
         <div>
           <span className="notification-card__meta">
             {formatDate(notification.created_at)}
-            {notification.author_trainer ? ` · ${notification.author_trainer.first_name} ${notification.author_trainer.last_name}` : ""}
+            {notification.author_trainer
+              ? ` · ${notification.author_trainer.first_name} ${notification.author_trainer.last_name}`
+              : notification.author_parent
+                ? ` · ${notification.author_parent.first_name} ${notification.author_parent.last_name} (rodič)`
+                : ""}
           </span>
-          <h3>{notification.title}</h3>
+          <h3>
+            {notification.author_parent ? (
+              <span className="notification-source notification-source--parent">Od rodiče</span>
+            ) : notification.author_trainer ? (
+              <span className="notification-source notification-source--trainer">Od trenéra</span>
+            ) : null}
+            {notification.title}
+          </h3>
           <p>{notification.body}</p>
           <small>
             {notification.targets
@@ -665,15 +688,62 @@ function NotificationCard({ notification, branchName, currentTrainerId, onDelete
             </div>
           )}
 
-          {notification.can_delete && (
-            <button
-              type="button"
-              className="notification-delete"
-              disabled={deletePending}
-              onClick={() => onDelete(notification.id)}
-            >
-              Smazat notifikaci
-            </button>
+          {(notification.can_edit || notification.can_delete) && (
+            <div className="notification-owner-actions">
+              {editingNotif ? (
+                <div className="notification-owner-edit">
+                  <input value={notifTitle} onChange={(event) => setNotifTitle(event.target.value)} />
+                  <textarea value={notifBody} onChange={(event) => setNotifBody(event.target.value)} rows={3} />
+                  <div className="notification-comment__edit-actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => {
+                        setEditingNotif(false);
+                        setNotifTitle(notification.title);
+                        setNotifBody(notification.body);
+                      }}
+                    >
+                      Zrušit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={!notifTitle.trim() || !notifBody.trim() || updateNotif.isPending}
+                      onClick={() => updateNotif.mutate()}
+                    >
+                      {updateNotif.isPending ? "Ukládám…" : "Uložit"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {notification.can_edit && (
+                    <button
+                      type="button"
+                      className="notification-comment__edit-btn"
+                      onClick={() => {
+                        setEditingNotif(true);
+                        setNotifTitle(notification.title);
+                        setNotifBody(notification.body);
+                      }}
+                    >
+                      Upravit notifikaci
+                    </button>
+                  )}
+                  {notification.can_delete && (
+                    <button
+                      type="button"
+                      className="notification-delete"
+                      disabled={deletePending}
+                      onClick={() => onDelete(notification.id)}
+                    >
+                      Smazat notifikaci
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           )}
         </div>
       )}

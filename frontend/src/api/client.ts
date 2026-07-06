@@ -279,8 +279,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }, true),
-  deleteNotification: (id: number) =>
-    request<void>(`/notifications/${id}`, { method: "DELETE" }, true),
+  createParentNotification: (payload: { title: string; body: string; branch_id: number | null }) =>
+    request<import("./types").Notification>("/notifications/to-trainers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true, false, "parent"),
+  updateNotification: (
+    id: number,
+    payload: { title?: string; body?: string },
+    role: Role = "trainer",
+  ) =>
+    request<import("./types").Notification>(`/notifications/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true, false, role),
+  deleteNotification: (id: number, role: Role = "trainer") =>
+    request<void>(`/notifications/${id}`, { method: "DELETE" }, true, false, role),
   markNotificationRead: (id: number, role: Role = "trainer") =>
     request<import("./types").Notification>(`/notifications/${id}/read`, { method: "POST" }, true, false, role),
   notificationComments: (id: number, role: Role = "trainer") =>

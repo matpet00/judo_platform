@@ -285,6 +285,8 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(160))
     body: Mapped[str] = mapped_column(String(4000))
     author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    # Parent-authored notifications ("napsat trenérům") set this instead of author_trainer_id.
+    author_parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id", ondelete="SET NULL"), nullable=True)
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=True)
     training_group_id: Mapped[int | None] = mapped_column(
         ForeignKey("training_groups.id", ondelete="SET NULL"),
@@ -302,6 +304,7 @@ class Notification(Base):
     )
 
     author_trainer: Mapped[Trainer | None] = relationship(back_populates="authored_notifications")
+    author_parent: Mapped[Parent | None] = relationship()
     targets: Mapped[list["NotificationTarget"]] = relationship(
         back_populates="notification",
         cascade="all, delete-orphan",
