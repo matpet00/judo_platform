@@ -394,6 +394,11 @@ async def create_comment(
     now: datetime = Depends(notification_now),
 ) -> NotificationCommentRead:
     notification = await _get_visible_notification_or_404(db, notification_id, viewer, now)
+    if notification.event_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="K této akci pište komentáře v plánovači akcí.",
+        )
     if _visibility_state(notification, now) == "expired":
         raise HTTPException(status_code=409, detail="Notification expired; reactions are closed.")
 
@@ -425,6 +430,7 @@ async def update_comment(
     viewer: Viewer = Depends(get_viewer),
     now: datetime = Depends(notification_now),
 ) -> NotificationCommentRead:
+    notification = await _get_visible_notification_or_404(db, notification_id, viewer, now)
     comment = await db.get(NotificationComment, comment_id, options=list(_COMMENT_AUTHOR_OPTIONS))
     if comment is None or comment.notification_id != notification_id:
         raise HTTPException(status_code=404, detail="Comment not found.")
@@ -432,10 +438,8 @@ async def update_comment(
         raise HTTPException(status_code=403, detail="Only the author can edit this comment.")
 
     comment.body = payload.body
-    notification = await db.get(Notification, notification_id, options=[selectinload(Notification.reads)])
-    if notification is not None:
-        notification.last_activity_at = now
-        _touch_read_receipt(notification, viewer, now)
+    notification.last_activity_at = now
+    _touch_read_receipt(notification, viewer, now)
     await db.commit()
 
     result = await db.execute(
@@ -452,11 +456,19 @@ async def delete_comment(
     comment_id: int,
     db: AsyncSession = Depends(get_db),
     viewer: Viewer = Depends(get_viewer),
+    now: datetime = Depends(notification_now),
 ) -> None:
+    notification = await _get_visible_notification_or_404(db, notification_id, viewer, now)
     comment = await db.get(NotificationComment, comment_id)
     if comment is None or comment.notification_id != notification_id:
         raise HTTPException(status_code=404, detail="Comment not found.")
     if not _authored_by_viewer(comment, viewer):
         raise HTTPException(status_code=403, detail="Only the author can delete this comment.")
     await db.delete(comment)
+    await db.flush()
+    remaining = [c for c in notification.comments if c.id != comment_id]
+    if remaining:
+        notification.last_activity_at = max(_as_aware_utc(c.created_at) for c in remaining)
+    else:
+        notification.last_activity_at = _as_aware_utc(notification.created_at)
     await db.commit()

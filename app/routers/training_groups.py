@@ -154,6 +154,7 @@ async def _get_students_for_group(
 async def list_training_groups(
     db: AsyncSession = Depends(get_db),
     branch_id: int | None = Query(default=None, ge=1),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> list[TrainingGroupDetailRead]:
     stmt = (
         select(TrainingGroup)
@@ -250,6 +251,7 @@ async def list_training_occurrences(
 async def create_training_group(
     payload: TrainingGroupCreate,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupRead:
     await _get_branch_or_404(db, payload.branch_id)
     _validate_slot_times(payload.start_time, payload.end_time)
@@ -286,7 +288,11 @@ async def create_training_group(
 
 
 @router.get("/{group_id}", response_model=TrainingGroupDetailRead)
-async def get_training_group(group_id: int, db: AsyncSession = Depends(get_db)) -> TrainingGroupDetailRead:
+async def get_training_group(
+    group_id: int,
+    db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> TrainingGroupDetailRead:
     group = await _get_group_or_404(db, group_id)
     return _group_to_detail(group)
 
@@ -315,6 +321,7 @@ async def patch_training_group(
     group_id: int,
     payload: TrainingGroupPatch,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -328,6 +335,11 @@ async def patch_training_group(
     start_time = data.get("start_time", group.start_time)
     end_time = data.get("end_time", group.end_time)
     _validate_slot_times(start_time, end_time)
+
+    active_from = data.get("active_from", group.active_from)
+    active_until = data.get("active_until", group.active_until)
+    if active_from is not None and active_until is not None and active_until < active_from:
+        raise HTTPException(status_code=422, detail="active_until must be on or after active_from.")
 
     for key, value in data.items():
         setattr(group, key, value)
@@ -423,6 +435,7 @@ async def replace_training_group_students(
     group_id: int,
     payload: TrainingGroupStudentsReplace,
     db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupDetailRead:
     group = await _get_group_or_404(db, group_id)
     students = await _get_students_for_group(db, group, payload.student_ids)

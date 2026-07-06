@@ -17,7 +17,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 
 async def _orlova_branch_id(client, trainer) -> int:
-    groups = (await client.get("/training-groups")).json()
+    groups = (await client.get("/training-groups", headers=write_headers(trainer))).json()
     return groups[0]["branch_id"]
 
 
@@ -168,8 +168,22 @@ async def test_delete_training_group_cascades_sessions(client):
     resp = await client.delete(f"/training-groups/{group_id}", headers=write_headers(trainer))
     assert resp.status_code == 204
 
-    assert (await client.get(f"/training-groups/{group_id}")).status_code == 404
+    assert (await client.get(f"/training-groups/{group_id}", headers=write_headers(trainer))).status_code == 404
     assert (await client.get(f"/training-sessions/{session['id']}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_patch_training_group_rejects_inverted_active_window(client):
+    trainer = await login_trainer(client)
+    create = await _create_daily_group(client, trainer)
+    group_id = create.json()["id"]
+
+    resp = await client.patch(
+        f"/training-groups/{group_id}",
+        json={"active_from": "2030-02-01", "active_until": "2030-01-01"},
+        headers=write_headers(trainer),
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

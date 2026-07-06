@@ -88,8 +88,9 @@ async def login_trainer(client: AsyncClient, trainer_id: int = 1) -> str:
     return response.json()["access_token"]
 
 
-async def first_group_id(client: AsyncClient) -> int:
-    response = await client.get("/training-groups")
+async def first_group_id(client: AsyncClient, trainer_id: int = 1) -> int:
+    token = await login_trainer(client, trainer_id=trainer_id)
+    response = await client.get("/training-groups", headers=write_headers(token))
     assert response.status_code == 200
     groups = response.json()
     assert groups

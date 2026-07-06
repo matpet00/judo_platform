@@ -2220,7 +2220,7 @@ textarea {
   justify-content: center;
   padding: 24px 12px;
   overflow-y: auto;
-  z-index: 1000;
+  z-index: 1300;
 }
 .modal {
   background: var(--surface);

@@ -278,6 +278,40 @@ async def test_own_comment_does_not_self_notify(client):
 
 
 @pytest.mark.asyncio
+async def test_delete_last_comment_clears_unread(client):
+    author_token = await login_trainer(client, trainer_id=1)
+    reader_token = await login_trainer(client, trainer_id=2)
+
+    create = await client.post(
+        "/notifications",
+        json={"title": "Thread", "body": "Discuss.", "targets": [{"audience": "trainer"}]},
+        headers=write_headers(author_token),
+    )
+    notification_id = create.json()["id"]
+    await client.post(f"/notifications/{notification_id}/read", headers=write_headers(reader_token))
+
+    comment = await client.post(
+        f"/notifications/{notification_id}/comments",
+        json={"body": "Only reply"},
+        headers=write_headers(author_token),
+    )
+    comment_id = comment.json()["id"]
+
+    reader_list = await client.get("/notifications", headers={"Authorization": f"Bearer {reader_token}"})
+    assert next(r for r in reader_list.json() if r["id"] == notification_id)["unread"] is True
+
+    await client.delete(
+        f"/notifications/{notification_id}/comments/{comment_id}",
+        headers=write_headers(author_token),
+    )
+
+    reader_list2 = await client.get("/notifications", headers={"Authorization": f"Bearer {reader_token}"})
+    row = next(r for r in reader_list2.json() if r["id"] == notification_id)
+    assert row["unread"] is False
+    assert row["comment_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_cannot_comment_on_expired_notification(client):
     fixed_now = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
     set_notification_now(fixed_now)

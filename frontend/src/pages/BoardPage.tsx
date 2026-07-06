@@ -177,12 +177,14 @@ export function BoardPage() {
     },
   });
 
-  const highlightId = Number(searchParams.get("notif")) || null;
+  const [highlightId, setHighlightId] = useState<number | null>(null);
   useEffect(() => {
-    if (highlightId == null) return;
+    const id = Number(searchParams.get("notif"));
+    if (Number.isFinite(id) && id > 0) setHighlightId(id);
+    if (!searchParams.has("notif")) return;
     searchParams.delete("notif");
     setSearchParams(searchParams, { replace: true });
-  }, [highlightId, searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams]);
 
   if (!isLoading && !isAuthenticated) {
     navigate("/", { replace: true });
@@ -416,7 +418,7 @@ export function BoardPage() {
         <h2>Existující notifikace</h2>
         {notificationsQuery.isLoading && <div className="loading">Načítám…</div>}
         {notificationsQuery.isError && <div className="error-box">{String(notificationsQuery.error)}</div>}
-        {(notificationsQuery.data ?? []).map((notification) => (
+        {(notificationsQuery.data ?? []).filter((n) => n.event_id == null).map((notification) => (
           <NotificationCard
             key={notification.id}
             notification={notification}
@@ -427,7 +429,7 @@ export function BoardPage() {
             autoOpen={notification.id === highlightId}
           />
         ))}
-        {!notificationsQuery.isLoading && (notificationsQuery.data ?? []).length === 0 && (
+        {!notificationsQuery.isLoading && (notificationsQuery.data ?? []).filter((n) => n.event_id == null).length === 0 && (
           <div className="loading">Zatím tu nejsou žádné notifikace.</div>
         )}
       </section>

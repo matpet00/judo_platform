@@ -25,19 +25,19 @@ export function BootPage() {
 
   const menuActive = isAuthenticated && !!trainer;
   const notificationsQuery = useQuery({
-    queryKey: ["notifications"],
+    queryKey: ["notifications", trainer?.id],
     queryFn: () => api.notifications(),
     enabled: menuActive,
     refetchInterval: 30_000,
   });
   const conversationsQuery = useQuery({
-    queryKey: ["chat-conversations"],
+    queryKey: ["chat-conversations", "trainer", trainer?.id],
     queryFn: () => api.chatConversations(),
     enabled: menuActive,
     refetchInterval: 30_000,
   });
   const notifications = notificationsQuery.data ?? [];
-  const unreadNotifications = notifications.filter((n) => n.unread).length;
+  const unreadBoard = notifications.filter((n) => n.unread && n.event_id == null).length;
   const unreadEvents = notifications.filter((n) => n.unread && n.event_id != null).length;
   const unreadChat = (conversationsQuery.data ?? []).reduce((sum, c) => sum + c.unread_count, 0);
 
@@ -84,10 +84,10 @@ export function BootPage() {
         </p>
         <div className="hub-card__actions">
           <button type="button" className="trainer-card" onClick={() => navigate("/board")}>
-            {unreadNotifications > 0 && <span className="trainer-card__badge">{unreadNotifications}</span>}
+            {unreadBoard > 0 && <span className="trainer-card__badge">{unreadBoard}</span>}
             <span className="trainer-card__name">Board</span>
             <span className="trainer-card__branch">
-              {unreadNotifications > 0 ? `${unreadNotifications} nepřečtených` : "Notifications"}
+              {unreadBoard > 0 ? `${unreadBoard} nepřečtených` : "Notifications"}
             </span>
           </button>
           <button type="button" className="trainer-card" onClick={() => navigate("/today")}>

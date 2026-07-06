@@ -124,8 +124,17 @@ export function ChatPage({ role, selfId, homePath }: ChatPageProps) {
   };
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottom = useRef(true);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    stickToBottom.current = true;
+  }, [activeId]);
+
+  useEffect(() => {
+    if (stickToBottom.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
   }, [messages.length, activeId]);
 
   // Contact picker view (typeahead)
@@ -199,7 +208,15 @@ export function ChatPage({ role, selfId, homePath }: ChatPageProps) {
             <h1 className="chat-header__title">{active?.counterpart?.name ?? "Konverzace"}</h1>
           </header>
 
-          <div className="chat-messages">
+          <div
+            className="chat-messages"
+            ref={messagesRef}
+            onScroll={() => {
+              const el = messagesRef.current;
+              if (!el) return;
+              stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+            }}
+          >
             {messagesQuery.isLoading && <div className="loading">Načítám…</div>}
             {messages.map((message) => {
               const mine = message.sender_kind === role && message.sender_id === selfId;

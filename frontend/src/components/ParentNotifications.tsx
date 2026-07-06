@@ -41,14 +41,17 @@ export function ParentNotifications({ parentId }: { parentId: number }) {
   });
 
   const notifications = notificationsQuery.data ?? [];
-  const pending = notifications.filter((n) => n.unread).length;
+  const boardNotifications = notifications.filter((n) => n.event_id == null);
+  const pending = boardNotifications.filter((n) => n.unread).length;
 
-  const highlightId = Number(searchParams.get("notif")) || null;
+  const [highlightId, setHighlightId] = useState<number | null>(null);
   useEffect(() => {
-    if (highlightId == null) return;
+    const id = Number(searchParams.get("notif"));
+    if (Number.isFinite(id) && id > 0) setHighlightId(id);
+    if (!searchParams.has("notif")) return;
     searchParams.delete("notif");
     setSearchParams(searchParams, { replace: true });
-  }, [highlightId, searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams]);
 
   return (
     <section className="notification-list parent-notifications">
@@ -60,7 +63,7 @@ export function ParentNotifications({ parentId }: { parentId: number }) {
       {notificationsQuery.isError && (
         <div className="error-box">Notifikace se nepodařilo načíst.</div>
       )}
-      {notifications.map((notification) => (
+      {boardNotifications.map((notification) => (
         <ParentNotificationCard
           key={notification.id}
           notification={notification}
@@ -68,7 +71,7 @@ export function ParentNotifications({ parentId }: { parentId: number }) {
           autoOpen={notification.id === highlightId}
         />
       ))}
-      {!notificationsQuery.isLoading && notifications.length === 0 && (
+      {!notificationsQuery.isLoading && boardNotifications.length === 0 && (
         <div className="loading">Zatím tu nejsou žádné notifikace pro tvoje děti.</div>
       )}
     </section>

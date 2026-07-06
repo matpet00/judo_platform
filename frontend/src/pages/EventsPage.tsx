@@ -90,7 +90,7 @@ function parentRsvpBanner(children: EventChildRsvp[]): { label: string; tone: "p
   }
   if (pending > 0) {
     return {
-      label: `${answered.length}/${total} čeká na odpověď`,
+      label: total === 1 ? "Čeká na přihlášení dítěte" : `${pending}/${total} čeká na odpověď`,
       tone: "pending",
     };
   }
@@ -431,6 +431,7 @@ export function EventsPage({ role, selfId, homePath }: Props) {
   const [calView, setCalView] = useState<CalView>("month");
   const [calAnchor, setCalAnchor] = useState(() => startOfDay(new Date()));
   const [activeOccurrence, setActiveOccurrence] = useState<TrainingOccurrence | null>(null);
+  const [scrollToEventId, setScrollToEventId] = useState<number | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -439,6 +440,7 @@ export function EventsPage({ role, selfId, homePath }: Props) {
     const id = Number(target);
     if (Number.isFinite(id)) {
       setActiveId(id);
+      setScrollToEventId(id);
       setView("list");
     }
     searchParams.delete("event");
@@ -575,6 +577,10 @@ export function EventsPage({ role, selfId, homePath }: Props) {
               role={role}
               selfId={selfId}
               expanded={activeId === event.id}
+              scrollTo={scrollToEventId === event.id}
+              onScrolled={() => {
+                if (scrollToEventId === event.id) setScrollToEventId(null);
+              }}
               onToggle={() => setActiveId((cur) => (cur === event.id ? null : event.id))}
               onDeleted={() => setActiveId(null)}
             />
@@ -689,7 +695,11 @@ function EventCompose({
     return (
       <section className="notification-compose">
         <ComposeModeToggle mode={mode} setMode={setMode} />
-        <TrainingSetupForm initialStart={initialStart} onDone={onTrainingCreated ?? onDone} />
+        <TrainingSetupForm
+          initialStart={initialStart}
+          onDone={onTrainingCreated ?? (() => onDone())}
+          onCancel={() => onDone()}
+        />
       </section>
     );
   }
@@ -803,7 +813,15 @@ function isoWeekday(date: Date): number {
   return ((date.getDay() + 6) % 7) + 1;
 }
 
-function TrainingSetupForm({ onDone, initialStart }: { onDone: () => void; initialStart?: Date | null }) {
+function TrainingSetupForm({
+  onDone,
+  onCancel,
+  initialStart,
+}: {
+  onDone: () => void;
+  onCancel: () => void;
+  initialStart?: Date | null;
+}) {
   const base = initialStart ?? new Date();
   const [branchId, setBranchId] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -946,7 +964,7 @@ function TrainingSetupForm({ onDone, initialStart }: { onDone: () => void; initi
       </div>
 
       <div className={`notification-compose__actions${canSave ? "" : " notification-compose__actions--single"}`}>
-        <button type="button" className="btn btn--ghost" onClick={onDone}>Zrušit</button>
+        <button type="button" className="btn btn--ghost" onClick={onCancel}>Zrušit</button>
         {canSave && (
           <button
             type="button"
@@ -969,15 +987,28 @@ type RowProps = {
   role: Role;
   selfId: number;
   expanded: boolean;
+  scrollTo?: boolean;
+  onScrolled?: () => void;
   onToggle: () => void;
   onDeleted: () => void;
 };
 
-function EventRow({ event, role, selfId, expanded, onToggle, onDeleted }: RowProps) {
+function EventRow({ event, role, selfId, expanded, scrollTo = false, onScrolled, onToggle, onDeleted }: RowProps) {
   const countdown = countdownLabel(event.starts_at);
   const parentBanner = role === "parent" ? parentRsvpBanner(event.my_child_rsvps) : null;
+  const cardRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!scrollTo || !expanded) return;
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    onScrolled?.();
+  }, [scrollTo, expanded, onScrolled]);
+
   return (
-    <article className={`event-card event-type--${event.event_type}${countdown?.today ? " event-card--today" : ""}`}>
+    <article
+      ref={cardRef}
+      className={`event-card event-type--${event.event_type}${countdown?.today ? " event-card--today" : ""}`}
+    >
       <button type="button" className="event-card__head" onClick={onToggle}>
         <span className={`event-type-dot event-type-dot--${event.event_type}`} aria-hidden />
         <div className="event-card__main">
