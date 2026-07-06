@@ -870,8 +870,15 @@ textarea {
 }
 
 .auth-back {
+  position: relative;
   width: 100%;
   margin-top: 16px;
+}
+
+.auth-back .trainer-card__badge {
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
 }
 
 .parent-children {
@@ -924,7 +931,7 @@ textarea {
 
 .parent-board {
   width: 100%;
-  max-width: 420px;
+  max-width: 760px;
   margin-top: 8px;
 }
 
@@ -1194,6 +1201,11 @@ textarea {
   margin: 4px 0 16px;
 }
 
+.notification-card--highlight {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
 .event-detail__confirm {
   display: flex;
   flex-wrap: wrap;
@@ -1334,9 +1346,26 @@ textarea {
   background: #e5484d;
 }
 
+.notif-bell__tag {
+  display: inline-block;
+  align-self: flex-start;
+  margin-bottom: 2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent, #2563eb);
+}
+
 .notif-bell__item-title {
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+.notif-bell__item-author {
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .notif-bell__item-body {

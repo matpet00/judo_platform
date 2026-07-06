@@ -790,6 +790,8 @@ class NotificationRead(BaseModel):
     unread: bool = True
     has_read: bool = False
     comment_count: int = 0
+    last_comment_author: str | None = None
+    last_comment_preview: str | None = None
 
 
 class EventTargetCreate(NotificationTargetCreate):

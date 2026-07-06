@@ -236,6 +236,8 @@ export interface Notification {
   unread: boolean;
   has_read: boolean;
   comment_count: number;
+  last_comment_author: string | null;
+  last_comment_preview: string | null;
 }
 
 export interface ParentBrief {

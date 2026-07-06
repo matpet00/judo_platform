@@ -66,7 +66,9 @@ export function NotificationBell() {
 
   if (role == null) return null;
 
-  const items = notificationsQuery.data ?? [];
+  const items = [...(notificationsQuery.data ?? [])].sort(
+    (a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime(),
+  );
   const unread = items.filter((n) => n.unread).length;
 
   const openItem = (n: Notification) => {
@@ -75,7 +77,7 @@ export function NotificationBell() {
     if (n.event_id != null) {
       navigate(`${role === "parent" ? "/parent/events" : "/events"}?event=${n.event_id}`);
     } else {
-      navigate(role === "parent" ? "/parent" : "/board");
+      navigate(`${role === "parent" ? "/parent/board" : "/board"}?notif=${n.id}`);
     }
   };
 
@@ -102,19 +104,30 @@ export function NotificationBell() {
             {!notificationsQuery.isLoading && items.length === 0 && (
               <div className="notif-bell__empty">Žádné notifikace.</div>
             )}
-            {items.slice(0, 20).map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                className={`notif-bell__item${n.unread ? " is-unread" : ""}`}
-                onClick={() => openItem(n)}
-              >
-                {n.unread && <span className="notif-bell__dot" aria-hidden />}
-                <span className="notif-bell__item-title">{n.title}</span>
-                <span className="notif-bell__item-body">{n.body}</span>
-                <span className="notif-bell__item-time">{formatWhen(n.created_at)}</span>
-              </button>
-            ))}
+            {items.slice(0, 20).map((n) => {
+              const isReply = n.comment_count > 0 && n.last_comment_preview != null;
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  className={`notif-bell__item${n.unread ? " is-unread" : ""}`}
+                  onClick={() => openItem(n)}
+                >
+                  {n.unread && <span className="notif-bell__dot" aria-hidden />}
+                  {isReply && <span className="notif-bell__tag">Nová odpověď ve vlákně</span>}
+                  <span className="notif-bell__item-title">{n.title}</span>
+                  {n.author_trainer && (
+                    <span className="notif-bell__item-author">
+                      od {n.author_trainer.first_name} {n.author_trainer.last_name}
+                    </span>
+                  )}
+                  <span className="notif-bell__item-body">
+                    {isReply ? `${n.last_comment_author}: ${n.last_comment_preview}` : n.body}
+                  </span>
+                  <span className="notif-bell__item-time">{formatWhen(n.last_activity_at)}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

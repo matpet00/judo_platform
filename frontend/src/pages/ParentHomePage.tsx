@@ -1,10 +1,19 @@
 import { Navigate, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../api/client";
 import { useParent } from "../context/ParentContext";
-import { ParentNotifications } from "../components/ParentNotifications";
 
 export function ParentHomePage() {
   const navigate = useNavigate();
   const { parent, isAuthenticated, isLoading, clearParent } = useParent();
+
+  const notificationsQuery = useQuery({
+    queryKey: ["parent-notifications", parent?.id],
+    queryFn: () => api.notifications("parent"),
+    enabled: isAuthenticated && !!parent,
+    refetchInterval: 30_000,
+  });
+  const unread = (notificationsQuery.data ?? []).filter((n) => n.unread).length;
 
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -54,6 +63,10 @@ export function ParentHomePage() {
           ))}
         </ul>
 
+        <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/board")}>
+          Nástěnka
+          {unread > 0 && <span className="trainer-card__badge">{unread}</span>}
+        </button>
         <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/chat")}>
           Chat
         </button>
@@ -63,10 +76,6 @@ export function ParentHomePage() {
         <button type="button" className="btn btn--ghost auth-back" onClick={logout}>
           Odhlásit
         </button>
-      </div>
-
-      <div className="notification-board parent-board">
-        <ParentNotifications parentId={parent.id} />
       </div>
     </div>
   );

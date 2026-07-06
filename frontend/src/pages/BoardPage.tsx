@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { AgeGroup, Notification, NotificationDurationUnit, NotificationTargetCreate } from "../api/types";
 import { TrainerSwitcher } from "../components/TrainerSwitcher";
@@ -63,6 +63,7 @@ const durationUnits: { value: NotificationDurationUnit; label: string }[] = [
 
 export function BoardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { trainer, isAuthenticated, isLoading } = useTrainer();
   const [composeOpen, setComposeOpen] = useState(false);
@@ -89,6 +90,7 @@ export function BoardPage() {
     queryKey: ["notifications", trainer?.id],
     queryFn: () => api.notifications(),
     enabled: isAuthenticated,
+    refetchInterval: 30_000,
   });
 
   const branches = branchesQuery.data ?? [];
@@ -174,6 +176,13 @@ export function BoardPage() {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
+
+  const highlightId = Number(searchParams.get("notif")) || null;
+  useEffect(() => {
+    if (highlightId == null) return;
+    searchParams.delete("notif");
+    setSearchParams(searchParams, { replace: true });
+  }, [highlightId, searchParams, setSearchParams]);
 
   if (!isLoading && !isAuthenticated) {
     navigate("/", { replace: true });
@@ -415,6 +424,7 @@ export function BoardPage() {
             currentTrainerId={trainer.id}
             onDelete={(id) => deleteNotification.mutate(id)}
             deletePending={deleteNotification.isPending}
+            autoOpen={notification.id === highlightId}
           />
         ))}
         {!notificationsQuery.isLoading && (notificationsQuery.data ?? []).length === 0 && (
@@ -431,12 +441,14 @@ type NotificationCardProps = {
   currentTrainerId: number;
   onDelete: (id: number) => void;
   deletePending: boolean;
+  autoOpen?: boolean;
 };
 
-function NotificationCard({ notification, branchName, currentTrainerId, onDelete, deletePending }: NotificationCardProps) {
+function NotificationCard({ notification, branchName, currentTrainerId, onDelete, deletePending, autoOpen = false }: NotificationCardProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef<HTMLElement | null>(null);
   const [reply, setReply] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
@@ -491,13 +503,22 @@ function NotificationCard({ notification, branchName, currentTrainerId, onDelete
     if (next && notification.unread) markRead.mutate();
   };
 
+  useEffect(() => {
+    if (!autoOpen) return;
+    setExpanded(true);
+    if (notification.unread) markRead.mutate();
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
+
   const badge = stateBadge[notificationState(notification)];
   const comments = commentsQuery.data ?? [];
   const isExpired = notification.visibility_state === "expired";
 
   return (
     <article
-      className={`notification-card${notification.visibility_state === "expired" ? " notification-card--expired" : ""}`}
+      ref={cardRef}
+      className={`notification-card${notification.visibility_state === "expired" ? " notification-card--expired" : ""}${autoOpen ? " notification-card--highlight" : ""}`}
     >
       <button type="button" className="notification-card__head" onClick={toggle}>
         <div>

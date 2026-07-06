@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Notification } from "../api/types";
 
@@ -33,13 +33,22 @@ function formatDate(value: string): string {
 }
 
 export function ParentNotifications({ parentId }: { parentId: number }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const notificationsQuery = useQuery({
     queryKey: ["parent-notifications", parentId],
     queryFn: () => api.notifications("parent"),
+    refetchInterval: 30_000,
   });
 
   const notifications = notificationsQuery.data ?? [];
   const pending = notifications.filter((n) => n.unread).length;
+
+  const highlightId = Number(searchParams.get("notif")) || null;
+  useEffect(() => {
+    if (highlightId == null) return;
+    searchParams.delete("notif");
+    setSearchParams(searchParams, { replace: true });
+  }, [highlightId, searchParams, setSearchParams]);
 
   return (
     <section className="notification-list parent-notifications">
@@ -52,7 +61,12 @@ export function ParentNotifications({ parentId }: { parentId: number }) {
         <div className="error-box">Notifikace se nepodařilo načíst.</div>
       )}
       {notifications.map((notification) => (
-        <ParentNotificationCard key={notification.id} notification={notification} parentId={parentId} />
+        <ParentNotificationCard
+          key={notification.id}
+          notification={notification}
+          parentId={parentId}
+          autoOpen={notification.id === highlightId}
+        />
       ))}
       {!notificationsQuery.isLoading && notifications.length === 0 && (
         <div className="loading">Zatím tu nejsou žádné notifikace pro tvoje děti.</div>
@@ -61,10 +75,19 @@ export function ParentNotifications({ parentId }: { parentId: number }) {
   );
 }
 
-function ParentNotificationCard({ notification, parentId }: { notification: Notification; parentId: number }) {
+function ParentNotificationCard({
+  notification,
+  parentId,
+  autoOpen = false,
+}: {
+  notification: Notification;
+  parentId: number;
+  autoOpen?: boolean;
+}) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef<HTMLElement | null>(null);
   const [reply, setReply] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
@@ -114,12 +137,23 @@ function ParentNotificationCard({ notification, parentId }: { notification: Noti
     if (next && notification.unread) markRead.mutate();
   };
 
+  useEffect(() => {
+    if (!autoOpen) return;
+    setExpanded(true);
+    if (notification.unread) markRead.mutate();
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
+
   const badge = stateBadge[notificationState(notification)];
   const comments = commentsQuery.data ?? [];
   const isExpired = notification.visibility_state === "expired";
 
   return (
-    <article className={`notification-card${isExpired ? " notification-card--expired" : ""}`}>
+    <article
+      ref={cardRef}
+      className={`notification-card${isExpired ? " notification-card--expired" : ""}${autoOpen ? " notification-card--highlight" : ""}`}
+    >
       <button type="button" className="notification-card__head" onClick={toggle}>
         <div>
           <span className="notification-card__meta">

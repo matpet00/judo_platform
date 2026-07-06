@@ -54,7 +54,8 @@ def _notification_options():
     return (
         selectinload(Notification.author_trainer),
         selectinload(Notification.targets),
-        selectinload(Notification.comments),
+        selectinload(Notification.comments).selectinload(NotificationComment.author_trainer),
+        selectinload(Notification.comments).selectinload(NotificationComment.author_parent),
         selectinload(Notification.reads),
     )
 
@@ -162,9 +163,26 @@ def _visibility_state(notification: Notification, now: datetime) -> str:
     return "expired" if now >= _as_aware_utc(notification.visible_until) else "active"
 
 
+def _last_comment_summary(notification: Notification) -> tuple[str | None, str | None]:
+    if not notification.comments:
+        return None, None
+    latest = max(notification.comments, key=lambda c: c.created_at)
+    if latest.author_trainer is not None:
+        who = f"{latest.author_trainer.first_name} {latest.author_trainer.last_name}"
+    elif latest.author_parent is not None:
+        who = f"{latest.author_parent.first_name} {latest.author_parent.last_name} (rodič)"
+    else:
+        who = "Neznámý"
+    preview = latest.body.strip()
+    if len(preview) > 120:
+        preview = preview[:119] + "…"
+    return who, preview
+
+
 def _notification_to_read(notification: Notification, viewer: Viewer, now: datetime) -> NotificationRead:
     hide_after = _hide_after(notification)
     can_delete = viewer.kind == "trainer" and notification.author_trainer_id == viewer.trainer_id
+    last_comment_author, last_comment_preview = _last_comment_summary(notification)
     return NotificationRead(
         id=notification.id,
         title=notification.title,
@@ -187,6 +205,8 @@ def _notification_to_read(notification: Notification, viewer: Viewer, now: datet
         unread=_is_unread(notification, viewer),
         has_read=_has_read(notification, viewer),
         comment_count=len(notification.comments),
+        last_comment_author=last_comment_author,
+        last_comment_preview=last_comment_preview,
     )
 
 

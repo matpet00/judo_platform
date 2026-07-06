@@ -4,8 +4,13 @@ import pytest
 
 from app.main import app
 from app.routers.notifications import notification_now
-from app.security import create_trainer_token
+from app.security import create_parent_token, create_trainer_token
 from tests.conftest import login_trainer, write_headers
+
+
+def _parent_bearer(parent_id: int = 1) -> dict[str, str]:
+    token, _ = create_parent_token(parent_id)
+    return {"Authorization": f"Bearer {token}"}
 
 
 def set_notification_now(value: datetime) -> None:
@@ -189,6 +194,87 @@ async def test_new_comment_makes_notification_unread_again(client):
 
     # Reader already read once, so the new comment shows up as has_read + unread (nová odpověď).
     assert reader_view["has_read"] is True
+
+
+@pytest.mark.asyncio
+async def test_parent_comment_makes_notification_unread_for_author(client):
+    author_token = await login_trainer(client, trainer_id=1)
+
+    create = await client.post(
+        "/notifications",
+        json={"title": "Trénink", "body": "Dnes není.", "targets": [{"audience": "parent"}]},
+        headers=write_headers(author_token),
+    )
+    notification_id = create.json()["id"]
+    assert create.json()["unread"] is False  # author starts read
+
+    reply = await client.post(
+        f"/notifications/{notification_id}/comments",
+        json={"body": "děkujeme za info"},
+        headers={**write_headers(), **_parent_bearer(1)},
+    )
+    assert reply.status_code == 201
+
+    author_list = await client.get("/notifications", headers={"Authorization": f"Bearer {author_token}"})
+    author_view = next(row for row in author_list.json() if row["id"] == notification_id)
+    assert author_view["unread"] is True
+    assert author_view["comment_count"] == 1
+
+    # The whole reaction thread lives on the original notification (no extra items).
+    assert len(author_list.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_trainer_comment_makes_notification_unread_for_targeted_parent(client):
+    author_token = await login_trainer(client, trainer_id=1)
+
+    create = await client.post(
+        "/notifications",
+        json={"title": "Turnaj", "body": "Info.", "targets": [{"audience": "parent"}]},
+        headers=write_headers(author_token),
+    )
+    notification_id = create.json()["id"]
+
+    # Parent sees it and reads it first.
+    await client.post(f"/notifications/{notification_id}/read", headers=_parent_bearer(1))
+
+    reply = await client.post(
+        f"/notifications/{notification_id}/comments",
+        json={"body": "doplňuji čas srazu"},
+        headers=write_headers(author_token),
+    )
+    assert reply.status_code == 201
+
+    parent_list = await client.get("/notifications", headers=_parent_bearer(1))
+    # No separate alert notifications; the original thread flips unread again.
+    assert len(parent_list.json()) == 1
+    parent_view = parent_list.json()[0]
+    assert parent_view["id"] == notification_id
+    assert parent_view["unread"] is True
+    assert parent_view["comment_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_own_comment_does_not_self_notify(client):
+    author_token = await login_trainer(client, trainer_id=1)
+
+    create = await client.post(
+        "/notifications",
+        json={"title": "Jen treneri", "body": "Info.", "targets": [{"audience": "trainer"}]},
+        headers=write_headers(author_token),
+    )
+    notification_id = create.json()["id"]
+
+    await client.post(
+        f"/notifications/{notification_id}/comments",
+        json={"body": "poznámka"},
+        headers=write_headers(author_token),
+    )
+
+    author_list = await client.get("/notifications", headers={"Authorization": f"Bearer {author_token}"})
+    # No extra items, and the author's own comment does not flip their own thread unread.
+    assert len(author_list.json()) == 1
+    assert author_list.json()[0]["unread"] is False
 
 
 @pytest.mark.asyncio
