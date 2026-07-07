@@ -45,7 +45,7 @@ from app.training_notify import (
     notify_training_series_deleted,
 )
 from app.routers.training_sessions import _session_to_read, create_session_for_group
-from app.security import require_trainer_or_admin, require_trainer_token
+from app.security import require_trainer_token
 
 router = APIRouter(prefix="/training-groups", tags=["training-groups"])
 
@@ -219,7 +219,7 @@ async def _get_students_for_group(
 async def list_training_groups(
     db: AsyncSession = Depends(get_db),
     branch_id: int | None = Query(default=None, ge=1),
-    _actor: int | None = Depends(require_trainer_or_admin),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> list[TrainingGroupDetailRead]:
     stmt = (
         select(TrainingGroup)
@@ -486,7 +486,7 @@ async def delete_training_occurrence_comment(
 async def create_training_group(
     payload: TrainingGroupCreate,
     db: AsyncSession = Depends(get_db),
-    _actor: int | None = Depends(require_trainer_or_admin),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupRead:
     await _get_branch_or_404(db, payload.branch_id)
     _validate_slot_times(payload.start_time, payload.end_time)
@@ -526,7 +526,7 @@ async def create_training_group(
 async def get_training_group(
     group_id: int,
     db: AsyncSession = Depends(get_db),
-    _actor: int | None = Depends(require_trainer_or_admin),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupDetailRead:
     group = await _get_group_or_404(db, group_id)
     return _group_to_detail(group)
@@ -556,7 +556,7 @@ async def patch_training_group(
     group_id: int,
     payload: TrainingGroupPatch,
     db: AsyncSession = Depends(get_db),
-    _actor: int | None = Depends(require_trainer_or_admin),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -597,11 +597,11 @@ async def patch_training_group(
 async def delete_training_group(
     group_id: int,
     db: AsyncSession = Depends(get_db),
-    _actor: int | None = Depends(require_trainer_or_admin),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> None:
     group = await _get_group_or_404(db, group_id)
 
-    await notify_training_series_deleted(db, group, trainer_id=_actor)
+    await notify_training_series_deleted(db, group, trainer_id=_trainer_id)
 
     # Cascade-delete the whole series: attendance records, then sessions, then the group.
     # (SQLite doesn't enforce ON DELETE CASCADE, so we clear children explicitly.)
@@ -701,7 +701,7 @@ async def replace_training_group_students(
     group_id: int,
     payload: TrainingGroupStudentsReplace,
     db: AsyncSession = Depends(get_db),
-    _actor: int | None = Depends(require_trainer_or_admin),
+    _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupDetailRead:
     group = await _get_group_or_404(db, group_id)
     students = await _get_students_for_group(db, group, payload.student_ids)

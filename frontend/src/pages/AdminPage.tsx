@@ -12,11 +12,10 @@ import type {
   ResendCredentialsRead,
   StudentWithBranches,
   Trainer,
-  TrainingGroup,
 } from "../api/types";
 import "./AdminPage.css";
 
-type TabId = "dashboard" | "trainers" | "students" | "parents" | "branches" | "roster" | "export";
+type TabId = "dashboard" | "trainers" | "students" | "parents" | "branches" | "export";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "dashboard", label: "Přehled" },
@@ -24,7 +23,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "students", label: "Děti" },
   { id: "parents", label: "Rodiče" },
   { id: "branches", label: "Pobočky" },
-  { id: "roster", label: "Skupiny" },
   { id: "export", label: "Export" },
 ];
 
@@ -81,7 +79,6 @@ export function AdminPage() {
       {tab === "students" && <StudentsTab />}
       {tab === "parents" && <ParentsTab />}
       {tab === "branches" && <BranchesTab />}
-      {tab === "roster" && <RosterTab />}
       {tab === "export" && <ExportTab />}
     </div>
   );
@@ -922,7 +919,6 @@ function BranchesTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<BranchBrief | "new" | null>(null);
-  const [addGroupBranch, setAddGroupBranch] = useState<BranchBrief | null>(null);
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const del = useMutation({
@@ -951,9 +947,6 @@ function BranchesTab() {
               <div className="admin-row__sub">{b.address}</div>
             </div>
             <div className="admin-row__actions">
-              <button type="button" className="admin-btn-sm" onClick={() => setAddGroupBranch(b)}>
-                + Skupina
-              </button>
               <button type="button" className="admin-btn-sm" onClick={() => setEditing(b)}>
                 Upravit
               </button>
@@ -979,19 +972,6 @@ function BranchesTab() {
           onSaved={() => {
             setEditing(null);
             qc.invalidateQueries({ queryKey: ["branches"] });
-          }}
-        />
-      )}
-
-      {addGroupBranch && (
-        <GroupForm
-          group={null}
-          branches={branches.data ?? []}
-          presetBranchId={addGroupBranch.id}
-          onClose={() => setAddGroupBranch(null)}
-          onSaved={() => {
-            setAddGroupBranch(null);
-            qc.invalidateQueries({ queryKey: ["admin", "groups"] });
           }}
         />
       )}
@@ -1046,331 +1026,6 @@ function BranchForm({
           </button>
         </div>
       </form>
-    </Modal>
-  );
-}
-
-// --- Roster ---
-
-const WEEKDAYS: { iso: number; label: string }[] = [
-  { iso: 1, label: "Po" },
-  { iso: 2, label: "Út" },
-  { iso: 3, label: "St" },
-  { iso: 4, label: "Čt" },
-  { iso: 5, label: "Pá" },
-  { iso: 6, label: "So" },
-  { iso: 7, label: "Ne" },
-];
-
-function weekdayLabels(days: number[] | null | undefined): string {
-  if (!days || days.length === 0) return "bez dnů";
-  return days
-    .slice()
-    .sort((a, b) => a - b)
-    .map((d) => WEEKDAYS.find((w) => w.iso === d)?.label ?? d)
-    .join(", ");
-}
-
-function timeShort(t: string): string {
-  return t?.slice(0, 5) ?? t;
-}
-
-function RosterTab() {
-  const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [rosterOf, setRosterOf] = useState<TrainingGroup | null>(null);
-  const [editing, setEditing] = useState<TrainingGroup | "new" | null>(null);
-
-  const groups = useQuery({ queryKey: ["admin", "groups"], queryFn: () => api.adminTrainingGroups() });
-  const branchesQ = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
-
-  const del = useMutation({
-    mutationFn: (id: number) => api.adminDeleteTrainingGroup(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "groups"] }),
-  });
-
-  const list = (groups.data ?? []).filter((g) => matches(search, g.name, g.branch?.name));
-  const refresh = () => qc.invalidateQueries({ queryKey: ["admin", "groups"] });
-
-  return (
-    <div>
-      <SearchBar
-        value={search}
-        onChange={setSearch}
-        onAdd={() => setEditing("new")}
-        addLabel="+ Skupina"
-        placeholder="Hledat skupinu…"
-      />
-      {groups.isError && <p className="error-box">{String(groups.error)}</p>}
-      {del.isError && <p className="error-box">{String(del.error)}</p>}
-      <div className="admin-list">
-        {list.map((g) => (
-          <div key={g.id} className="admin-row">
-            <div className="admin-row__main">
-              <div className="admin-row__title">{g.name}</div>
-              <div className="admin-row__sub">
-                {g.branch?.name} · {timeShort(g.start_time)}–{timeShort(g.end_time)} · {weekdayLabels(g.weekdays)} ·{" "}
-                {g.students.length} dětí
-              </div>
-            </div>
-            <div className="admin-row__actions">
-              <button type="button" className="admin-btn-sm" onClick={() => setEditing(g)}>
-                Upravit
-              </button>
-              <button type="button" className="admin-btn-sm" onClick={() => setRosterOf(g)}>
-                Soupiska
-              </button>
-              <button
-                type="button"
-                className="admin-btn-sm admin-btn-sm--danger"
-                onClick={() => {
-                  if (confirm(`Smazat skupinu ${g.name}? Smažou se i její tréninky a docházka.`)) del.mutate(g.id);
-                }}
-              >
-                Smazat
-              </button>
-            </div>
-          </div>
-        ))}
-        {list.length === 0 && !groups.isLoading && <p className="admin-empty">Žádné skupiny.</p>}
-      </div>
-
-      {rosterOf && (
-        <RosterForm
-          group={rosterOf}
-          onClose={() => setRosterOf(null)}
-          onSaved={() => {
-            setRosterOf(null);
-            refresh();
-          }}
-        />
-      )}
-
-      {editing && (
-        <GroupForm
-          group={editing === "new" ? null : editing}
-          branches={branchesQ.data ?? []}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
-            refresh();
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function GroupForm({
-  group,
-  branches,
-  presetBranchId,
-  onClose,
-  onSaved,
-}: {
-  group: TrainingGroup | null;
-  branches: BranchBrief[];
-  presetBranchId?: number;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [name, setName] = useState(group?.name ?? "");
-  const [branchId, setBranchId] = useState<number | "">(group?.branch_id ?? presetBranchId ?? "");
-  const [startTime, setStartTime] = useState(group ? timeShort(group.start_time) : "17:00");
-  const [endTime, setEndTime] = useState(group ? timeShort(group.end_time) : "18:00");
-  const [weekdays, setWeekdays] = useState<number[]>(group?.weekdays ?? []);
-  const [studentIds, setStudentIds] = useState<number[]>(group?.students.map((s) => s.id) ?? []);
-  const [studentSearch, setStudentSearch] = useState("");
-
-  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students() });
-
-  const toggleDay = (iso: number) =>
-    setWeekdays((prev) => (prev.includes(iso) ? prev.filter((x) => x !== iso) : [...prev, iso]));
-  const toggleStudent = (id: number) =>
-    setStudentIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const bid = branchId === "" ? 0 : branchId;
-      const times = { start_time: `${startTime}:00`, end_time: `${endTime}:00` };
-      if (group) {
-        await api.adminUpdateTrainingGroup(group.id, {
-          branch_id: bid,
-          name,
-          ...times,
-          weekdays: weekdays.slice().sort((a, b) => a - b),
-        });
-        await api.adminReplaceGroupStudents(group.id, studentIds);
-      } else {
-        await api.adminCreateTrainingGroup({
-          branch_id: bid,
-          name,
-          ...times,
-          weekdays: weekdays.slice().sort((a, b) => a - b),
-          student_ids: studentIds,
-        });
-      }
-    },
-    onSuccess: onSaved,
-  });
-
-  const canSave = name.trim() && branchId !== "" && weekdays.length > 0 && startTime < endTime;
-
-  const studentList = (students.data ?? [])
-    .filter((s) => matches(studentSearch, s.first_name, s.last_name, s.age_group))
-    .sort((a, b) => a.last_name.localeCompare(b.last_name, "cs"));
-
-  return (
-    <Modal title={group ? "Upravit skupinu" : "Nová skupina"} onClose={onClose}>
-      <form
-        className="admin-form"
-        onSubmit={(e: FormEvent) => {
-          e.preventDefault();
-          if (canSave) save.mutate();
-        }}
-      >
-        <div className="admin-field">
-          <label>Název</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Např. Přípravka" />
-        </div>
-        <div className="admin-field">
-          <label>Pobočka</label>
-          <select
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value === "" ? "" : Number(e.target.value))}
-          >
-            <option value="">Vyber pobočku…</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="admin-guardian__grid">
-          <div className="admin-field">
-            <label>Začátek</label>
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-          </div>
-          <div className="admin-field">
-            <label>Konec</label>
-            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-          </div>
-        </div>
-        <div className="admin-field">
-          <label>Dny v týdnu</label>
-          <div className="admin-checks">
-            {WEEKDAYS.map((w) => {
-              const on = weekdays.includes(w.iso);
-              return (
-                <label key={w.iso} className={`admin-check ${on ? "admin-check--on" : ""}`}>
-                  <input type="checkbox" checked={on} onChange={() => toggleDay(w.iso)} />
-                  {w.label}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-        <div className="admin-field">
-          <label>Děti ({studentIds.length})</label>
-          <input
-            type="search"
-            placeholder="Hledat dítě…"
-            value={studentSearch}
-            onChange={(e) => setStudentSearch(e.target.value)}
-          />
-          <div className="admin-checks" style={{ maxHeight: "35vh", overflowY: "auto", marginTop: 8 }}>
-            {studentList.map((s) => {
-              const on = studentIds.includes(s.id);
-              return (
-                <label key={s.id} className={`admin-check ${on ? "admin-check--on" : ""}`}>
-                  <input type="checkbox" checked={on} onChange={() => toggleStudent(s.id)} />
-                  {s.last_name} {s.first_name} · {s.age_group}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-        {!canSave && (startTime >= endTime) && (
-          <p className="page-header__sub" style={{ margin: 0 }}>Konec musí být po začátku.</p>
-        )}
-        {save.isError && <p className="error-box">{String(save.error)}</p>}
-        <div className="admin-form__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
-            Zrušit
-          </button>
-          <button type="submit" className="btn btn--primary" disabled={!canSave || save.isPending}>
-            {save.isPending ? "Ukládám…" : "Uložit"}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function RosterForm({
-  group,
-  onClose,
-  onSaved,
-}: {
-  group: TrainingGroup;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [selected, setSelected] = useState<number[]>(group.students.map((s) => s.id));
-  const [search, setSearch] = useState("");
-  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students() });
-
-  const save = useMutation({
-    mutationFn: () => api.adminReplaceGroupStudents(group.id, selected),
-    onSuccess: onSaved,
-  });
-
-  const list = (students.data ?? [])
-    .filter((s) => matches(search, s.first_name, s.last_name, s.age_group))
-    .sort((a, b) => a.last_name.localeCompare(b.last_name, "cs"));
-
-  const toggle = (id: number) =>
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  return (
-    <Modal title={`Soupiska – ${group.name}`} onClose={onClose}>
-      <div className="admin-form">
-        <input
-          type="search"
-          placeholder="Hledat dítě…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <p className="page-header__sub" style={{ margin: 0 }}>
-          Vybráno: {selected.length}
-        </p>
-        <div className="admin-checks" style={{ maxHeight: "45vh", overflowY: "auto" }}>
-          {list.map((s) => {
-            const on = selected.includes(s.id);
-            return (
-              <label key={s.id} className={`admin-check ${on ? "admin-check--on" : ""}`}>
-                <input type="checkbox" checked={on} onChange={() => toggle(s.id)} />
-                {s.last_name} {s.first_name} · {s.age_group}
-              </label>
-            );
-          })}
-        </div>
-        {save.isError && <p className="error-box">{String(save.error)}</p>}
-        <div className="admin-form__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
-            Zrušit
-          </button>
-          <button
-            type="button"
-            className="btn btn--primary"
-            disabled={save.isPending}
-            onClick={() => save.mutate()}
-          >
-            {save.isPending ? "Ukládám…" : "Uložit soupisku"}
-          </button>
-        </div>
-      </div>
     </Modal>
   );
 }
