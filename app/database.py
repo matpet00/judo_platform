@@ -254,6 +254,10 @@ async def migrate_schema() -> None:
                 ),
             )
 
+        from app.student_delete import cleanup_students_without_branches
+
+        await cleanup_students_without_branches(conn)
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:

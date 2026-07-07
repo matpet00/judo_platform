@@ -14,6 +14,7 @@ from app.schemas import (
     StudentPatch,
     StudentRead,
 )
+from app.student_delete import delete_student_cascade
 from app.routers.training_sessions import attendance_with_session_to_read
 from app.security import require_admin
 
@@ -164,6 +165,8 @@ async def patch_student(
                 status_code=400,
                 detail="Field 'branch_ids' cannot be null; omit it or use a non-empty array.",
             )
+        if not branch_ids:
+            raise HTTPException(status_code=422, detail="Student must belong to at least one branch.")
         branches_list = await get_branches_by_ids(db, branch_ids)
         student.branches.clear()
         student.branches.extend(branches_list)
@@ -196,11 +199,7 @@ async def delete_student(
     student = await db.get(Student, student_id)
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found.")
-    # SQLite may not enforce ON DELETE, so remove one-to-many children explicitly
-    # (attendance_records.student_id is NOT NULL and would otherwise block the delete).
-    await db.execute(delete(AttendanceRecord).where(AttendanceRecord.student_id == student_id))
-    await db.execute(delete(EventRsvp).where(EventRsvp.student_id == student_id))
-    await db.delete(student)
+    await delete_student_cascade(db, student_id)
     await db.commit()
 
 

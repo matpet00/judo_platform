@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.student_delete import unlink_branch_students
 from app.models import (
     AttendanceRecord,
     Branch,
@@ -14,7 +15,6 @@ from app.models import (
     TrainingGroup,
     TrainingOccurrenceComment,
     TrainingSession,
-    student_branches,
     student_training_groups,
     trainer_branches,
 )
@@ -79,7 +79,7 @@ async def _cleanup_branch_references(db: AsyncSession, branch_id: int) -> None:
         )
         await db.execute(delete(TrainingGroup).where(TrainingGroup.id.in_(group_ids)))
 
-    await db.execute(delete(student_branches).where(student_branches.c.branch_id == branch_id))
+    await unlink_branch_students(db, branch_id)
     await db.execute(delete(trainer_branches).where(trainer_branches.c.branch_id == branch_id))
     await db.execute(delete(NotificationTarget).where(NotificationTarget.branch_id == branch_id))
     await db.execute(delete(EventTarget).where(EventTarget.branch_id == branch_id))
