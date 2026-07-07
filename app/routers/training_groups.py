@@ -187,6 +187,14 @@ def _validate_slot_times(start_time, end_time) -> None:
         raise HTTPException(status_code=400, detail="end_time must be after start_time.")
 
 
+def _ensure_recurring_has_roster(weekdays: list[int] | None, roster_count: int) -> None:
+    if weekdays and roster_count == 0:
+        raise HTTPException(
+            status_code=422,
+            detail="Recurring training groups require at least one student.",
+        )
+
+
 async def _get_students_for_group(
     db: AsyncSession,
     group: TrainingGroup,
@@ -579,6 +587,8 @@ async def patch_training_group(
     for key, value in data.items():
         setattr(group, key, value)
 
+    _ensure_recurring_has_roster(group.weekdays, len(group.students))
+
     try:
         await db.commit()
     except Exception as exc:
@@ -704,6 +714,7 @@ async def replace_training_group_students(
     _trainer_id: int = Depends(require_trainer_token),
 ) -> TrainingGroupDetailRead:
     group = await _get_group_or_404(db, group_id)
+    _ensure_recurring_has_roster(group.weekdays, len(payload.student_ids))
     students = await _get_students_for_group(db, group, payload.student_ids)
     previous_ids = {s.id for s in group.students}
     added = [s for s in students if s.id not in previous_ids]

@@ -474,6 +474,8 @@ class TrainingGroupCreate(BaseModel):
     def validate_active_window(self) -> "TrainingGroupCreate":
         if self.active_from is not None and self.active_until is not None and self.active_until < self.active_from:
             raise ValueError("active_until must be on or after active_from.")
+        if self.weekdays and not self.student_ids:
+            raise ValueError("Recurring training groups require at least one student.")
         return self
 
 

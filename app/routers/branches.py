@@ -1,10 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Branch, Trainer, TrainingGroup, student_branches, trainer_branches
+from app.models import (
+    AttendanceRecord,
+    Branch,
+    EventTarget,
+    Notification,
+    NotificationTarget,
+    TrainerSessionAttendance,
+    TrainingGroup,
+    TrainingOccurrenceComment,
+    TrainingSession,
+    student_branches,
+    student_training_groups,
+    trainer_branches,
+)
 from app.schemas import (
     BranchCreate,
     BranchDetailRead,
@@ -32,6 +45,44 @@ def _branch_to_detail(branch: Branch) -> BranchDetailRead:
 
 def _branch_load_options():
     return selectinload(Branch.students), selectinload(Branch.trainers)
+
+
+async def _cleanup_branch_references(db: AsyncSession, branch_id: int) -> None:
+    """Detach or remove rows tied to this branch (SQLite may not enforce ON DELETE)."""
+    group_ids = (
+        await db.scalars(select(TrainingGroup.id).where(TrainingGroup.branch_id == branch_id))
+    ).all()
+
+    session_filters = [TrainingSession.branch_id == branch_id]
+    if group_ids:
+        session_filters.append(TrainingSession.training_group_id.in_(group_ids))
+    session_ids = (
+        await db.scalars(select(TrainingSession.id).where(or_(*session_filters)))
+    ).all()
+
+    if session_ids:
+        await db.execute(
+            delete(TrainerSessionAttendance).where(TrainerSessionAttendance.session_id.in_(session_ids)),
+        )
+        await db.execute(delete(AttendanceRecord).where(AttendanceRecord.session_id.in_(session_ids)))
+        await db.execute(delete(TrainingSession).where(TrainingSession.id.in_(session_ids)))
+
+    if group_ids:
+        await db.execute(
+            delete(TrainingOccurrenceComment).where(TrainingOccurrenceComment.training_group_id.in_(group_ids)),
+        )
+        await db.execute(delete(student_training_groups).where(student_training_groups.c.group_id.in_(group_ids)))
+        await db.execute(
+            update(Notification)
+            .where(Notification.training_group_id.in_(group_ids))
+            .values(training_group_id=None),
+        )
+        await db.execute(delete(TrainingGroup).where(TrainingGroup.id.in_(group_ids)))
+
+    await db.execute(delete(student_branches).where(student_branches.c.branch_id == branch_id))
+    await db.execute(delete(trainer_branches).where(trainer_branches.c.branch_id == branch_id))
+    await db.execute(delete(NotificationTarget).where(NotificationTarget.branch_id == branch_id))
+    await db.execute(delete(EventTarget).where(EventTarget.branch_id == branch_id))
 
 
 @router.get("", response_model=list[BranchDetailRead])
@@ -81,21 +132,7 @@ async def delete_branch(branch_id: int, db: AsyncSession = Depends(get_db)) -> N
     if branch is None:
         raise HTTPException(status_code=404, detail="Branch not found.")
 
-    n_trainers = await db.scalar(
-        select(func.count()).select_from(trainer_branches).where(trainer_branches.c.branch_id == branch_id),
-    )
-    n_students = await db.scalar(
-        select(func.count()).select_from(student_branches).where(student_branches.c.branch_id == branch_id),
-    )
-    n_groups = await db.scalar(
-        select(func.count()).select_from(TrainingGroup).where(TrainingGroup.branch_id == branch_id),
-    )
-    if (n_trainers or 0) > 0 or (n_students or 0) > 0 or (n_groups or 0) > 0:
-        raise HTTPException(
-            status_code=409,
-            detail="Branch has assigned trainers, students, or training groups. Reassign or delete them first.",
-        )
-
+    await _cleanup_branch_references(db, branch_id)
     await db.delete(branch)
     await db.commit()
 

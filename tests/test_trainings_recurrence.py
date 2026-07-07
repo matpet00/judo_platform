@@ -53,6 +53,37 @@ async def test_occurrences_expand_weekly_and_clip_to_active_until(client):
 
 
 @pytest.mark.asyncio
+async def test_recurring_group_requires_at_least_one_student(client):
+    trainer = await login_trainer(client)
+    branch_id = await _orlova_branch_id(client, trainer)
+
+    empty = await client.post(
+        "/training-groups",
+        json={
+            "branch_id": branch_id,
+            "name": "Prázdný roster",
+            "start_time": "17:00",
+            "end_time": "18:30",
+            "weekdays": [1],
+            "student_ids": [],
+        },
+        headers=write_headers(trainer),
+    )
+    assert empty.status_code == 422
+
+    ok = await _create_daily_group(client, trainer, name="S dítětem", student_ids=[1])
+    assert ok.status_code == 201
+
+    group_id = ok.json()["id"]
+    cleared = await client.put(
+        f"/training-groups/{group_id}/students",
+        json={"student_ids": []},
+        headers=write_headers(trainer),
+    )
+    assert cleared.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_parent_only_sees_groups_with_their_child(client):
     trainer = await login_trainer(client)
     parent = _parent_token(1)  # owns child id 1

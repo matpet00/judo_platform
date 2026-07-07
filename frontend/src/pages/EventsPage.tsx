@@ -1140,6 +1140,7 @@ function TrainingSetupForm({
   if (endTime <= startTime) missing.push("konec po začátku");
   if (!activeFrom) missing.push("začátek opakování");
   if (activeUntil && activeFrom && activeUntil < activeFrom) missing.push("konec po začátku opakování");
+  if (studentIds.size === 0) missing.push("alespoň jedno dítě");
   const canSave = missing.length === 0;
 
   const toggleWeekday = (d: number) =>
@@ -2646,6 +2647,7 @@ function TrainingEditFields({
   if (weekdays.size === 0) missing.push("alespoň jeden den");
   if (endTime <= startTime) missing.push("konec po začátku");
   if (activeFrom && activeUntil && activeUntil < activeFrom) missing.push("konec po začátku opakování");
+  if (studentIds.size === 0) missing.push("alespoň jedno dítě");
   const canSave = missing.length === 0;
 
   const toggleWeekday = (d: number) =>
