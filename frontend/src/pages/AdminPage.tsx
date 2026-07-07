@@ -3,6 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { ClubLogo } from "../components/ClubLogo";
+import {
+  ADMIN_CHART_COLORS,
+  AdminBarChart,
+  AdminDonutChart,
+  AdminStackedBar,
+  RSVP_CHART_SEGMENTS,
+} from "../components/AdminCharts";
 import { useAdmin } from "../context/AdminContext";
 import { computeAgeGroup } from "../lib/ageGroup";
 import type {
@@ -250,6 +257,24 @@ function DashboardTab() {
     { label: "Bez přihlášení", value: s.parents_without_login },
   ];
 
+  const branchChart = s.students_per_branch.map((r) => ({
+    label: r.label,
+    value: r.count,
+    color: ADMIN_CHART_COLORS.gold,
+  }));
+
+  const ageChart = s.students_per_age_group.map((r, i) => ({
+    label: r.label,
+    value: r.count,
+    color: [ADMIN_CHART_COLORS.gold, ADMIN_CHART_COLORS.accent, ADMIN_CHART_COLORS.present, ADMIN_CHART_COLORS.cream, ADMIN_CHART_COLORS.muted, ADMIN_CHART_COLORS.absent][i % 6],
+  }));
+
+  const memberDonut = [
+    { label: "Děti", value: s.students, color: ADMIN_CHART_COLORS.gold },
+    { label: "Rodiče", value: s.parents, color: ADMIN_CHART_COLORS.accent },
+    { label: "Trenéři", value: s.trainers, color: ADMIN_CHART_COLORS.present },
+  ];
+
   return (
     <div>
       <div className="admin-stats-grid">
@@ -261,41 +286,12 @@ function DashboardTab() {
         ))}
       </div>
 
-      <div className="admin-section-title">Děti podle poboček</div>
-      <table className="admin-mini-table">
-        <thead>
-          <tr>
-            <th>Pobočka</th>
-            <th style={{ textAlign: "right" }}>Počet dětí</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.students_per_branch.map((r) => (
-            <tr key={r.label}>
-              <td>{r.label}</td>
-              <td style={{ textAlign: "right" }}>{r.count}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="admin-charts-grid">
+        <AdminDonutChart title="Členové klubu" items={memberDonut} centerLabel="celkem" />
+        <AdminBarChart title="Děti podle poboček" items={branchChart} />
+      </div>
 
-      <div className="admin-section-title">Děti podle kategorií</div>
-      <table className="admin-mini-table">
-        <thead>
-          <tr>
-            <th>Kategorie</th>
-            <th style={{ textAlign: "right" }}>Počet dětí</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.students_per_age_group.map((r) => (
-            <tr key={r.label}>
-              <td>{r.label}</td>
-              <td style={{ textAlign: "right" }}>{r.count}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <AdminBarChart title="Děti podle kategorií" items={ageChart} />
     </div>
   );
 }
@@ -1068,6 +1064,17 @@ function EventsTab() {
 
   const list = events.data ?? [];
 
+  const monthTotals = list.reduce(
+    (acc, e) => ({
+      yes: acc.yes + e.yes_count,
+      maybe: acc.maybe + e.maybe_count,
+      no: acc.no + e.no_count,
+      trainerYes: acc.trainerYes + e.trainer_yes,
+      studentYes: acc.studentYes + e.student_yes,
+    }),
+    { yes: 0, maybe: 0, no: 0, trainerYes: 0, studentYes: 0 },
+  );
+
   return (
     <div>
       <div className="admin-form" style={{ maxWidth: 520, marginBottom: 16 }}>
@@ -1100,6 +1107,31 @@ function EventsTab() {
         <p className="admin-empty">V tomto měsíci nejsou žádné akce.</p>
       )}
 
+      {list.length > 0 && (
+        <div className="admin-event-chart-block">
+          <div className="admin-charts-grid">
+            <div className="admin-chart">
+              <div className="admin-chart__title">Účast za měsíc (všechny akce)</div>
+              <AdminStackedBar
+                segments={RSVP_CHART_SEGMENTS(monthTotals.yes, monthTotals.maybe, monthTotals.no)}
+                showLegend
+              />
+              <p className="admin-row__sub" style={{ margin: "10px 0 0" }}>
+                Potvrzeno ano: {monthTotals.trainerYes} trenérů, {monthTotals.studentYes} dětí
+              </p>
+            </div>
+            <AdminBarChart
+              title="Potvrzená účast po akcích"
+              items={list.map((e) => ({
+                label: e.title,
+                value: e.yes_count,
+                color: ADMIN_CHART_COLORS.present,
+              }))}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="admin-list">
         {list.map((event) => {
           const when = new Date(event.starts_at).toLocaleString("cs-CZ", {
@@ -1125,6 +1157,9 @@ function EventsTab() {
                     Účast: {event.yes_count} ano ({event.trainer_yes} trenérů, {event.student_yes} dětí)
                     {event.maybe_count > 0 ? ` · ${event.maybe_count} možná` : ""}
                     {event.no_count > 0 ? ` · ${event.no_count} ne` : ""}
+                  </div>
+                  <div className="admin-event-row-chart">
+                    <AdminStackedBar segments={RSVP_CHART_SEGMENTS(event.yes_count, event.maybe_count, event.no_count)} />
                   </div>
                 </div>
                 <div className="admin-row__actions">
