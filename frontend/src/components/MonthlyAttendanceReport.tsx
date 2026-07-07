@@ -1,6 +1,31 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
+import type { TrainingGroup } from "../api/types";
+
+function monthBounds(month: string): { start: string; end: string } | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const mon = Number(match[2]);
+  const start = `${month}-01`;
+  const lastDay = new Date(year, mon, 0).getDate();
+  const end = `${month}-${String(lastDay).padStart(2, "0")}`;
+  return { start, end };
+}
+
+/** Skupiny viditelné v kalendáři: mají dny v týdnu a platí ve vybraném měsíci. */
+function calendarGroupsForMonth(groups: TrainingGroup[], month: string): TrainingGroup[] {
+  const bounds = monthBounds(month);
+  if (!bounds) return [];
+
+  return groups.filter((g) => {
+    if (!g.weekdays?.length) return false;
+    if (g.active_from && g.active_from > bounds.end) return false;
+    if (g.active_until && g.active_until < bounds.start) return false;
+    return true;
+  });
+}
 
 export function MonthlyAttendanceReport() {
   const [groupId, setGroupId] = useState<number | null>(null);
@@ -10,12 +35,18 @@ export function MonthlyAttendanceReport() {
   });
 
   const groupsQuery = useQuery({ queryKey: ["training-groups-all"], queryFn: () => api.trainingGroups() });
-  const groups = groupsQuery.data ?? [];
+  const groups = useMemo(
+    () => calendarGroupsForMonth(groupsQuery.data ?? [], month),
+    [groupsQuery.data, month],
+  );
+
+  // Vybraná skupina už v daném měsíci neplatí (např. změna měsíce).
+  const effectiveGroupId = groupId != null && groups.some((g) => g.id === groupId) ? groupId : null;
 
   const reportQuery = useQuery({
-    queryKey: ["attendance-report", groupId, month],
-    queryFn: () => api.attendanceReport(groupId as number, month),
-    enabled: groupId != null && /^\d{4}-\d{2}$/.test(month),
+    queryKey: ["attendance-report", effectiveGroupId, month],
+    queryFn: () => api.attendanceReport(effectiveGroupId as number, month),
+    enabled: effectiveGroupId != null && /^\d{4}-\d{2}$/.test(month),
   });
 
   return (
@@ -24,10 +55,12 @@ export function MonthlyAttendanceReport() {
       <div className="events-compose__row">
         <label className="notification-field">
           Trénink
-          <select value={groupId ?? ""} onChange={(e) => setGroupId(e.target.value ? Number(e.target.value) : null)}>
+          <select value={effectiveGroupId ?? ""} onChange={(e) => setGroupId(e.target.value ? Number(e.target.value) : null)}>
             <option value="">Vyber trénink…</option>
             {groups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name} · {g.branch.name}</option>
+              <option key={g.id} value={g.id}>
+                {g.name} · {g.branch.name} · {g.start_time.slice(0, 5)}–{g.end_time.slice(0, 5)}
+              </option>
             ))}
           </select>
         </label>
@@ -36,7 +69,15 @@ export function MonthlyAttendanceReport() {
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
         </label>
       </div>
-      {groupId == null && <p className="notification-compose__missing">Vyber trénink pro zobrazení docházky.</p>}
+      {groupsQuery.isLoading && <p className="notification-compose__missing">Načítám tréninky…</p>}
+      {!groupsQuery.isLoading && groups.length === 0 && (
+        <p className="notification-compose__missing">
+          V kalendáři není žádný opakovaný trénink pro tento měsíc. Založ ho v plánovači (+ Trénink).
+        </p>
+      )}
+      {effectiveGroupId == null && groups.length > 0 && (
+        <p className="notification-compose__missing">Vyber trénink pro zobrazení docházky.</p>
+      )}
       {reportQuery.isLoading && <div className="loading">Načítám…</div>}
       {reportQuery.isError && <div className="error-box">{String(reportQuery.error)}</div>}
       {reportQuery.data && (
