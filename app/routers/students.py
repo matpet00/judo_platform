@@ -15,6 +15,7 @@ from app.schemas import (
     StudentRead,
 )
 from app.routers.training_sessions import attendance_with_session_to_read
+from app.security import require_admin
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -187,7 +188,11 @@ async def patch_student(
 
 
 @router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_student(student_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_student(
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> None:
     student = await db.get(Student, student_id)
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found.")

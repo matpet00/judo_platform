@@ -47,7 +47,7 @@ def main() -> None:
             fail("verify-pin", pin_resp)
         token = pin_resp.json()["access_token"]
 
-        groups = client.get("/training-groups")
+        groups = client.get("/training-groups", headers=headers(token))
         if groups.status_code != 200 or not groups.json():
             fail("GET /training-groups", groups)
         group = groups.json()[0]
