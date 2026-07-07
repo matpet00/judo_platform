@@ -1,5 +1,7 @@
+from typing import Annotated
+
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -20,7 +22,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-jwt-change-me"
     jwt_ttl_hours: int = 8
     pin_pepper: str = "dev-pin-pepper-change-me"
-    allowed_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
+    allowed_origins: Annotated[list[str], NoDecode] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     upload_dir: str = "./uploads"
     max_upload_bytes: int = 10 * 1024 * 1024
     event_reminder_lead_hours: int = 24
@@ -30,6 +32,11 @@ class Settings(BaseSettings):
     @classmethod
     def parse_allowed_origins(cls, v: object) -> object:
         if isinstance(v, str):
+            stripped = v.strip()
+            if stripped.startswith("["):
+                import json
+
+                return json.loads(stripped)
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
