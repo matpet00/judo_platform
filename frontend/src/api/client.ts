@@ -144,6 +144,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }, true),
+  updateOccurrenceSchedule: (groupId: number, date: string, startTime: string, endTime: string) =>
+    request<import("./types").TrainingSessionSummary>(`/training-groups/${groupId}/occurrences/${date}/schedule`, {
+      method: "PATCH",
+      body: JSON.stringify({ start_time: startTime, end_time: endTime }),
+    }, true),
   replaceGroupStudents: (id: number, studentIds: number[]) =>
     request<import("./types").TrainingGroup>(`/training-groups/${id}/students`, {
       method: "PUT",

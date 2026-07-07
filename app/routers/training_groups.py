@@ -37,6 +37,7 @@ from app.schemas import (
     TrainingOccurrence,
     TrainingOccurrenceCommentCreate,
     TrainingOccurrenceCommentRead,
+    TrainingOccurrenceSchedulePatch,
     TrainingSessionRead,
 )
 from app.training_notify import (
@@ -45,7 +46,7 @@ from app.training_notify import (
     _parents_on_roster,
     notify_training_series_deleted,
 )
-from app.routers.training_sessions import _session_to_read, create_session_for_group
+from app.routers.training_sessions import _get_session_or_404, _session_to_read, create_session_for_group
 from app.security import require_trainer_or_admin, require_trainer_token
 
 router = APIRouter(prefix="/training-groups", tags=["training-groups"])
@@ -308,6 +309,12 @@ def _occurrence_dates(group: TrainingGroup, from_date: date, to_date: date) -> l
     return dates
 
 
+def _occurrence_times(group: TrainingGroup, session: TrainingSession | None) -> tuple:
+    if session is None:
+        return group.start_time, group.end_time
+    return session.starts_at.time(), session.end_time if session.end_time is not None else group.end_time
+
+
 @router.get("/occurrences", response_model=list[TrainingOccurrence])
 async def list_training_occurrences(
     db: AsyncSession = Depends(get_db),
@@ -354,14 +361,15 @@ async def list_training_occurrences(
                 if session is not None
                 else 0
             )
+            start_time, end_time = _occurrence_times(group, session)
             occurrences.append(
                 TrainingOccurrence(
                     group_id=group.id,
                     name=group.name,
                     branch_id=group.branch_id,
                     date=occ_date,
-                    start_time=group.start_time,
-                    end_time=group.end_time,
+                    start_time=start_time,
+                    end_time=end_time,
                     session_id=session.id if session is not None else None,
                     canceled=bool(session.canceled) if session is not None else False,
                     roster_count=roster_count,
@@ -606,6 +614,34 @@ async def create_training_group_session(
     )
     response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
     return _session_to_read(session)
+
+
+@router.patch(
+    "/{group_id}/occurrences/{training_date}/schedule",
+    response_model=TrainingSessionRead,
+)
+async def patch_occurrence_schedule(
+    group_id: int,
+    training_date: date,
+    payload: TrainingOccurrenceSchedulePatch,
+    db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> TrainingSessionRead:
+    group = await _get_group_or_404(db, group_id)
+    _validate_slot_times(payload.start_time, payload.end_time)
+    if training_date not in _occurrence_dates(group, training_date, training_date):
+        raise HTTPException(status_code=404, detail="Training occurrence not found.")
+
+    session, _created = await create_session_for_group(
+        db,
+        training_group_id=group_id,
+        session_date=training_date,
+        trainer_id=_trainer_id,
+    )
+    session.starts_at = datetime.combine(training_date, payload.start_time, tzinfo=UTC)
+    session.end_time = payload.end_time
+    await db.commit()
+    return _session_to_read(await _get_session_or_404(db, session.id))
 
 
 @router.patch("/{group_id}", response_model=TrainingGroupRead)

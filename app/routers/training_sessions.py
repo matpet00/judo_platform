@@ -57,6 +57,14 @@ def _starts_at_from_group(session_date: date, group: TrainingGroup) -> datetime:
     return datetime.combine(session_date, group.start_time, tzinfo=timezone.utc)
 
 
+def _starts_at_from_date_and_time(session_date: date, start_time) -> datetime:
+    return datetime.combine(session_date, start_time, tzinfo=timezone.utc)
+
+
+def _session_end_time(session: TrainingSession, group: TrainingGroup):
+    return session.end_time if session.end_time is not None else group.end_time
+
+
 def _session_date_from_starts_at(starts_at: datetime) -> date:
     return starts_at.date()
 
@@ -105,6 +113,7 @@ def _session_to_read(session: TrainingSession) -> TrainingSessionRead:
         training_group_id=session.training_group_id,
         trainer_id=session.trainer_id,
         starts_at=session.starts_at,
+        end_time=session.end_time,
         notes=session.notes,
         canceled=bool(session.canceled),
         created_at=session.created_at,
@@ -423,11 +432,18 @@ async def patch_training_session(
 
     group_id = data.get("training_group_id", session.training_group_id)
     session_date = data.get("session_date", _session_date_from_starts_at(session.starts_at))
+    start_time = data.get("start_time")
 
     if "training_group_id" in data:
         await get_training_group_or_404(db, group_id)
 
     group = await get_training_group_or_404(db, group_id)
+
+    if start_time is not None or "end_time" in data:
+        effective_start = start_time if start_time is not None else session.starts_at.time()
+        effective_end = data.get("end_time", _session_end_time(session, group))
+        if effective_end <= effective_start:
+            raise HTTPException(status_code=400, detail="end_time must be after start_time.")
 
     if "trainer_id" in data and data["trainer_id"] is not None:
         await _get_trainer_or_404(db, data["trainer_id"])
@@ -438,6 +454,13 @@ async def patch_training_session(
 
     if "session_date" in data or "training_group_id" in data:
         session.starts_at = _starts_at_from_group(session_date, group)
+        session_date = _session_date_from_starts_at(session.starts_at)
+
+    if start_time is not None:
+        session.starts_at = _starts_at_from_date_and_time(session_date, start_time)
+
+    if "end_time" in data:
+        session.end_time = data["end_time"]
 
     if "trainer_id" in data:
         session.trainer_id = data["trainer_id"]

@@ -607,11 +607,24 @@ class TrainingGroupSessionCreate(BaseModel):
         return v
 
 
+class TrainingOccurrenceSchedulePatch(BaseModel):
+    start_time: time
+    end_time: time
+
+    @model_validator(mode="after")
+    def validate_slot(self) -> "TrainingOccurrenceSchedulePatch":
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be after start_time.")
+        return self
+
+
 class TrainingSessionPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     training_group_id: int | None = Field(default=None, ge=1)
     session_date: date | None = None
+    start_time: time | None = None
+    end_time: time | None = None
     trainer_id: int | None = Field(default=None, ge=1)
     notes: str | None = Field(default=None, max_length=512)
 
@@ -630,6 +643,7 @@ class TrainingSessionRead(BaseModel):
     training_group_id: int = Field(examples=[1])
     trainer_id: int | None = Field(examples=[1])
     starts_at: datetime
+    end_time: time | None = None
     notes: str | None = None
     canceled: bool = False
     created_at: datetime

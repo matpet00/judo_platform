@@ -616,3 +616,46 @@ async def test_training_group_trainers_roster(client):
     )
     assert replace2.status_code == 200, replace2.text
     assert {t["id"] for t in replace2.json()["trainers"]} == {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_occurrence_schedule_override(client):
+    trainer = await login_trainer(client)
+    today = date.today()
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+
+    patch = await client.patch(
+        f"/training-groups/{group_id}/occurrences/{today.isoformat()}/schedule",
+        json={"start_time": "18:00", "end_time": "19:30"},
+        headers=write_headers(trainer),
+    )
+    assert patch.status_code == 200, patch.text
+
+    frm = today.isoformat()
+    occ = (await client.get(f"/training-groups/occurrences?from={frm}&to={frm}", headers=write_headers(trainer))).json()
+    match = [o for o in occ if o["group_id"] == group_id and o["date"] == frm]
+    assert len(match) == 1
+    assert match[0]["start_time"] == "18:00:00"
+    assert match[0]["end_time"] == "19:30:00"
+    assert match[0]["session_id"] is not None
+
+    group_patch = await client.patch(
+        f"/training-groups/{group_id}",
+        json={"start_time": "16:00", "end_time": "17:00"},
+        headers=write_headers(trainer),
+    )
+    assert group_patch.status_code == 200, group_patch.text
+
+    occ_after = (await client.get(f"/training-groups/occurrences?from={frm}&to={frm}", headers=write_headers(trainer))).json()
+    match_after = [o for o in occ_after if o["group_id"] == group_id and o["date"] == frm]
+    assert match_after[0]["start_time"] == "18:00:00"
+    assert match_after[0]["end_time"] == "19:30:00"
+
+    tomorrow = (today + timedelta(days=1)).isoformat()
+    occ_tomorrow = (
+        await client.get(f"/training-groups/occurrences?from={tomorrow}&to={tomorrow}", headers=write_headers(trainer))
+    ).json()
+    match_tomorrow = [o for o in occ_tomorrow if o["group_id"] == group_id]
+    if match_tomorrow:
+        assert match_tomorrow[0]["start_time"] == "16:00:00"
+        assert match_tomorrow[0]["end_time"] == "17:00:00"

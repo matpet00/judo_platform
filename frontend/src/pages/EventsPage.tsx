@@ -2303,6 +2303,9 @@ function TrainingOccurrencePanel({
     return (
       <TrainingEditForm
         groupId={occurrence.group_id}
+        occurrenceDate={occurrence.date}
+        occurrenceStartTime={occurrence.start_time}
+        occurrenceEndTime={occurrence.end_time}
         onCancel={() => setEditing(false)}
         onSaved={() => {
           setEditing(false);
@@ -2620,10 +2623,16 @@ function TrainingOccurrenceComments({ occurrence, role }: { occurrence: Training
 
 function TrainingEditForm({
   groupId,
+  occurrenceDate,
+  occurrenceStartTime,
+  occurrenceEndTime,
   onCancel,
   onSaved,
 }: {
   groupId: number;
+  occurrenceDate: string;
+  occurrenceStartTime: string;
+  occurrenceEndTime: string;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -2632,26 +2641,46 @@ function TrainingEditForm({
   if (groupQuery.isError || !groupQuery.data) {
     return <div className="error-box">{String(groupQuery.error)}</div>;
   }
-  return <TrainingEditFields group={groupQuery.data} onCancel={onCancel} onSaved={onSaved} />;
+  return (
+    <TrainingEditFields
+      group={groupQuery.data}
+      occurrenceDate={occurrenceDate}
+      occurrenceStartTime={occurrenceStartTime}
+      occurrenceEndTime={occurrenceEndTime}
+      onCancel={onCancel}
+      onSaved={onSaved}
+    />
+  );
 }
 
 function TrainingEditFields({
   group,
+  occurrenceDate,
+  occurrenceStartTime,
+  occurrenceEndTime,
   onCancel,
   onSaved,
 }: {
   group: import("../api/types").TrainingGroup;
+  occurrenceDate: string;
+  occurrenceStartTime: string;
+  occurrenceEndTime: string;
   onCancel: () => void;
   onSaved: () => void;
 }) {
+  const initialStartTime = occurrenceStartTime.slice(0, 5);
+  const initialEndTime = occurrenceEndTime.slice(0, 5);
   const [name, setName] = useState(group.name);
-  const [startTime, setStartTime] = useState(group.start_time.slice(0, 5));
-  const [endTime, setEndTime] = useState(group.end_time.slice(0, 5));
+  const [startTime, setStartTime] = useState(initialStartTime);
+  const [endTime, setEndTime] = useState(initialEndTime);
   const [weekdays, setWeekdays] = useState<Set<number>>(() => new Set(group.weekdays ?? []));
   const [activeFrom, setActiveFrom] = useState(group.active_from ?? "");
   const [activeUntil, setActiveUntil] = useState(group.active_until ?? "");
   const [studentIds, setStudentIds] = useState<Set<number>>(() => new Set(group.students.map((s) => s.id)));
   const [trainerIds, setTrainerIds] = useState<Set<number>>(() => new Set(group.trainers.map((t) => t.id)));
+  const [awaitingTimeChoice, setAwaitingTimeChoice] = useState(false);
+
+  const timesChanged = startTime !== initialStartTime || endTime !== initialEndTime;
 
   const studentsQuery = useQuery({ queryKey: ["students"], queryFn: () => api.students() });
   const students = studentsQuery.data ?? [];
@@ -2667,20 +2696,37 @@ function TrainingEditFields({
   );
 
   const save = useMutation({
-    mutationFn: async () => {
-      await api.updateTrainingGroup(group.id, {
+    mutationFn: async (scope: "term" | "series") => {
+      const groupPayload: import("../api/types").TrainingGroupUpdate = {
         name,
-        start_time: startTime,
-        end_time: endTime,
         weekdays: [...weekdays].sort((a, b) => a - b),
         active_from: activeFrom || null,
         active_until: activeUntil || null,
-      });
+      };
+      if (!timesChanged || scope === "series") {
+        groupPayload.start_time = startTime;
+        groupPayload.end_time = endTime;
+      }
+      await api.updateTrainingGroup(group.id, groupPayload);
+      if (timesChanged && scope === "term") {
+        await api.updateOccurrenceSchedule(group.id, occurrenceDate, startTime, endTime);
+      }
       await api.replaceGroupStudents(group.id, [...studentIds]);
       await api.replaceGroupTrainers(group.id, [...trainerIds]);
     },
-    onSuccess: onSaved,
+    onSuccess: () => {
+      setAwaitingTimeChoice(false);
+      onSaved();
+    },
   });
+
+  const attemptSave = () => {
+    if (timesChanged) {
+      setAwaitingTimeChoice(true);
+      return;
+    }
+    save.mutate("series");
+  };
 
   const missing: string[] = [];
   if (!name.trim()) missing.push("název");
@@ -2787,19 +2833,56 @@ function TrainingEditFields({
         </div>
       </div>
 
-      <div className="notification-compose__actions">
-        <button type="button" className="btn btn--ghost" onClick={onCancel}>Zrušit</button>
-        <button
-          type="button"
-          className="btn btn--primary"
-          disabled={!canSave || save.isPending}
-          onClick={() => save.mutate()}
-        >
-          {save.isPending ? "Ukládám…" : "Uložit změny"}
-        </button>
-      </div>
-      {!canSave && <p className="notification-compose__missing">Ještě chybí: {missing.join(", ")}.</p>}
-      {save.isError && <div className="error-box">{String(save.error)}</div>}
+      {awaitingTimeChoice ? (
+        <div className="event-detail">
+          <p className="event-rsvp__pending">Změnil jsi čas. Kam ho uložit?</p>
+          <div className="occurrence-delete-choice">
+            <button
+              type="button"
+              className="occurrence-delete-choice__btn"
+              disabled={save.isPending}
+              onClick={() => save.mutate("term")}
+            >
+              <strong>Jen tento termín</strong>
+              <small>
+                {new Date(occurrenceDate).toLocaleDateString("cs-CZ", { weekday: "long", day: "numeric", month: "long" })}
+                {" · "}{startTime}–{endTime}
+              </small>
+            </button>
+            <button
+              type="button"
+              className="occurrence-delete-choice__btn"
+              disabled={save.isPending}
+              onClick={() => save.mutate("series")}
+            >
+              <strong>Celá série</strong>
+              <small>Všechny budoucí termíny skupiny „{name}"</small>
+            </button>
+          </div>
+          <div className="notification-compose__actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setAwaitingTimeChoice(false)}>
+              Zpět
+            </button>
+          </div>
+          {save.isError && <div className="error-box">{String(save.error)}</div>}
+        </div>
+      ) : (
+        <>
+          <div className="notification-compose__actions">
+            <button type="button" className="btn btn--ghost" onClick={onCancel}>Zrušit</button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={!canSave || save.isPending}
+              onClick={attemptSave}
+            >
+              {save.isPending ? "Ukládám…" : "Uložit změny"}
+            </button>
+          </div>
+          {!canSave && <p className="notification-compose__missing">Ještě chybí: {missing.join(", ")}.</p>}
+          {save.isError && <div className="error-box">{String(save.error)}</div>}
+        </>
+      )}
     </>
   );
 }

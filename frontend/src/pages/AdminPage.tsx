@@ -114,6 +114,7 @@ export function AdminPage() {
 }
 
 function AdminLogin() {
+  const navigate = useNavigate();
   const { loginAdmin } = useAdmin();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -153,13 +154,23 @@ function AdminLogin() {
           onChange={(e) => setPassword(e.target.value)}
         />
         {login.isError && <p className="error-box">{String(login.error)}</p>}
-        <button
-          type="submit"
-          className="btn btn--primary"
-          disabled={login.isPending || !username || !password}
-        >
-          {login.isPending ? "Přihlašuji…" : "Přihlásit"}
-        </button>
+        <div className="confirm-card__actions">
+          <button
+            type="button"
+            className="btn btn--ghost"
+            disabled={login.isPending}
+            onClick={() => navigate("/")}
+          >
+            Zpět
+          </button>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            disabled={login.isPending || !username || !password}
+          >
+            {login.isPending ? "Přihlašuji…" : "Přihlásit"}
+          </button>
+        </div>
       </form>
     </div>
   );

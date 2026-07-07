@@ -152,6 +152,8 @@ async def migrate_schema() -> None:
         session_columns = {row[1] for row in result.fetchall()}
         if session_columns and "canceled" not in session_columns:
             await conn.execute(text("ALTER TABLE training_sessions ADD COLUMN canceled BOOLEAN DEFAULT 0"))
+        if session_columns and "end_time" not in session_columns:
+            await conn.execute(text("ALTER TABLE training_sessions ADD COLUMN end_time TIME"))
 
         await conn.execute(
             text(
