@@ -19,6 +19,8 @@ import type {
 import { RecipientTargets, recipientLabel } from "../components/RecipientTargets";
 import { AttendanceOverview } from "../components/AttendanceOverview";
 import { TrainingGuestPicker } from "../components/TrainingGuestPicker";
+import { TrainerAttendanceOverview } from "../components/TrainerAttendanceOverview";
+import { TrainingTrainerPicker } from "../components/TrainingTrainerPicker";
 import { occurrenceListKey as trainingOccurrenceKey } from "../lib/notificationNavigation";
 
 type Role = "trainer" | "parent";
@@ -2219,6 +2221,45 @@ function TrainingOccurrencePanel({
     onChanged();
   };
 
+  const setTrainerStatus = async (trainerId: number, status: AttendanceStatus, attendanceId?: number) => {
+    if (sessionId == null) return;
+    setSavingIds((cur) => new Set(cur).add(trainerId));
+    try {
+      await api.setTrainerAttendance(sessionId, trainerId, status, attendanceId);
+      queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      onChanged();
+    } finally {
+      setSavingIds((cur) => {
+        const next = new Set(cur);
+        next.delete(trainerId);
+        return next;
+      });
+    }
+  };
+
+  const removeTrainer = async (trainerId: number, attendanceId: number) => {
+    if (sessionId == null) return;
+    setSavingIds((cur) => new Set(cur).add(trainerId));
+    try {
+      await api.deleteTrainerAttendance(sessionId, attendanceId);
+      queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      onChanged();
+    } finally {
+      setSavingIds((cur) => {
+        const next = new Set(cur);
+        next.delete(trainerId);
+        return next;
+      });
+    }
+  };
+
+  const addTrainer = async (trainerId: number) => {
+    if (sessionId == null) return;
+    await api.setTrainerAttendance(sessionId, trainerId, "present");
+    queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+    onChanged();
+  };
+
   const dateLabel = new Date(occurrenceDateKey(occurrence.date)).toLocaleDateString("cs-CZ", {
     weekday: "long",
     day: "numeric",
@@ -2377,6 +2418,16 @@ function TrainingOccurrencePanel({
           <TrainingGuestPicker
             existingIds={detailQuery.data.students.map((s) => s.id)}
             onAdd={addGuest}
+          />
+          <TrainerAttendanceOverview
+            trainers={detailQuery.data.trainers ?? []}
+            onStatus={setTrainerStatus}
+            isSaving={(id) => savingIds.has(id)}
+            onRemove={removeTrainer}
+          />
+          <TrainingTrainerPicker
+            existingIds={(detailQuery.data.trainers ?? []).map((t) => t.id)}
+            onAdd={addTrainer}
           />
           <div className="event-detail__owner-actions">
             <button

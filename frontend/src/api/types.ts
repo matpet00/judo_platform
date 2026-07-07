@@ -195,6 +195,14 @@ export interface SessionStudent {
   home_branch?: string | null;
 }
 
+export interface SessionTrainer {
+  id: number;
+  first_name: string;
+  last_name: string;
+  attendance: AttendanceSummary | null;
+  branches?: string | null;
+}
+
 export interface TrainingSessionSummary {
   id: number;
   branch_id: number;
@@ -229,6 +237,7 @@ export interface TrainingSessionDetail {
   };
   branch: { id: number; name: string };
   students: SessionStudent[];
+  trainers: SessionTrainer[];
 }
 
 export interface SessionWithProgress extends TrainingSessionSummary {

@@ -4,10 +4,12 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AttendanceOverview } from "../components/AttendanceOverview";
 import { TrainingGuestPicker } from "../components/TrainingGuestPicker";
+import { TrainerAttendanceOverview } from "../components/TrainerAttendanceOverview";
+import { TrainingTrainerPicker } from "../components/TrainingTrainerPicker";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { TrainerSwitcher } from "../components/TrainerSwitcher";
 import { useTrainer } from "../context/TrainerContext";
-import type { AttendanceStatus, SessionStudent } from "../api/types";
+import type { AttendanceStatus, SessionStudent, SessionTrainer } from "../api/types";
 import { StudentSwipeDeck } from "../components/StudentSwipeDeck";
 import { ProgressRing } from "../components/ProgressRing";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
@@ -27,6 +29,7 @@ export function SessionSwipePage({ sessionId }: { sessionId: number }) {
   const online = useOnlineStatus();
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<SessionStudent[]>([]);
+  const [trainers, setTrainers] = useState<SessionTrainer[]>([]);
   const [view, setView] = useState<SessionView>(
     searchParams.get("view") === "overview" ? "overview" : "deck",
   );
@@ -39,7 +42,10 @@ export function SessionSwipePage({ sessionId }: { sessionId: number }) {
   });
 
   useEffect(() => {
-    if (session) setStudents(session.students);
+    if (session) {
+      setStudents(session.students);
+      setTrainers(session.trainers ?? []);
+    }
   }, [session]);
 
   const setStatus = useMutation({
@@ -152,6 +158,95 @@ export function SessionSwipePage({ sessionId }: { sessionId: number }) {
     [online, sessionId, refreshSession],
   );
 
+  const handleTrainerStatus = useCallback(
+    async (trainerId: number, status: AttendanceStatus, attendanceId?: number) => {
+      if (!online) {
+        setToast("Jsi offline — nelze uložit");
+        setTimeout(() => setToast(null), 3000);
+        throw new Error("offline");
+      }
+      setPendingStudentIds((prev) => new Set(prev).add(trainerId));
+      try {
+        const summary = await api.setTrainerAttendance(
+          sessionId,
+          trainerId,
+          status,
+          attendanceId,
+          trainer?.id,
+        );
+        setTrainers((prev) =>
+          prev.map((t) => (t.id === trainerId ? { ...t, attendance: summary } : t)),
+        );
+        hapticSuccess();
+      } catch (err) {
+        if (session) setTrainers(session.trainers ?? []);
+        setToast(String(err));
+        setTimeout(() => setToast(null), 4000);
+        throw err;
+      } finally {
+        setPendingStudentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(trainerId);
+          return next;
+        });
+        refreshSession();
+      }
+    },
+    [online, sessionId, trainer?.id, session, refreshSession],
+  );
+
+  const addTrainer = useCallback(
+    async (trainerId: number) => {
+      if (!online) {
+        setToast("Jsi offline — nelze uložit");
+        setTimeout(() => setToast(null), 3000);
+        throw new Error("offline");
+      }
+      setPendingStudentIds((prev) => new Set(prev).add(trainerId));
+      try {
+        await api.setTrainerAttendance(sessionId, trainerId, "present", undefined, trainer?.id);
+        refreshSession();
+      } catch (err) {
+        setToast(String(err));
+        setTimeout(() => setToast(null), 4000);
+        throw err;
+      } finally {
+        setPendingStudentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(trainerId);
+          return next;
+        });
+      }
+    },
+    [online, sessionId, trainer?.id, refreshSession],
+  );
+
+  const removeTrainer = useCallback(
+    async (trainerId: number, attendanceId: number) => {
+      if (!online) {
+        setToast("Jsi offline — nelze uložit");
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
+      setPendingStudentIds((prev) => new Set(prev).add(trainerId));
+      try {
+        await api.deleteTrainerAttendance(sessionId, attendanceId);
+        setTrainers((prev) => prev.filter((t) => t.id !== trainerId));
+        refreshSession();
+      } catch (err) {
+        setToast(String(err));
+        setTimeout(() => setToast(null), 4000);
+      } finally {
+        setPendingStudentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(trainerId);
+          return next;
+        });
+      }
+    },
+    [online, sessionId, refreshSession],
+  );
+
   if (isLoading) {
     return (
       <div className="boot-screen">
@@ -244,6 +339,14 @@ export function SessionSwipePage({ sessionId }: { sessionId: number }) {
             onRemoveGuest={removeGuest}
           />
           <TrainingGuestPicker existingIds={students.map((s) => s.id)} onAdd={addGuest} />
+          <TrainerAttendanceOverview
+            trainers={trainers}
+            onStatus={handleTrainerStatus}
+            disabled={actionsDisabled}
+            isSaving={isSaving}
+            onRemove={removeTrainer}
+          />
+          <TrainingTrainerPicker existingIds={trainers.map((t) => t.id)} onAdd={addTrainer} />
           <div className="session-overview-footer">
             <Link to="/today" className="btn btn--ghost session-overview-footer__back">
               ← Dnešní přehled

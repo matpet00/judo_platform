@@ -1093,6 +1093,12 @@
   background: rgba(198, 160, 74, 0.06);
 }
 
+.attendance-row--trainer {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: rgba(74, 124, 198, 0.06);
+}
+
 .attendance-guest-badge {
   display: inline-block;
   margin-left: 8px;
@@ -1105,6 +1111,26 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   vertical-align: middle;
+}
+
+.attendance-trainer-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.attendance-overview--trainers {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .attendance-guest-remove {

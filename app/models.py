@@ -139,6 +139,14 @@ class Trainer(Base):
     )
     training_sessions: Mapped[list["TrainingSession"]] = relationship(back_populates="trainer")
     recorded_attendance: Mapped[list["AttendanceRecord"]] = relationship(back_populates="recorded_by")
+    session_attendance: Mapped[list["TrainerSessionAttendance"]] = relationship(
+        back_populates="trainer",
+        foreign_keys="TrainerSessionAttendance.trainer_id",
+    )
+    recorded_trainer_attendance: Mapped[list["TrainerSessionAttendance"]] = relationship(
+        back_populates="recorded_by",
+        foreign_keys="TrainerSessionAttendance.recorded_by_id",
+    )
     authored_notifications: Mapped[list["Notification"]] = relationship(back_populates="author_trainer")
 
 
@@ -252,6 +260,10 @@ class TrainingSession(Base):
     training_group: Mapped[TrainingGroup | None] = relationship(back_populates="training_sessions")
     trainer: Mapped[Trainer | None] = relationship(back_populates="training_sessions")
     attendance_records: Mapped[list["AttendanceRecord"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    trainer_attendance_records: Mapped[list["TrainerSessionAttendance"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
     )
@@ -397,6 +409,35 @@ class AttendanceRecord(Base):
     session: Mapped[TrainingSession] = relationship(back_populates="attendance_records")
     student: Mapped[Student] = relationship(back_populates="attendance_records")
     recorded_by: Mapped[Trainer | None] = relationship(back_populates="recorded_attendance")
+
+
+class TrainerSessionAttendance(Base):
+    __tablename__ = "trainer_session_attendance"
+    __table_args__ = (UniqueConstraint("session_id", "trainer_id", name="uq_trainer_attendance_session_trainer"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("training_sessions.id", ondelete="CASCADE"))
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"))
+    status: Mapped[AttendanceStatus] = mapped_column(
+        Enum(AttendanceStatus, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=16),
+    )
+    recorded_by_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    session: Mapped[TrainingSession] = relationship(back_populates="trainer_attendance_records")
+    trainer: Mapped[Trainer] = relationship(
+        back_populates="session_attendance",
+        foreign_keys=[trainer_id],
+    )
+    recorded_by: Mapped[Trainer | None] = relationship(
+        back_populates="recorded_trainer_attendance",
+        foreign_keys=[recorded_by_id],
+    )
 
 
 class ChatConversation(Base):

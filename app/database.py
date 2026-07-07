@@ -224,6 +224,20 @@ async def migrate_schema() -> None:
         if chat_participant_columns and "hidden_at" not in chat_participant_columns:
             await conn.execute(text("ALTER TABLE chat_participants ADD COLUMN hidden_at DATETIME"))
 
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS trainer_session_attendance ("
+                "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                "session_id INTEGER NOT NULL REFERENCES training_sessions(id) ON DELETE CASCADE, "
+                "trainer_id INTEGER NOT NULL REFERENCES trainers(id) ON DELETE CASCADE, "
+                "status VARCHAR(16) NOT NULL, "
+                "recorded_by_id INTEGER REFERENCES trainers(id) ON DELETE SET NULL, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "CONSTRAINT uq_trainer_attendance_session_trainer UNIQUE (session_id, trainer_id))"
+            ),
+        )
+
         result = await conn.execute(text("PRAGMA table_info(notification_comments)"))
         comment_columns = {row[1] for row in result.fetchall()}
         if comment_columns and "author_parent_id" not in comment_columns:

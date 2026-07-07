@@ -445,3 +445,47 @@ async def test_guest_attendance_is_flagged_and_counts(client):
     assert delete.status_code == 204
     detail_after = (await client.get(f"/training-sessions/{session_id}")).json()
     assert all(s["id"] != 2 for s in detail_after["students"])
+
+
+@pytest.mark.asyncio
+async def test_trainer_attendance_on_session(client):
+    trainer = await login_trainer(client)
+    today = date.today()
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+    session = (
+        await client.post(
+            f"/training-groups/{group_id}/sessions",
+            json={"session_date": today.isoformat()},
+            headers=write_headers(trainer),
+        )
+    ).json()
+    session_id = session["id"]
+
+    mark = await client.post(
+        f"/training-sessions/{session_id}/trainer-attendance",
+        json={"trainer_id": 2, "status": "present"},
+        headers=write_headers(trainer),
+    )
+    assert mark.status_code == 201, mark.text
+    attendance_id = mark.json()["id"]
+
+    detail = (await client.get(f"/training-sessions/{session_id}")).json()
+    assert len(detail["trainers"]) == 1
+    assert detail["trainers"][0]["id"] == 2
+    assert detail["trainers"][0]["attendance"]["status"] == "present"
+
+    patch = await client.patch(
+        f"/training-sessions/{session_id}/trainer-attendance/{attendance_id}",
+        json={"status": "absent"},
+        headers=write_headers(trainer),
+    )
+    assert patch.status_code == 200, patch.text
+    assert patch.json()["status"] == "absent"
+
+    delete = await client.delete(
+        f"/training-sessions/{session_id}/trainer-attendance/{attendance_id}",
+        headers=write_headers(trainer),
+    )
+    assert delete.status_code == 204
+    detail_after = (await client.get(f"/training-sessions/{session_id}")).json()
+    assert detail_after["trainers"] == []

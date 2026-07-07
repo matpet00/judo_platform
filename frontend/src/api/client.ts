@@ -278,6 +278,56 @@ export const api = {
       { method: "DELETE" },
       true,
     ),
+  setTrainerAttendance: async (
+    sessionId: number,
+    trainerId: number,
+    status: AttendanceStatus,
+    attendanceId?: number,
+    recordedById?: number,
+  ): Promise<AttendanceSummary> => {
+    const trainerField = recordedById ? { recorded_by_id: recordedById } : {};
+
+    const patch = (id: number) =>
+      request<{ id: number; status: AttendanceStatus; recorded_by_id: number | null; created_at: string; updated_at: string }>(
+        `/training-sessions/${sessionId}/trainer-attendance/${id}`,
+        { method: "PATCH", body: JSON.stringify({ status, ...trainerField }) },
+        true,
+      );
+
+    const post = () =>
+      request<{ id: number; status: AttendanceStatus; recorded_by_id: number | null; created_at: string; updated_at: string }>(
+        `/training-sessions/${sessionId}/trainer-attendance`,
+        {
+          method: "POST",
+          body: JSON.stringify({ trainer_id: trainerId, status, ...trainerField }),
+        },
+        true,
+      );
+
+    if (attendanceId != null && attendanceId > 0) {
+      const record = await patch(attendanceId);
+      return toSummary(record);
+    }
+
+    try {
+      const record = await post();
+      return toSummary(record);
+    } catch (error) {
+      const message = String(error);
+      if (!message.includes("already exists") && !message.includes("409")) throw error;
+      const session = await request<import("./types").TrainingSessionDetail>(`/training-sessions/${sessionId}`);
+      const trainer = session.trainers.find((t) => t.id === trainerId);
+      if (!trainer?.attendance?.id) throw error;
+      const record = await patch(trainer.attendance.id);
+      return toSummary(record);
+    }
+  },
+  deleteTrainerAttendance: (sessionId: number, attendanceId: number) =>
+    request<void>(
+      `/training-sessions/${sessionId}/trainer-attendance/${attendanceId}`,
+      { method: "DELETE" },
+      true,
+    ),
   notifications: (role: Role = "trainer") =>
     request<import("./types").Notification[]>("/notifications", undefined, false, true, role),
   createNotification: (payload: NotificationCreate) =>
@@ -458,7 +508,13 @@ export const api = {
   },
 };
 
-function toSummary(record: import("./types").AttendanceRecordRead): AttendanceSummary {
+function toSummary(record: {
+  id: number;
+  status: AttendanceStatus;
+  recorded_by_id: number | null;
+  created_at: string;
+  updated_at: string;
+}): AttendanceSummary {
   return {
     id: record.id,
     status: record.status,

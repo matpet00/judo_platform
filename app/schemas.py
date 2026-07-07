@@ -662,6 +662,41 @@ class SessionStudentWithAttendance(BaseModel):
     home_branch: str | None = None
 
 
+class SessionTrainerWithAttendance(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    attendance: AttendanceSummary | None = None
+    branches: str | None = None
+
+
+class TrainerAttendanceRecordCreate(BaseModel):
+    trainer_id: int = Field(ge=1)
+    status: AttendanceStatus
+    recorded_by_id: int | None = Field(default=None, ge=1)
+
+
+class TrainerAttendanceRecordPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: AttendanceStatus | None = None
+    recorded_by_id: int | None = Field(default=None, ge=1)
+
+
+class TrainerAttendanceRecordRead(BaseModel):
+    id: int
+    session_id: int
+    trainer_id: int
+    status: AttendanceStatus
+    recorded_by_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    trainer: TrainerBrief
+    recorded_by: TrainerBrief | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class AttendanceBulkItem(BaseModel):
     student_id: int = Field(ge=1)
     status: AttendanceStatus
@@ -682,6 +717,7 @@ class AttendanceBulkReplace(BaseModel):
 
 class TrainingSessionDetailRead(TrainingSessionRead):
     students: list[SessionStudentWithAttendance] = Field(default_factory=list)
+    trainers: list[SessionTrainerWithAttendance] = Field(default_factory=list)
     attendance_records: list[AttendanceRecordRead] = Field(default_factory=list)
 
 

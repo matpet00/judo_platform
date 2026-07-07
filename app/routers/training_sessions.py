@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import AttendanceRecord, Branch, Student, Trainer, TrainingGroup, TrainingSession
+from app.models import AttendanceRecord, Branch, Student, Trainer, TrainerSessionAttendance, TrainingGroup, TrainingSession
 from app.schemas import (
     AttendanceBulkReplace,
     AttendanceRecordCreate,
@@ -17,11 +17,15 @@ from app.schemas import (
     AttendanceSummary,
     BranchRead,
     SessionStudentWithAttendance,
+    SessionTrainerWithAttendance,
     TrainingGroupBrief,
     TrainingSessionCreate,
     TrainingSessionDetailRead,
     TrainingSessionPatch,
     TrainingSessionRead,
+    TrainerAttendanceRecordCreate,
+    TrainerAttendanceRecordPatch,
+    TrainerAttendanceRecordRead,
     TrainerBrief,
     StudentBrief,
 )
@@ -40,6 +44,12 @@ def _session_load_options():
         .selectinload(AttendanceRecord.student)
         .selectinload(Student.branches),
         selectinload(TrainingSession.attendance_records).selectinload(AttendanceRecord.recorded_by),
+        selectinload(TrainingSession.trainer_attendance_records)
+        .selectinload(TrainerSessionAttendance.trainer)
+        .selectinload(Trainer.branches),
+        selectinload(TrainingSession.trainer_attendance_records).selectinload(
+            TrainerSessionAttendance.recorded_by,
+        ),
     )
 
 
@@ -115,6 +125,12 @@ def _guest_home_branch(student: Student) -> str | None:
     return ", ".join(names) if names else None
 
 
+def _trainer_branch_names(trainer: Trainer) -> str | None:
+    branches = getattr(trainer, "branches", None) or []
+    names = sorted(b.name for b in branches)
+    return ", ".join(names) if names else None
+
+
 def _session_students_with_attendance(session: TrainingSession) -> list[SessionStudentWithAttendance]:
     if session.training_group is None:
         raise HTTPException(status_code=500, detail="Training group not loaded for session.")
@@ -158,11 +174,29 @@ def _session_students_with_attendance(session: TrainingSession) -> list[SessionS
     return rows
 
 
+def _session_trainers_with_attendance(session: TrainingSession) -> list[SessionTrainerWithAttendance]:
+    records_sorted = sorted(
+        session.trainer_attendance_records,
+        key=lambda r: (r.trainer.last_name, r.trainer.first_name, r.trainer_id),
+    )
+    return [
+        SessionTrainerWithAttendance(
+            id=record.trainer.id,
+            first_name=record.trainer.first_name,
+            last_name=record.trainer.last_name,
+            attendance=_attendance_to_summary(record),
+            branches=_trainer_branch_names(record.trainer),
+        )
+        for record in records_sorted
+    ]
+
+
 def _session_to_detail(session: TrainingSession) -> TrainingSessionDetailRead:
     records_sorted = sorted(session.attendance_records, key=lambda r: r.student_id)
     return TrainingSessionDetailRead(
         **_session_to_read(session).model_dump(),
         students=_session_students_with_attendance(session),
+        trainers=_session_trainers_with_attendance(session),
         attendance_records=[_attendance_to_read(r) for r in records_sorted],
     )
 
@@ -607,5 +641,147 @@ async def delete_attendance_record(
     _trainer_id: int = Depends(require_trainer_token),
 ) -> None:
     record = await _get_attendance_in_session_or_404(db, session_id, attendance_id)
+    await db.delete(record)
+    await db.commit()
+
+
+async def _get_trainer_with_branches_or_404(db: AsyncSession, trainer_id: int) -> Trainer:
+    result = await db.execute(
+        select(Trainer).where(Trainer.id == trainer_id).options(selectinload(Trainer.branches)),
+    )
+    trainer = result.scalar_one_or_none()
+    if trainer is None:
+        raise HTTPException(status_code=404, detail=f"Trainer id not found: {trainer_id}")
+    return trainer
+
+
+def _trainer_attendance_to_read(record: TrainerSessionAttendance) -> TrainerAttendanceRecordRead:
+    return TrainerAttendanceRecordRead(
+        id=record.id,
+        session_id=record.session_id,
+        trainer_id=record.trainer_id,
+        status=record.status,
+        recorded_by_id=record.recorded_by_id,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        trainer=TrainerBrief.model_validate(record.trainer, from_attributes=True),
+        recorded_by=(
+            TrainerBrief.model_validate(record.recorded_by, from_attributes=True)
+            if record.recorded_by is not None
+            else None
+        ),
+    )
+
+
+async def _get_trainer_attendance_in_session_or_404(
+    db: AsyncSession,
+    session_id: int,
+    attendance_id: int,
+) -> TrainerSessionAttendance:
+    result = await db.execute(
+        select(TrainerSessionAttendance)
+        .where(
+            TrainerSessionAttendance.id == attendance_id,
+            TrainerSessionAttendance.session_id == session_id,
+        )
+        .options(
+            selectinload(TrainerSessionAttendance.trainer).selectinload(Trainer.branches),
+            selectinload(TrainerSessionAttendance.recorded_by),
+        ),
+    )
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise HTTPException(status_code=404, detail="Trainer attendance record not found.")
+    return record
+
+
+@router.post(
+    "/{session_id}/trainer-attendance",
+    response_model=TrainerAttendanceRecordRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_trainer_attendance_record(
+    session_id: int,
+    payload: TrainerAttendanceRecordCreate,
+    db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> TrainerAttendanceRecordRead:
+    await _get_session_or_404(db, session_id)
+    await _get_trainer_with_branches_or_404(db, payload.trainer_id)
+
+    if payload.recorded_by_id is not None:
+        await _get_trainer_or_404(db, payload.recorded_by_id)
+
+    existing = await db.execute(
+        select(TrainerSessionAttendance).where(
+            TrainerSessionAttendance.session_id == session_id,
+            TrainerSessionAttendance.trainer_id == payload.trainer_id,
+        ),
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Attendance for this trainer in this session already exists. Use PATCH.",
+        )
+
+    record = TrainerSessionAttendance(
+        session_id=session_id,
+        trainer_id=payload.trainer_id,
+        status=payload.status,
+        recorded_by_id=payload.recorded_by_id,
+    )
+    db.add(record)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Attendance for this trainer in this session already exists. Use PATCH.",
+        ) from exc
+
+    loaded = await _get_trainer_attendance_in_session_or_404(db, session_id, record.id)
+    return _trainer_attendance_to_read(loaded)
+
+
+@router.patch(
+    "/{session_id}/trainer-attendance/{attendance_id}",
+    response_model=TrainerAttendanceRecordRead,
+)
+async def patch_trainer_attendance_record(
+    session_id: int,
+    attendance_id: int,
+    payload: TrainerAttendanceRecordPatch,
+    db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> TrainerAttendanceRecordRead:
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+
+    record = await _get_trainer_attendance_in_session_or_404(db, session_id, attendance_id)
+
+    if "recorded_by_id" in data and data["recorded_by_id"] is not None:
+        await _get_trainer_or_404(db, data["recorded_by_id"])
+
+    for key, value in data.items():
+        setattr(record, key, value)
+
+    await db.commit()
+    record = await _get_trainer_attendance_in_session_or_404(db, session_id, attendance_id)
+    return _trainer_attendance_to_read(record)
+
+
+@router.delete(
+    "/{session_id}/trainer-attendance/{attendance_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_trainer_attendance_record(
+    session_id: int,
+    attendance_id: int,
+    db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> None:
+    record = await _get_trainer_attendance_in_session_or_404(db, session_id, attendance_id)
     await db.delete(record)
     await db.commit()
