@@ -33,6 +33,7 @@ from app.schemas import (
     TrainingGroupRead,
     TrainingGroupSessionCreate,
     TrainingGroupStudentsReplace,
+    TrainingGroupTrainersReplace,
     TrainingOccurrence,
     TrainingOccurrenceCommentCreate,
     TrainingOccurrenceCommentRead,
@@ -85,7 +86,11 @@ async def _notify_enrollment(db: AsyncSession, group: TrainingGroup, students: l
 
 
 def _group_load_options():
-    return selectinload(TrainingGroup.branch), selectinload(TrainingGroup.students)
+    return (
+        selectinload(TrainingGroup.branch),
+        selectinload(TrainingGroup.students),
+        selectinload(TrainingGroup.trainers).selectinload(Trainer.branches),
+    )
 
 
 def _group_to_read(group: TrainingGroup) -> TrainingGroupRead:
@@ -106,9 +111,11 @@ def _group_to_read(group: TrainingGroup) -> TrainingGroupRead:
 
 def _group_to_detail(group: TrainingGroup) -> TrainingGroupDetailRead:
     students_sorted = sorted(group.students, key=lambda s: (s.last_name, s.first_name, s.id))
+    trainers_sorted = sorted(group.trainers, key=lambda t: (t.last_name, t.first_name, t.id))
     return TrainingGroupDetailRead(
         **_group_to_read(group).model_dump(),
         students=[StudentBrief.model_validate(s, from_attributes=True) for s in students_sorted],
+        trainers=[TrainerBrief.model_validate(t, from_attributes=True) for t in trainers_sorted],
     )
 
 
@@ -221,6 +228,47 @@ async def _get_students_for_group(
             )
 
     return sorted(students, key=lambda s: student_ids.index(s.id))
+
+
+async def _get_trainers_for_group(
+    db: AsyncSession,
+    group: TrainingGroup,
+    trainer_ids: list[int],
+) -> list[Trainer]:
+    if not trainer_ids:
+        return []
+
+    result = await db.execute(
+        select(Trainer).where(Trainer.id.in_(trainer_ids)).options(selectinload(Trainer.branches)),
+    )
+    trainers = result.scalars().unique().all()
+    found_ids = {t.id for t in trainers}
+    missing = [tid for tid in trainer_ids if tid not in found_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Trainer id not found: {missing[0]}")
+
+    for trainer in trainers:
+        branch_ids = {b.id for b in trainer.branches}
+        if group.branch_id not in branch_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Trainer {trainer.id} is not assigned to the group branch.",
+            )
+
+    return sorted(trainers, key=lambda t: trainer_ids.index(t.id))
+
+
+async def _assign_group_trainers(
+    db: AsyncSession,
+    group: TrainingGroup,
+    trainer_ids: list[int],
+    *,
+    creator_id: int,
+) -> None:
+    ids = list(dict.fromkeys([creator_id, *trainer_ids]))
+    trainers = await _get_trainers_for_group(db, group, ids)
+    group.trainers.clear()
+    group.trainers.extend(trainers)
 
 
 @router.get("", response_model=list[TrainingGroupDetailRead])
@@ -520,12 +568,13 @@ async def create_training_group(
             ) from exc
         raise
 
+    loaded = await _get_group_or_404(db, group.id)
     if payload.student_ids:
-        loaded = await _get_group_or_404(db, group.id)
         students = await _get_students_for_group(db, loaded, payload.student_ids)
         loaded.students.extend(students)
         await _notify_enrollment(db, loaded, students)
-        await db.commit()
+    await _assign_group_trainers(db, loaded, payload.trainer_ids, creator_id=_trainer_id)
+    await db.commit()
 
     return _group_to_read(await _get_group_or_404(db, group.id))
 
@@ -655,5 +704,18 @@ async def replace_training_group_students(
     group.students.clear()
     group.students.extend(students)
     await _notify_enrollment(db, group, added)
+    await db.commit()
+    return _group_to_detail(await _get_group_or_404(db, group_id))
+
+
+@router.put("/{group_id}/trainers", response_model=TrainingGroupDetailRead)
+async def replace_training_group_trainers(
+    group_id: int,
+    payload: TrainingGroupTrainersReplace,
+    db: AsyncSession = Depends(get_db),
+    _trainer_id: int = Depends(require_trainer_token),
+) -> TrainingGroupDetailRead:
+    group = await _get_group_or_404(db, group_id)
+    await _assign_group_trainers(db, group, payload.trainer_ids, creator_id=_trainer_id)
     await db.commit()
     return _group_to_detail(await _get_group_or_404(db, group_id))

@@ -149,6 +149,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ student_ids: studentIds }),
     }, true),
+  replaceGroupTrainers: (id: number, trainerIds: number[]) =>
+    request<import("./types").TrainingGroup>(`/training-groups/${id}/trainers`, {
+      method: "PUT",
+      body: JSON.stringify({ trainer_ids: trainerIds }),
+    }, true),
   deleteTrainingGroup: (id: number) =>
     request<void>(`/training-groups/${id}`, { method: "DELETE" }, true),
   trainingOccurrences: (fromIso: string, toIso: string, role: Role = "trainer") => {

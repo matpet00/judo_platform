@@ -78,6 +78,7 @@ export interface TrainingGroup {
   active_until?: string | null;
   branch: { id: number; name: string; address: string };
   students: StudentBrief[];
+  trainers: TrainerBrief[];
 }
 
 export interface TrainingGroupCreate {
@@ -89,6 +90,7 @@ export interface TrainingGroupCreate {
   active_from?: string | null;
   active_until?: string | null;
   student_ids: number[];
+  trainer_ids?: number[];
 }
 
 export interface TrainingGroupUpdate {
@@ -210,6 +212,7 @@ export interface SessionTrainer {
   last_name: string;
   attendance: AttendanceSummary | null;
   branches?: string | null;
+  is_guest?: boolean;
 }
 
 export interface TrainingSessionSummary {

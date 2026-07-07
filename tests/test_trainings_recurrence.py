@@ -31,6 +31,7 @@ async def _create_daily_group(client, trainer, **overrides):
         "weekdays": [1, 2, 3, 4, 5, 6, 7],
         "active_until": overrides.get("active_until"),
         "student_ids": overrides.get("student_ids", [1, 2]),
+        "trainer_ids": overrides.get("trainer_ids", []),
     }
     return await client.post("/training-groups", json=payload, headers=write_headers(trainer))
 
@@ -562,9 +563,13 @@ async def test_trainer_attendance_on_session(client):
     attendance_id = mark.json()["id"]
 
     detail = (await client.get(f"/training-sessions/{session_id}")).json()
-    assert len(detail["trainers"]) == 1
-    assert detail["trainers"][0]["id"] == 2
-    assert detail["trainers"][0]["attendance"]["status"] == "present"
+    by_id = {t["id"]: t for t in detail["trainers"]}
+    assert 1 in by_id
+    assert by_id[1]["is_guest"] is False
+    assert by_id[1]["attendance"] is None
+    assert 2 in by_id
+    assert by_id[2]["is_guest"] is True
+    assert by_id[2]["attendance"]["status"] == "present"
 
     patch = await client.patch(
         f"/training-sessions/{session_id}/trainer-attendance/{attendance_id}",
@@ -580,4 +585,34 @@ async def test_trainer_attendance_on_session(client):
     )
     assert delete.status_code == 204
     detail_after = (await client.get(f"/training-sessions/{session_id}")).json()
-    assert detail_after["trainers"] == []
+    by_id_after = {t["id"]: t for t in detail_after["trainers"]}
+    assert 1 in by_id_after
+    assert 2 not in by_id_after
+
+
+@pytest.mark.asyncio
+async def test_training_group_trainers_roster(client):
+    trainer = await login_trainer(client, trainer_id=1)
+    create = await _create_daily_group(client, trainer, student_ids=[1], trainer_ids=[2])
+    assert create.status_code == 201, create.text
+    group_id = create.json()["id"]
+
+    detail = (await client.get(f"/training-groups/{group_id}", headers=write_headers(trainer))).json()
+    trainer_ids = {t["id"] for t in detail["trainers"]}
+    assert trainer_ids == {1, 2}
+
+    replace = await client.put(
+        f"/training-groups/{group_id}/trainers",
+        json={"trainer_ids": []},
+        headers=write_headers(trainer),
+    )
+    assert replace.status_code == 200, replace.text
+    assert {t["id"] for t in replace.json()["trainers"]} == {1}
+
+    replace2 = await client.put(
+        f"/training-groups/{group_id}/trainers",
+        json={"trainer_ids": [1]},
+        headers=write_headers(await login_trainer(client, trainer_id=2)),
+    )
+    assert replace2.status_code == 200, replace2.text
+    assert {t["id"] for t in replace2.json()["trainers"]} == {1, 2}

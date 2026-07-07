@@ -2,9 +2,10 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy import event, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.models import Base, Branch, DEFAULT_BRANCHES, Trainer
+from app.models import Base, Branch, DEFAULT_BRANCHES, DEFAULT_TRAINERS, Trainer
 from app.security import hash_pin
 
 engine = create_async_engine(
@@ -61,6 +62,34 @@ async def seed_trainer_pins() -> None:
             pin_hash = hash_pin(DEFAULT_TRAINER_PIN)
             for trainer in trainers:
                 trainer.pin_hash = pin_hash
+
+
+async def seed_trainers() -> None:
+    """Idempotentně doplní výchozí trenéry a jejich pobočky."""
+    async with async_session_maker() as session:
+        async with session.begin():
+            branch_rows = (await session.execute(select(Branch))).scalars().all()
+            by_name = {b.name: b for b in branch_rows}
+            for first_name, last_name, branch_names in DEFAULT_TRAINERS:
+                result = await session.execute(
+                    select(Trainer)
+                    .where(Trainer.first_name == first_name, Trainer.last_name == last_name)
+                    .options(selectinload(Trainer.branches)),
+                )
+                trainer = result.scalar_one_or_none()
+                branches = [by_name[name] for name in branch_names if name in by_name]
+                if not branches:
+                    continue
+                if trainer is None:
+                    trainer = Trainer(first_name=first_name, last_name=last_name)
+                    trainer.branches.extend(branches)
+                    session.add(trainer)
+                else:
+                    existing_ids = {b.id for b in trainer.branches}
+                    target_ids = {b.id for b in branches}
+                    if existing_ids != target_ids:
+                        trainer.branches.clear()
+                        trainer.branches.extend(branches)
 
 
 async def migrate_schema() -> None:
@@ -226,6 +255,15 @@ async def migrate_schema() -> None:
 
         await conn.execute(
             text(
+                "CREATE TABLE IF NOT EXISTS trainer_training_groups ("
+                "trainer_id INTEGER NOT NULL REFERENCES trainers(id) ON DELETE CASCADE, "
+                "group_id INTEGER NOT NULL REFERENCES training_groups(id) ON DELETE CASCADE, "
+                "PRIMARY KEY (trainer_id, group_id))"
+            ),
+        )
+
+        await conn.execute(
+            text(
                 "CREATE TABLE IF NOT EXISTS trainer_session_attendance ("
                 "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
                 "session_id INTEGER NOT NULL REFERENCES training_sessions(id) ON DELETE CASCADE, "
@@ -264,4 +302,5 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
     await migrate_schema()
     await seed_branches()
+    await seed_trainers()
     await seed_trainer_pins()

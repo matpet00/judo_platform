@@ -17,6 +17,7 @@ from app.models import (
     TrainingSession,
     student_training_groups,
     trainer_branches,
+    trainer_training_groups,
 )
 from app.schemas import (
     BranchCreate,
@@ -72,6 +73,7 @@ async def _cleanup_branch_references(db: AsyncSession, branch_id: int) -> None:
             delete(TrainingOccurrenceComment).where(TrainingOccurrenceComment.training_group_id.in_(group_ids)),
         )
         await db.execute(delete(student_training_groups).where(student_training_groups.c.group_id.in_(group_ids)))
+        await db.execute(delete(trainer_training_groups).where(trainer_training_groups.c.group_id.in_(group_ids)))
         await db.execute(
             update(Notification)
             .where(Notification.training_group_id.in_(group_ids))

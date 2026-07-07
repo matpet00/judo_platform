@@ -1107,15 +1107,22 @@ function TrainingSetupForm({
     return toDateInputValue(d);
   });
   const [studentIds, setStudentIds] = useState<Set<number>>(new Set());
+  const [trainerIds, setTrainerIds] = useState<Set<number>>(new Set());
 
   const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const branches = branchesQuery.data ?? [];
   const studentsQuery = useQuery({ queryKey: ["students"], queryFn: () => api.students() });
   const students = studentsQuery.data ?? [];
+  const trainersQuery = useQuery({ queryKey: ["trainers"], queryFn: () => api.trainers() });
+  const trainers = trainersQuery.data ?? [];
 
   const eligible = useMemo(
     () => (branchId == null ? [] : students.filter((s) => s.branches.some((b) => b.id === branchId))),
     [students, branchId],
+  );
+  const eligibleTrainers = useMemo(
+    () => (branchId == null ? [] : trainers.filter((t) => t.branches.some((b) => b.id === branchId))),
+    [trainers, branchId],
   );
 
   const create = useMutation({
@@ -1129,6 +1136,7 @@ function TrainingSetupForm({
         active_from: activeFrom || toDateInputValue(base),
         active_until: activeUntil || null,
         student_ids: [...studentIds],
+        trainer_ids: [...trainerIds],
       }),
     onSuccess: onDone,
   });
@@ -1157,6 +1165,13 @@ function TrainingSetupForm({
       else next.add(id);
       return next;
     });
+  const toggleTrainer = (id: number) =>
+    setTrainerIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <>
@@ -1169,6 +1184,7 @@ function TrainingSetupForm({
             onChange={(e) => {
               setBranchId(e.target.value ? Number(e.target.value) : null);
               setStudentIds(new Set());
+              setTrainerIds(new Set());
             }}
           >
             <option value="">Vyber pobočku…</option>
@@ -1231,6 +1247,22 @@ function TrainingSetupForm({
               <input type="checkbox" checked={studentIds.has(s.id)} onChange={() => toggleStudent(s.id)} />
               <span>{s.first_name} {s.last_name}</span>
               <small>{s.age_group}</small>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="notification-section">
+        <h3 className="notification-section__title">Stálí trenéři</h3>
+        <p className="event-attachments__empty">Ty (přihlášený trenér) budeš na skupině automaticky.</p>
+        {branchId != null && eligibleTrainers.length === 0 && (
+          <p className="event-attachments__empty">Na této pobočce nejsou další trenéři.</p>
+        )}
+        <div className="training-roster">
+          {eligibleTrainers.map((t) => (
+            <label key={t.id} className={`training-roster__item${trainerIds.has(t.id) ? " is-active" : ""}`}>
+              <input type="checkbox" checked={trainerIds.has(t.id)} onChange={() => toggleTrainer(t.id)} />
+              <span>{t.first_name} {t.last_name}</span>
             </label>
           ))}
         </div>
@@ -2619,12 +2651,19 @@ function TrainingEditFields({
   const [activeFrom, setActiveFrom] = useState(group.active_from ?? "");
   const [activeUntil, setActiveUntil] = useState(group.active_until ?? "");
   const [studentIds, setStudentIds] = useState<Set<number>>(() => new Set(group.students.map((s) => s.id)));
+  const [trainerIds, setTrainerIds] = useState<Set<number>>(() => new Set(group.trainers.map((t) => t.id)));
 
   const studentsQuery = useQuery({ queryKey: ["students"], queryFn: () => api.students() });
   const students = studentsQuery.data ?? [];
+  const trainersQuery = useQuery({ queryKey: ["trainers"], queryFn: () => api.trainers() });
+  const trainers = trainersQuery.data ?? [];
   const eligible = useMemo(
     () => students.filter((s) => s.branches.some((b) => b.id === group.branch_id)),
     [students, group.branch_id],
+  );
+  const eligibleTrainers = useMemo(
+    () => trainers.filter((t) => t.branches.some((b) => b.id === group.branch_id)),
+    [trainers, group.branch_id],
   );
 
   const save = useMutation({
@@ -2638,6 +2677,7 @@ function TrainingEditFields({
         active_until: activeUntil || null,
       });
       await api.replaceGroupStudents(group.id, [...studentIds]);
+      await api.replaceGroupTrainers(group.id, [...trainerIds]);
     },
     onSuccess: onSaved,
   });
@@ -2659,6 +2699,13 @@ function TrainingEditFields({
     });
   const toggleStudent = (id: number) =>
     setStudentIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleTrainer = (id: number) =>
+    setTrainerIds((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -2719,6 +2766,22 @@ function TrainingEditFields({
               <input type="checkbox" checked={studentIds.has(s.id)} onChange={() => toggleStudent(s.id)} />
               <span>{s.first_name} {s.last_name}</span>
               <small>{s.age_group}</small>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="notification-section">
+        <h3 className="notification-section__title">Stálí trenéři</h3>
+        <p className="event-attachments__empty">Přihlášený trenér zůstane na skupině automaticky.</p>
+        {eligibleTrainers.length === 0 && (
+          <p className="event-attachments__empty">Na této pobočce nejsou další trenéři.</p>
+        )}
+        <div className="training-roster">
+          {eligibleTrainers.map((t) => (
+            <label key={t.id} className={`training-roster__item${trainerIds.has(t.id) ? " is-active" : ""}`}>
+              <input type="checkbox" checked={trainerIds.has(t.id)} onChange={() => toggleTrainer(t.id)} />
+              <span>{t.first_name} {t.last_name}</span>
             </label>
           ))}
         </div>

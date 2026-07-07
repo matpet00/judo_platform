@@ -175,20 +175,44 @@ def _session_students_with_attendance(session: TrainingSession) -> list[SessionS
 
 
 def _session_trainers_with_attendance(session: TrainingSession) -> list[SessionTrainerWithAttendance]:
-    records_sorted = sorted(
-        session.trainer_attendance_records,
-        key=lambda r: (r.trainer.last_name, r.trainer.first_name, r.trainer_id),
+    if session.training_group is None:
+        raise HTTPException(status_code=500, detail="Training group not loaded for session.")
+    by_trainer_id = {r.trainer_id: r for r in session.trainer_attendance_records}
+    roster_ids = {t.id for t in session.training_group.trainers}
+    trainers_sorted = sorted(
+        session.training_group.trainers,
+        key=lambda t: (t.last_name, t.first_name, t.id),
     )
-    return [
+    rows = [
+        SessionTrainerWithAttendance(
+            id=trainer.id,
+            first_name=trainer.first_name,
+            last_name=trainer.last_name,
+            attendance=(
+                _attendance_to_summary(by_trainer_id[trainer.id])
+                if trainer.id in by_trainer_id
+                else None
+            ),
+            branches=_trainer_branch_names(trainer),
+            is_guest=False,
+        )
+        for trainer in trainers_sorted
+    ]
+
+    guest_records = [r for r in session.trainer_attendance_records if r.trainer_id not in roster_ids]
+    guest_records.sort(key=lambda r: (r.trainer.last_name, r.trainer.first_name, r.trainer_id))
+    rows.extend(
         SessionTrainerWithAttendance(
             id=record.trainer.id,
             first_name=record.trainer.first_name,
             last_name=record.trainer.last_name,
             attendance=_attendance_to_summary(record),
             branches=_trainer_branch_names(record.trainer),
+            is_guest=True,
         )
-        for record in records_sorted
-    ]
+        for record in guest_records
+    )
+    return rows
 
 
 def _session_to_detail(session: TrainingSession) -> TrainingSessionDetailRead:
@@ -212,7 +236,7 @@ async def get_training_group_or_404(db: AsyncSession, group_id: int) -> Training
     result = await db.execute(
         select(TrainingGroup)
         .where(TrainingGroup.id == group_id)
-        .options(selectinload(TrainingGroup.students)),
+        .options(selectinload(TrainingGroup.students), selectinload(TrainingGroup.trainers)),
     )
     group = result.scalar_one_or_none()
     if group is None:
@@ -228,6 +252,9 @@ async def _get_session_or_404(db: AsyncSession, session_id: int) -> TrainingSess
             *_session_load_options(),
             selectinload(TrainingSession.training_group).selectinload(TrainingGroup.branch),
             selectinload(TrainingSession.training_group).selectinload(TrainingGroup.students),
+            selectinload(TrainingSession.training_group).selectinload(TrainingGroup.trainers).selectinload(
+                Trainer.branches,
+            ),
         ),
     )
     session = result.scalar_one_or_none()
@@ -249,7 +276,7 @@ async def _get_existing_session_for_group_date(
             TrainingSession.training_group_id == group_id,
             TrainingSession.starts_at == starts_at,
         )
-        .options(*_session_load_options(), selectinload(TrainingSession.training_group).selectinload(TrainingGroup.students)),
+        .options(*_session_load_options(), selectinload(TrainingSession.training_group).selectinload(TrainingGroup.students), selectinload(TrainingSession.training_group).selectinload(TrainingGroup.trainers)),
     )
     return result.scalar_one_or_none()
 

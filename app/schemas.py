@@ -433,6 +433,7 @@ class TrainingGroupCreate(BaseModel):
     active_from: date | None = Field(default=None, description="Opakovat od (včetně); None = bez omezení.")
     active_until: date | None = Field(default=None, description="Opakovat do (včetně); None = bez omezení.")
     student_ids: list[int] = Field(default_factory=list, description="Zapsané děti (roster).")
+    trainer_ids: list[int] = Field(default_factory=list, description="Stálí trenéři skupiny (kromě tvůrce).")
 
     @field_validator("name", mode="before")
     @classmethod
@@ -460,6 +461,15 @@ class TrainingGroupCreate(BaseModel):
             raise ValueError("Duplicate student_ids are not allowed.")
         if any(sid < 1 for sid in v):
             raise ValueError("student_ids must be >= 1.")
+        return v
+
+    @field_validator("trainer_ids", mode="after")
+    @classmethod
+    def unique_group_trainer_ids(cls, v: list[int]) -> list[int]:
+        if len(set(v)) != len(v):
+            raise ValueError("Duplicate trainer_ids are not allowed.")
+        if any(tid < 1 for tid in v):
+            raise ValueError("trainer_ids must be >= 1.")
         return v
 
     @field_validator("end_time")
@@ -528,6 +538,7 @@ class TrainingGroupRead(BaseModel):
 
 class TrainingGroupDetailRead(TrainingGroupRead):
     students: list[StudentBrief] = Field(default_factory=list)
+    trainers: list[TrainerBrief] = Field(default_factory=list)
 
 
 class TrainingGroupBrief(BaseModel):
@@ -551,6 +562,19 @@ class TrainingGroupStudentsReplace(BaseModel):
             raise ValueError("Duplicate student_ids are not allowed.")
         if any(sid < 1 for sid in v):
             raise ValueError("student_ids must be >= 1.")
+        return v
+
+
+class TrainingGroupTrainersReplace(BaseModel):
+    trainer_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("trainer_ids", mode="after")
+    @classmethod
+    def unique_trainer_ids(cls, v: list[int]) -> list[int]:
+        if len(set(v)) != len(v):
+            raise ValueError("Duplicate trainer_ids are not allowed.")
+        if any(tid < 1 for tid in v):
+            raise ValueError("trainer_ids must be >= 1.")
         return v
 
 
@@ -670,6 +694,7 @@ class SessionTrainerWithAttendance(BaseModel):
     last_name: str
     attendance: AttendanceSummary | None = None
     branches: str | None = None
+    is_guest: bool = False
 
 
 class TrainerAttendanceRecordCreate(BaseModel):

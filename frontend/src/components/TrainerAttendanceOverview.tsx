@@ -69,12 +69,16 @@ export function TrainerAttendanceOverview({
           return (
             <div
               key={trainer.id}
-              className={`attendance-row attendance-row--trainer${saving ? " attendance-row--saving" : ""}`}
+              className={`attendance-row attendance-row--trainer${saving ? " attendance-row--saving" : ""}${trainer.is_guest ? " attendance-row--guest" : ""}`}
             >
               <div className="attendance-row__info">
                 <span className="attendance-row__name">
                   {trainer.first_name} {trainer.last_name}
-                  <span className="attendance-trainer-badge">Trenér</span>
+                  {trainer.is_guest ? (
+                    <span className="attendance-guest-badge">Host</span>
+                  ) : (
+                    <span className="attendance-trainer-badge">Trenér</span>
+                  )}
                 </span>
                 {trainer.branches && (
                   <span className="attendance-row__age">{trainer.branches}</span>
@@ -98,7 +102,7 @@ export function TrainerAttendanceOverview({
                     {STATUS_SHORT[status]}
                   </button>
                 ))}
-                {onRemove && trainer.attendance?.id != null && (
+                {onRemove && trainer.is_guest && trainer.attendance?.id != null && (
                   <button
                     type="button"
                     className="attendance-guest-remove"

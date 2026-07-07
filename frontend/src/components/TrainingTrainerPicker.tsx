@@ -40,7 +40,7 @@ export function TrainingTrainerPicker({
   return (
     <div className="guest-picker">
       <label className="notification-field guest-picker__field">
-        Přidat trenéra na trénink
+        Přidat hostujícího trenéra
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}

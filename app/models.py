@@ -60,6 +60,14 @@ DEFAULT_BRANCHES: tuple[tuple[str, str], ...] = (
     ("Petrvald", "Nádražní 201, 735 81 Petřvald"),
 )
 
+# (jméno, příjmení, pobočky) — idempotentní seed při startu API
+DEFAULT_TRAINERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("Lukáš", "Morcin", ("Orlova",)),
+    ("Eduard", "Lanča", ("Dolni Lutyne", "Orlova")),
+    ("Roman", "Bielczyk", ("Orlova", "Dolni Lutyne")),
+    ("Petr", "Steiniger", ("Petrvald",)),
+)
+
 
 class Base(DeclarativeBase):
     pass
@@ -90,6 +98,13 @@ student_training_groups = Table(
     "student_training_groups",
     Base.metadata,
     Column("student_id", Integer, ForeignKey("students.id", ondelete="CASCADE"), primary_key=True),
+    Column("group_id", Integer, ForeignKey("training_groups.id", ondelete="CASCADE"), primary_key=True),
+)
+
+trainer_training_groups = Table(
+    "trainer_training_groups",
+    Base.metadata,
+    Column("trainer_id", Integer, ForeignKey("trainers.id", ondelete="CASCADE"), primary_key=True),
     Column("group_id", Integer, ForeignKey("training_groups.id", ondelete="CASCADE"), primary_key=True),
 )
 
@@ -148,6 +163,10 @@ class Trainer(Base):
         foreign_keys="TrainerSessionAttendance.recorded_by_id",
     )
     authored_notifications: Mapped[list["Notification"]] = relationship(back_populates="author_trainer")
+    training_groups: Mapped[list["TrainingGroup"]] = relationship(
+        secondary=trainer_training_groups,
+        back_populates="trainers",
+    )
 
 
 class Parent(Base):
@@ -231,6 +250,10 @@ class TrainingGroup(Base):
     branch: Mapped[Branch] = relationship(back_populates="training_groups")
     students: Mapped[list[Student]] = relationship(
         secondary=student_training_groups,
+        back_populates="training_groups",
+    )
+    trainers: Mapped[list["Trainer"]] = relationship(
+        secondary=trainer_training_groups,
         back_populates="training_groups",
     )
     training_sessions: Mapped[list["TrainingSession"]] = relationship(back_populates="training_group")
