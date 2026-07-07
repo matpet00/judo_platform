@@ -391,13 +391,16 @@ function TrainerForm({
           last_name: lastName,
           branch_ids: branchIds,
         });
-        if (pin) await api.updateTrainer(created.id, { pin });
+        await api.updateTrainer(created.id, { pin });
       }
     },
     onSuccess: onSaved,
   });
 
-  const canSave = firstName.trim() && lastName.trim() && branchIds.length > 0;
+  // New trainer: PIN required. Editing: blank keeps the current PIN.
+  const pinRequired = !trainer;
+  const pinValid = pin === "" ? !pinRequired : pin.length >= 4 && pin.length <= 8;
+  const canSave = firstName.trim() && lastName.trim() && branchIds.length > 0 && pinValid;
 
   return (
     <Modal title={trainer ? "Upravit trenéra" : "Nový trenér"} onClose={onClose}>
@@ -427,14 +430,21 @@ function TrainerForm({
           />
         </div>
         <div className="admin-field">
-          <label>PIN {trainer ? "(nový, nepovinné)" : "(nepovinné)"}</label>
+          <label>PIN {trainer ? "(nový – prázdné = beze změny)" : "(povinný, 4–8 číslic)"}</label>
           <input
             value={pin}
-            onChange={(e) => setPin(e.target.value)}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
             placeholder="4–8 číslic"
             inputMode="numeric"
+            autoComplete="off"
+            maxLength={8}
           />
         </div>
+        {!pinValid && (
+          <p className="page-header__sub" style={{ margin: 0 }}>
+            {pinRequired ? "Zadej PIN (4–8 číslic)." : "PIN musí mít 4–8 číslic."}
+          </p>
+        )}
         {save.isError && <p className="error-box">{String(save.error)}</p>}
         <div className="admin-form__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
@@ -912,6 +922,7 @@ function BranchesTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<BranchBrief | "new" | null>(null);
+  const [addGroupBranch, setAddGroupBranch] = useState<BranchBrief | null>(null);
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const del = useMutation({
@@ -940,6 +951,9 @@ function BranchesTab() {
               <div className="admin-row__sub">{b.address}</div>
             </div>
             <div className="admin-row__actions">
+              <button type="button" className="admin-btn-sm" onClick={() => setAddGroupBranch(b)}>
+                + Skupina
+              </button>
               <button type="button" className="admin-btn-sm" onClick={() => setEditing(b)}>
                 Upravit
               </button>
@@ -965,6 +979,19 @@ function BranchesTab() {
           onSaved={() => {
             setEditing(null);
             qc.invalidateQueries({ queryKey: ["branches"] });
+          }}
+        />
+      )}
+
+      {addGroupBranch && (
+        <GroupForm
+          group={null}
+          branches={branches.data ?? []}
+          presetBranchId={addGroupBranch.id}
+          onClose={() => setAddGroupBranch(null)}
+          onSaved={() => {
+            setAddGroupBranch(null);
+            qc.invalidateQueries({ queryKey: ["admin", "groups"] });
           }}
         />
       )}
@@ -1025,31 +1052,82 @@ function BranchForm({
 
 // --- Roster ---
 
+const WEEKDAYS: { iso: number; label: string }[] = [
+  { iso: 1, label: "Po" },
+  { iso: 2, label: "Út" },
+  { iso: 3, label: "St" },
+  { iso: 4, label: "Čt" },
+  { iso: 5, label: "Pá" },
+  { iso: 6, label: "So" },
+  { iso: 7, label: "Ne" },
+];
+
+function weekdayLabels(days: number[] | null | undefined): string {
+  if (!days || days.length === 0) return "bez dnů";
+  return days
+    .slice()
+    .sort((a, b) => a - b)
+    .map((d) => WEEKDAYS.find((w) => w.iso === d)?.label ?? d)
+    .join(", ");
+}
+
+function timeShort(t: string): string {
+  return t?.slice(0, 5) ?? t;
+}
+
 function RosterTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<TrainingGroup | null>(null);
+  const [rosterOf, setRosterOf] = useState<TrainingGroup | null>(null);
+  const [editing, setEditing] = useState<TrainingGroup | "new" | null>(null);
 
   const groups = useQuery({ queryKey: ["admin", "groups"], queryFn: () => api.adminTrainingGroups() });
+  const branchesQ = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
+
+  const del = useMutation({
+    mutationFn: (id: number) => api.adminDeleteTrainingGroup(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "groups"] }),
+  });
 
   const list = (groups.data ?? []).filter((g) => matches(search, g.name, g.branch?.name));
+  const refresh = () => qc.invalidateQueries({ queryKey: ["admin", "groups"] });
 
   return (
     <div>
-      <SearchBar value={search} onChange={setSearch} placeholder="Hledat skupinu…" />
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        onAdd={() => setEditing("new")}
+        addLabel="+ Skupina"
+        placeholder="Hledat skupinu…"
+      />
       {groups.isError && <p className="error-box">{String(groups.error)}</p>}
+      {del.isError && <p className="error-box">{String(del.error)}</p>}
       <div className="admin-list">
         {list.map((g) => (
           <div key={g.id} className="admin-row">
             <div className="admin-row__main">
               <div className="admin-row__title">{g.name}</div>
               <div className="admin-row__sub">
-                {g.branch?.name} · {g.students.length} dětí
+                {g.branch?.name} · {timeShort(g.start_time)}–{timeShort(g.end_time)} · {weekdayLabels(g.weekdays)} ·{" "}
+                {g.students.length} dětí
               </div>
             </div>
             <div className="admin-row__actions">
               <button type="button" className="admin-btn-sm" onClick={() => setEditing(g)}>
-                Upravit soupisku
+                Upravit
+              </button>
+              <button type="button" className="admin-btn-sm" onClick={() => setRosterOf(g)}>
+                Soupiska
+              </button>
+              <button
+                type="button"
+                className="admin-btn-sm admin-btn-sm--danger"
+                onClick={() => {
+                  if (confirm(`Smazat skupinu ${g.name}? Smažou se i její tréninky a docházka.`)) del.mutate(g.id);
+                }}
+              >
+                Smazat
               </button>
             </div>
           </div>
@@ -1057,17 +1135,176 @@ function RosterTab() {
         {list.length === 0 && !groups.isLoading && <p className="admin-empty">Žádné skupiny.</p>}
       </div>
 
-      {editing && (
+      {rosterOf && (
         <RosterForm
-          group={editing}
+          group={rosterOf}
+          onClose={() => setRosterOf(null)}
+          onSaved={() => {
+            setRosterOf(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {editing && (
+        <GroupForm
+          group={editing === "new" ? null : editing}
+          branches={branchesQ.data ?? []}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            qc.invalidateQueries({ queryKey: ["admin", "groups"] });
+            refresh();
           }}
         />
       )}
     </div>
+  );
+}
+
+function GroupForm({
+  group,
+  branches,
+  presetBranchId,
+  onClose,
+  onSaved,
+}: {
+  group: TrainingGroup | null;
+  branches: BranchBrief[];
+  presetBranchId?: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(group?.name ?? "");
+  const [branchId, setBranchId] = useState<number | "">(group?.branch_id ?? presetBranchId ?? "");
+  const [startTime, setStartTime] = useState(group ? timeShort(group.start_time) : "17:00");
+  const [endTime, setEndTime] = useState(group ? timeShort(group.end_time) : "18:00");
+  const [weekdays, setWeekdays] = useState<number[]>(group?.weekdays ?? []);
+  const [studentIds, setStudentIds] = useState<number[]>(group?.students.map((s) => s.id) ?? []);
+  const [studentSearch, setStudentSearch] = useState("");
+
+  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students() });
+
+  const toggleDay = (iso: number) =>
+    setWeekdays((prev) => (prev.includes(iso) ? prev.filter((x) => x !== iso) : [...prev, iso]));
+  const toggleStudent = (id: number) =>
+    setStudentIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const bid = branchId === "" ? 0 : branchId;
+      const times = { start_time: `${startTime}:00`, end_time: `${endTime}:00` };
+      if (group) {
+        await api.adminUpdateTrainingGroup(group.id, {
+          branch_id: bid,
+          name,
+          ...times,
+          weekdays: weekdays.slice().sort((a, b) => a - b),
+        });
+        await api.adminReplaceGroupStudents(group.id, studentIds);
+      } else {
+        await api.adminCreateTrainingGroup({
+          branch_id: bid,
+          name,
+          ...times,
+          weekdays: weekdays.slice().sort((a, b) => a - b),
+          student_ids: studentIds,
+        });
+      }
+    },
+    onSuccess: onSaved,
+  });
+
+  const canSave = name.trim() && branchId !== "" && weekdays.length > 0 && startTime < endTime;
+
+  const studentList = (students.data ?? [])
+    .filter((s) => matches(studentSearch, s.first_name, s.last_name, s.age_group))
+    .sort((a, b) => a.last_name.localeCompare(b.last_name, "cs"));
+
+  return (
+    <Modal title={group ? "Upravit skupinu" : "Nová skupina"} onClose={onClose}>
+      <form
+        className="admin-form"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault();
+          if (canSave) save.mutate();
+        }}
+      >
+        <div className="admin-field">
+          <label>Název</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Např. Přípravka" />
+        </div>
+        <div className="admin-field">
+          <label>Pobočka</label>
+          <select
+            value={branchId}
+            onChange={(e) => setBranchId(e.target.value === "" ? "" : Number(e.target.value))}
+          >
+            <option value="">Vyber pobočku…</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="admin-guardian__grid">
+          <div className="admin-field">
+            <label>Začátek</label>
+            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          </div>
+          <div className="admin-field">
+            <label>Konec</label>
+            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+          </div>
+        </div>
+        <div className="admin-field">
+          <label>Dny v týdnu</label>
+          <div className="admin-checks">
+            {WEEKDAYS.map((w) => {
+              const on = weekdays.includes(w.iso);
+              return (
+                <label key={w.iso} className={`admin-check ${on ? "admin-check--on" : ""}`}>
+                  <input type="checkbox" checked={on} onChange={() => toggleDay(w.iso)} />
+                  {w.label}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <div className="admin-field">
+          <label>Děti ({studentIds.length})</label>
+          <input
+            type="search"
+            placeholder="Hledat dítě…"
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
+          />
+          <div className="admin-checks" style={{ maxHeight: "35vh", overflowY: "auto", marginTop: 8 }}>
+            {studentList.map((s) => {
+              const on = studentIds.includes(s.id);
+              return (
+                <label key={s.id} className={`admin-check ${on ? "admin-check--on" : ""}`}>
+                  <input type="checkbox" checked={on} onChange={() => toggleStudent(s.id)} />
+                  {s.last_name} {s.first_name} · {s.age_group}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        {!canSave && (startTime >= endTime) && (
+          <p className="page-header__sub" style={{ margin: 0 }}>Konec musí být po začátku.</p>
+        )}
+        {save.isError && <p className="error-box">{String(save.error)}</p>}
+        <div className="admin-form__actions">
+          <button type="button" className="btn btn--ghost" onClick={onClose}>
+            Zrušit
+          </button>
+          <button type="submit" className="btn btn--primary" disabled={!canSave || save.isPending}>
+            {save.isPending ? "Ukládám…" : "Uložit"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

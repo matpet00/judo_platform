@@ -486,7 +486,7 @@ async def delete_training_occurrence_comment(
 async def create_training_group(
     payload: TrainingGroupCreate,
     db: AsyncSession = Depends(get_db),
-    _trainer_id: int = Depends(require_trainer_token),
+    _actor: int | None = Depends(require_trainer_or_admin),
 ) -> TrainingGroupRead:
     await _get_branch_or_404(db, payload.branch_id)
     _validate_slot_times(payload.start_time, payload.end_time)
@@ -556,7 +556,7 @@ async def patch_training_group(
     group_id: int,
     payload: TrainingGroupPatch,
     db: AsyncSession = Depends(get_db),
-    _trainer_id: int = Depends(require_trainer_token),
+    _actor: int | None = Depends(require_trainer_or_admin),
 ) -> TrainingGroupRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -597,11 +597,11 @@ async def patch_training_group(
 async def delete_training_group(
     group_id: int,
     db: AsyncSession = Depends(get_db),
-    _trainer_id: int = Depends(require_trainer_token),
+    _actor: int | None = Depends(require_trainer_or_admin),
 ) -> None:
     group = await _get_group_or_404(db, group_id)
 
-    await notify_training_series_deleted(db, group, trainer_id=_trainer_id)
+    await notify_training_series_deleted(db, group, trainer_id=_actor)
 
     # Cascade-delete the whole series: attendance records, then sessions, then the group.
     # (SQLite doesn't enforce ON DELETE CASCADE, so we clear children explicitly.)

@@ -410,6 +410,18 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ student_ids: studentIds }),
     }, true, false, "admin"),
+  adminCreateTrainingGroup: (payload: import("./types").TrainingGroupCreate) =>
+    request<import("./types").TrainingGroup>("/training-groups", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  adminUpdateTrainingGroup: (id: number, payload: import("./types").TrainingGroupUpdate) =>
+    request<import("./types").TrainingGroup>(`/training-groups/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  adminDeleteTrainingGroup: (id: number) =>
+    request<void>(`/training-groups/${id}`, { method: "DELETE" }, true, false, "admin"),
   createTrainer: (payload: import("./types").TrainerCreate) =>
     request<import("./types").Trainer>("/trainers", {
       method: "POST",
