@@ -486,6 +486,40 @@
   padding: 32px 0;
 }
 
+.admin-detail {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-detail__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 16px;
+  align-items: start;
+}
+
+.admin-detail__label {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-detail__value {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.attendance-report__charts {
+  margin: 16px 0 20px;
+}
+
 .admin-login-card {
   max-width: 380px;
   margin: 10vh auto 0;

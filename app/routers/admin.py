@@ -10,6 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.attendance_report import (
+    build_branch_attendance_report,
+    group_active_in_month,
+    load_branch_sessions,
+)
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -26,6 +31,7 @@ from app.models import (
 )
 from app.parent_credentials import allocate_username, generate_password
 from app.routers.registration import _try_send_credentials_email
+from app.schemas import AttendanceMonthlyReport
 from app.security import create_admin_token, hash_pin, require_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -246,6 +252,31 @@ def _month_range(month: str) -> tuple[datetime, datetime]:
         datetime(start.year, start.month, start.day, tzinfo=UTC),
         datetime(end.year, end.month, end.day, tzinfo=UTC),
     )
+
+
+@router.get("/attendance-report", response_model=AttendanceMonthlyReport)
+async def admin_branch_attendance_report(
+    branch_id: int = Query(..., ge=1),
+    month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> AttendanceMonthlyReport:
+    branch = await db.get(Branch, branch_id)
+    if branch is None:
+        raise HTTPException(status_code=404, detail="Branch not found.")
+
+    result = await db.execute(
+        select(TrainingGroup)
+        .where(TrainingGroup.branch_id == branch_id)
+        .options(
+            selectinload(TrainingGroup.students),
+            selectinload(TrainingGroup.branch),
+        ),
+    )
+    groups = [g for g in result.scalars().unique().all() if group_active_in_month(g, month)]
+    group_ids = [g.id for g in groups]
+    sessions = await load_branch_sessions(db, group_ids, month)
+    return build_branch_attendance_report(groups, sessions, branch_id, month)
 
 
 @router.get("/attendance.csv")

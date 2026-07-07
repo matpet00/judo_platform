@@ -5,6 +5,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.attendance_report import build_group_attendance_report, load_group_sessions
 from app.database import get_db
 from app.deps import Viewer, get_viewer
 from app.models import (
@@ -22,7 +23,6 @@ from app.models import (
 )
 from app.schemas import (
     AttendanceMonthlyReport,
-    AttendanceMonthlyReportRow,
     BranchRead,
     ParentBrief,
     StudentBrief,
@@ -45,7 +45,7 @@ from app.training_notify import (
     notify_training_series_deleted,
 )
 from app.routers.training_sessions import _session_to_read, create_session_for_group
-from app.security import require_trainer_token
+from app.security import require_trainer_or_admin, require_trainer_token
 
 router = APIRouter(prefix="/training-groups", tags=["training-groups"])
 
@@ -227,7 +227,7 @@ async def _get_students_for_group(
 async def list_training_groups(
     db: AsyncSession = Depends(get_db),
     branch_id: int | None = Query(default=None, ge=1),
-    _trainer_id: int = Depends(require_trainer_token),
+    _trainer_id: int | None = Depends(require_trainer_or_admin),
 ) -> list[TrainingGroupDetailRead]:
     stmt = (
         select(TrainingGroup)
@@ -633,77 +633,11 @@ async def training_group_attendance_report(
     group_id: int,
     db: AsyncSession = Depends(get_db),
     month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
-    _trainer_id: int = Depends(require_trainer_token),
+    _trainer_id: int | None = Depends(require_trainer_or_admin),
 ) -> AttendanceMonthlyReport:
     group = await _get_group_or_404(db, group_id)
-    year, mon = (int(part) for part in month.split("-"))
-    month_start = datetime(year, mon, 1, tzinfo=UTC)
-    month_end = datetime(year + (mon == 12), (mon % 12) + 1, 1, tzinfo=UTC)
-
-    sessions_result = await db.execute(
-        select(TrainingSession)
-        .where(
-            TrainingSession.training_group_id == group_id,
-            TrainingSession.starts_at >= month_start,
-            TrainingSession.starts_at < month_end,
-            TrainingSession.canceled.is_(False),
-        )
-        .options(selectinload(TrainingSession.attendance_records).selectinload(AttendanceRecord.student)),
-    )
-    sessions = sessions_result.scalars().unique().all()
-
-    roster_ids = {s.id for s in group.students}
-    counts: dict[int, dict[str, int]] = {
-        s.id: {"present": 0, "absent": 0, "excused": 0} for s in group.students
-    }
-    guest_counts: dict[int, dict[str, int]] = {}
-    guest_students: dict[int, Student] = {}
-    for session in sessions:
-        for record in session.attendance_records:
-            if record.student_id in roster_ids:
-                counts[record.student_id][record.status.value] += 1
-            else:
-                bucket = guest_counts.setdefault(
-                    record.student_id,
-                    {"present": 0, "absent": 0, "excused": 0},
-                )
-                bucket[record.status.value] += 1
-                if record.student is not None:
-                    guest_students[record.student_id] = record.student
-
-    rows = [
-        AttendanceMonthlyReportRow(
-            student_id=student.id,
-            name=f"{student.first_name} {student.last_name}",
-            present=counts[student.id]["present"],
-            absent=counts[student.id]["absent"],
-            excused=counts[student.id]["excused"],
-            sessions=len(sessions),
-            is_guest=False,
-        )
-        for student in sorted(group.students, key=lambda s: (s.last_name, s.first_name, s.id))
-    ]
-
-    guest_rows = []
-    for student_id, bucket in guest_counts.items():
-        student = guest_students.get(student_id)
-        name = f"{student.first_name} {student.last_name}" if student is not None else f"#{student_id}"
-        guest_rows.append(
-            AttendanceMonthlyReportRow(
-                student_id=student_id,
-                name=name,
-                present=bucket["present"],
-                absent=bucket["absent"],
-                excused=bucket["excused"],
-                # For guests the denominator is how many times they actually dropped in.
-                sessions=bucket["present"] + bucket["absent"] + bucket["excused"],
-                is_guest=True,
-            ),
-        )
-    guest_rows.sort(key=lambda r: r.name.lower())
-    rows.extend(guest_rows)
-
-    return AttendanceMonthlyReport(group_id=group_id, month=month, sessions=len(sessions), rows=rows)
+    sessions = await load_group_sessions(db, group_id, month)
+    return build_group_attendance_report(group, sessions, month)
 
 
 @router.put("/{group_id}/students", response_model=TrainingGroupDetailRead)

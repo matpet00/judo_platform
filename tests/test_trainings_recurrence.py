@@ -53,6 +53,67 @@ async def test_occurrences_expand_weekly_and_clip_to_active_until(client):
 
 
 @pytest.mark.asyncio
+async def test_admin_branch_attendance_report(client):
+    trainer = await login_trainer(client)
+    branch_id = await _orlova_branch_id(client, trainer)
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+    today = date.today()
+    month = f"{today.year}-{today.month:02d}"
+
+    session = (
+        await client.post(
+            f"/training-groups/{group_id}/sessions",
+            json={"session_date": today.isoformat()},
+            headers=write_headers(trainer),
+        )
+    ).json()
+    await client.put(
+        f"/training-sessions/{session['id']}/attendance",
+        json={"records": [{"student_id": 1, "status": "present"}]},
+        headers=write_headers(trainer),
+    )
+
+    admin_resp = await client.post("/admin/login", json={"username": "admin", "password": "admin"})
+    assert admin_resp.status_code == 200
+    admin_headers = write_headers()
+    admin_headers["Authorization"] = f"Bearer {admin_resp.json()['access_token']}"
+
+    report = await client.get(
+        f"/admin/attendance-report?branch_id={branch_id}&month={month}",
+        headers=admin_headers,
+    )
+    assert report.status_code == 200, report.text
+    body = report.json()
+    assert body["branch_id"] == branch_id
+    assert body["month"] == month
+    assert body["sessions"] >= 1
+    assert body["group_count"] >= 1
+    assert any(r["student_id"] == 1 and r["present"] >= 1 for r in body["rows"])
+
+
+@pytest.mark.asyncio
+async def test_admin_can_read_attendance_report(client):
+    trainer = await login_trainer(client)
+    group_id = (await _create_daily_group(client, trainer, student_ids=[1])).json()["id"]
+    today = date.today()
+    month = f"{today.year}-{today.month:02d}"
+
+    admin_resp = await client.post("/admin/login", json={"username": "admin", "password": "admin"})
+    assert admin_resp.status_code == 200
+    admin_headers = write_headers()
+    admin_headers["Authorization"] = f"Bearer {admin_resp.json()['access_token']}"
+
+    report = await client.get(
+        f"/training-groups/{group_id}/attendance-report?month={month}",
+        headers=admin_headers,
+    )
+    assert report.status_code == 200, report.text
+    body = report.json()
+    assert body["group_id"] == group_id
+    assert body["month"] == month
+
+
+@pytest.mark.asyncio
 async def test_recurring_group_requires_at_least_one_student(client):
     trainer = await login_trainer(client)
     branch_id = await _orlova_branch_id(client, trainer)

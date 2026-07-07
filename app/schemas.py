@@ -752,9 +752,11 @@ class AttendanceMonthlyReportRow(BaseModel):
 
 
 class AttendanceMonthlyReport(BaseModel):
-    group_id: int
+    group_id: int | None = None
+    branch_id: int | None = None
     month: str = Field(examples=["2026-07"])
     sessions: int = 0
+    group_count: int = 0
     rows: list[AttendanceMonthlyReportRow] = Field(default_factory=list)
 
 

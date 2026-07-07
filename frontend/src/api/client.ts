@@ -117,18 +117,19 @@ export const api = {
     if (referenceYear) params.set("reference_year", String(referenceYear));
     return request<import("./types").AgeGroupPreview>(`/age-group?${params}`);
   },
-  branches: () => request<import("./types").BranchBrief[]>("/branches"),
+  branches: () => request<import("./types").BranchDetail[]>("/branches"),
   verifyPin: (trainerId: number, pin: string) =>
     request<import("./types").TrainerAuthToken>(`/trainers/${trainerId}/verify-pin`, {
       method: "POST",
       body: JSON.stringify({ pin }),
     }, true),
-  trainingGroups: (branchId?: number) =>
+  trainingGroups: (branchId?: number, role: Role = "trainer") =>
     request<import("./types").TrainingGroup[]>(
       branchId ? `/training-groups?branch_id=${branchId}` : "/training-groups",
       undefined,
       false,
       true,
+      role,
     ),
   students: () => request<import("./types").StudentWithBranches[]>("/students"),
   trainingGroup: (id: number) =>
@@ -210,12 +211,13 @@ export const api = {
       { method: "POST" },
       true,
     ),
-  attendanceReport: (groupId: number, month: string) =>
+  attendanceReport: (groupId: number, month: string, role: Role = "trainer") =>
     request<import("./types").AttendanceMonthlyReport>(
       `/training-groups/${groupId}/attendance-report?month=${month}`,
       undefined,
       false,
       true,
+      role,
     ),
   listSessions: (sessionDate: string, branchId?: number) => {
     const params = new URLSearchParams({ session_date: sessionDate });
@@ -446,6 +448,14 @@ export const api = {
     request<void>(`/events/${eventId}/attachments/${attachmentId}`, { method: "DELETE" }, true, false, role),
 
   // --- Admin ---
+  adminBranchAttendanceReport: (branchId: number, month: string) =>
+    request<import("./types").AttendanceMonthlyReport>(
+      `/admin/attendance-report?branch_id=${branchId}&month=${month}`,
+      undefined,
+      false,
+      true,
+      "admin",
+    ),
   adminLogin: (username: string, password: string) =>
     request<import("./types").AdminAuthToken>("/admin/login", {
       method: "POST",

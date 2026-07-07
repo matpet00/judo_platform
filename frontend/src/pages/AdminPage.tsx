@@ -10,12 +10,14 @@ import {
   AdminStackedBar,
   RSVP_CHART_SEGMENTS,
 } from "../components/AdminCharts";
+import { MonthlyAttendanceReport } from "../components/MonthlyAttendanceReport";
 import { useAdmin } from "../context/AdminContext";
 import { computeAgeGroup } from "../lib/ageGroup";
 import type {
   AgeGroup,
   AdminEventParticipation,
   BranchBrief,
+  BranchDetail,
   ParentRow,
   ResendCredentialsRead,
   RsvpStatus,
@@ -24,7 +26,7 @@ import type {
 } from "../api/types";
 import "./AdminPage.css";
 
-type TabId = "dashboard" | "trainers" | "students" | "parents" | "branches" | "events" | "export";
+type TabId = "dashboard" | "trainers" | "students" | "parents" | "branches" | "attendance" | "events" | "export";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "dashboard", label: "Přehled" },
@@ -32,6 +34,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "students", label: "Děti" },
   { id: "parents", label: "Rodiče" },
   { id: "branches", label: "Pobočky" },
+  { id: "attendance", label: "Docházka" },
   { id: "events", label: "Akce" },
   { id: "export", label: "Export" },
 ];
@@ -103,6 +106,7 @@ export function AdminPage() {
       {tab === "students" && <StudentsTab />}
       {tab === "parents" && <ParentsTab />}
       {tab === "branches" && <BranchesTab />}
+      {tab === "attendance" && <MonthlyAttendanceReport role="admin" />}
       {tab === "events" && <EventsTab />}
       {tab === "export" && <ExportTab />}
     </div>
@@ -239,6 +243,37 @@ function matches(query: string, ...fields: (string | null | undefined)[]): boole
   return fields.some((f) => (f ?? "").toLowerCase().includes(q));
 }
 
+function AdminDetailModal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Modal title={title} onClose={onClose}>
+      <dl className="admin-detail">{children}</dl>
+      <div className="admin-form__actions">
+        <button type="button" className="btn btn--primary" onClick={onClose}>
+          Zavřít
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  if (value == null || value === "") return null;
+  return (
+    <div className="admin-detail__row">
+      <dt className="admin-detail__label">{label}</dt>
+      <dd className="admin-detail__value">{value}</dd>
+    </div>
+  );
+}
+
 // --- Dashboard ---
 
 function DashboardTab() {
@@ -302,6 +337,7 @@ function TrainersTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Trainer | "new" | null>(null);
+  const [viewing, setViewing] = useState<Trainer | null>(null);
 
   const trainers = useQuery({ queryKey: ["admin", "trainers"], queryFn: () => api.trainers() });
   const branchesQ = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
@@ -338,6 +374,9 @@ function TrainersTab() {
               </div>
             </div>
             <div className="admin-row__actions">
+              <button type="button" className="admin-btn-sm" onClick={() => setViewing(t)}>
+                Zobrazit
+              </button>
               <button type="button" className="admin-btn-sm" onClick={() => setEditing(t)}>
                 Upravit
               </button>
@@ -355,6 +394,13 @@ function TrainersTab() {
         ))}
         {list.length === 0 && !trainers.isLoading && <p className="admin-empty">Žádní trenéři.</p>}
       </div>
+
+      {viewing && (
+        <AdminDetailModal title={`${viewing.first_name} ${viewing.last_name}`} onClose={() => setViewing(null)}>
+          <DetailRow label="Jméno" value={`${viewing.first_name} ${viewing.last_name}`} />
+          <DetailRow label="Pobočky" value={viewing.branches.map((b) => b.name).join(", ") || "—"} />
+        </AdminDetailModal>
+      )}
 
       {editing && (
         <TrainerForm
@@ -476,6 +522,7 @@ function StudentsTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<StudentWithBranches | "new" | null>(null);
+  const [viewing, setViewing] = useState<StudentWithBranches | null>(null);
 
   const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students() });
   const branchesQ = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
@@ -512,6 +559,9 @@ function StudentsTab() {
               </div>
             </div>
             <div className="admin-row__actions">
+              <button type="button" className="admin-btn-sm" onClick={() => setViewing(s)}>
+                Zobrazit
+              </button>
               <button type="button" className="admin-btn-sm" onClick={() => setEditing(s)}>
                 Upravit
               </button>
@@ -529,6 +579,22 @@ function StudentsTab() {
         ))}
         {list.length === 0 && !students.isLoading && <p className="admin-empty">Žádné děti.</p>}
       </div>
+
+      {viewing && (
+        <AdminDetailModal title={`${viewing.first_name} ${viewing.last_name}`} onClose={() => setViewing(null)}>
+          <DetailRow label="Jméno" value={`${viewing.first_name} ${viewing.last_name}`} />
+          <DetailRow label="Věková kategorie" value={viewing.age_group} />
+          <DetailRow label="Pobočky" value={viewing.branches.map((b) => b.name).join(", ") || "—"} />
+          <DetailRow
+            label="Rodiče"
+            value={
+              viewing.parents?.length
+                ? viewing.parents.map((p) => `${p.first_name} ${p.last_name} · ${p.email}`).join("; ")
+                : "—"
+            }
+          />
+        </AdminDetailModal>
+      )}
 
       {editing && (
         <StudentForm
@@ -761,9 +827,11 @@ function ParentsTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<ParentRow | null>(null);
+  const [viewing, setViewing] = useState<ParentRow | null>(null);
   const [credentials, setCredentials] = useState<ResendCredentialsRead | null>(null);
 
   const parents = useQuery({ queryKey: ["admin", "parents"], queryFn: () => api.adminParents() });
+  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students() });
 
   const del = useMutation({
     mutationFn: (id: number) => api.deleteParent(id),
@@ -777,6 +845,9 @@ function ParentsTab() {
   const list = (parents.data ?? []).filter((p) =>
     matches(search, p.first_name, p.last_name, p.email, p.phone),
   );
+
+  const childrenForParent = (parentId: number) =>
+    (students.data ?? []).filter((s) => s.parents?.some((par) => par.id === parentId));
 
   return (
     <div>
@@ -796,6 +867,9 @@ function ParentsTab() {
               </div>
             </div>
             <div className="admin-row__actions">
+              <button type="button" className="admin-btn-sm" onClick={() => setViewing(p)}>
+                Zobrazit
+              </button>
               <button type="button" className="admin-btn-sm" onClick={() => setEditing(p)}>
                 Upravit
               </button>
@@ -825,6 +899,24 @@ function ParentsTab() {
         ))}
         {list.length === 0 && !parents.isLoading && <p className="admin-empty">Žádní rodiče.</p>}
       </div>
+
+      {viewing && (
+        <AdminDetailModal title={`${viewing.first_name} ${viewing.last_name}`} onClose={() => setViewing(null)}>
+          <DetailRow label="Jméno" value={`${viewing.first_name} ${viewing.last_name}`} />
+          <DetailRow label="E-mail" value={viewing.email} />
+          <DetailRow label="Telefon" value={viewing.phone} />
+          <DetailRow
+            label="Děti"
+            value={
+              childrenForParent(viewing.id).length
+                ? childrenForParent(viewing.id)
+                    .map((c) => `${c.first_name} ${c.last_name} (${c.age_group})`)
+                    .join("; ")
+                : "—"
+            }
+          />
+        </AdminDetailModal>
+      )}
 
       {editing && (
         <ParentForm
@@ -933,6 +1025,7 @@ function BranchesTab() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<BranchBrief | "new" | null>(null);
+  const [viewing, setViewing] = useState<BranchDetail | null>(null);
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const del = useMutation({
@@ -961,6 +1054,13 @@ function BranchesTab() {
               <div className="admin-row__sub">{b.address}</div>
             </div>
             <div className="admin-row__actions">
+              <button
+                type="button"
+                className="admin-btn-sm"
+                onClick={() => setViewing(branches.data?.find((x) => x.id === b.id) ?? b)}
+              >
+                Zobrazit
+              </button>
               <button type="button" className="admin-btn-sm" onClick={() => setEditing(b)}>
                 Upravit
               </button>
@@ -978,6 +1078,29 @@ function BranchesTab() {
         ))}
         {list.length === 0 && !branches.isLoading && <p className="admin-empty">Žádné pobočky.</p>}
       </div>
+
+      {viewing && (
+        <AdminDetailModal title={viewing.name} onClose={() => setViewing(null)}>
+          <DetailRow label="Název" value={viewing.name} />
+          <DetailRow label="Adresa" value={viewing.address} />
+          <DetailRow
+            label="Trenéři"
+            value={
+              viewing.trainers?.length
+                ? viewing.trainers.map((t) => `${t.first_name} ${t.last_name}`).join(", ")
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Děti"
+            value={
+              viewing.students?.length
+                ? viewing.students.map((s) => `${s.first_name} ${s.last_name} (${s.age_group})`).join(", ")
+                : "—"
+            }
+          />
+        </AdminDetailModal>
+      )}
 
       {editing && (
         <BranchForm

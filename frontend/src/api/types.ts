@@ -141,9 +141,11 @@ export interface AttendanceMonthlyReportRow {
 }
 
 export interface AttendanceMonthlyReport {
-  group_id: number;
+  group_id?: number | null;
+  branch_id?: number | null;
   month: string;
   sessions: number;
+  group_count?: number;
   rows: AttendanceMonthlyReportRow[];
 }
 
@@ -175,6 +177,13 @@ export interface TrainerBrief {
   id: number;
   first_name: string;
   last_name: string;
+}
+
+export interface BranchDetail extends BranchBrief {
+  created_at?: string;
+  updated_at?: string;
+  students?: StudentBrief[];
+  trainers?: TrainerBrief[];
 }
 
 export interface AttendanceSummary {
