@@ -7,15 +7,17 @@ import { useAdmin } from "../context/AdminContext";
 import { computeAgeGroup } from "../lib/ageGroup";
 import type {
   AgeGroup,
+  AdminEventParticipation,
   BranchBrief,
   ParentRow,
   ResendCredentialsRead,
+  RsvpStatus,
   StudentWithBranches,
   Trainer,
 } from "../api/types";
 import "./AdminPage.css";
 
-type TabId = "dashboard" | "trainers" | "students" | "parents" | "branches" | "export";
+type TabId = "dashboard" | "trainers" | "students" | "parents" | "branches" | "events" | "export";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "dashboard", label: "Přehled" },
@@ -23,8 +25,23 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "students", label: "Děti" },
   { id: "parents", label: "Rodiče" },
   { id: "branches", label: "Pobočky" },
+  { id: "events", label: "Akce" },
   { id: "export", label: "Export" },
 ];
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  tournament: "Turnaj",
+  training: "Trénink",
+  meeting: "Schůzka",
+  seminar: "Školení",
+  other: "Akce",
+};
+
+const RSVP_LABELS: Record<RsvpStatus, string> = {
+  yes: "Ano",
+  no: "Ne",
+  maybe: "Možná",
+};
 
 const AGE_GROUPS: AgeGroup[] = ["U8", "U10", "U12", "U14", "U16", "U18"];
 
@@ -79,6 +96,7 @@ export function AdminPage() {
       {tab === "students" && <StudentsTab />}
       {tab === "parents" && <ParentsTab />}
       {tab === "branches" && <BranchesTab />}
+      {tab === "events" && <EventsTab />}
       {tab === "export" && <ExportTab />}
     </div>
   );
@@ -1030,6 +1048,135 @@ function BranchForm({
   );
 }
 
+// --- Events ---
+
+function EventsTab() {
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [month, setMonth] = useState(defaultMonth);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const events = useQuery({
+    queryKey: ["admin", "event-participation", month],
+    queryFn: () => api.adminEventParticipation(month),
+    enabled: /^\d{4}-\d{2}$/.test(month),
+  });
+
+  const download = useMutation({
+    mutationFn: () => api.downloadEventParticipationCsv(month),
+  });
+
+  const list = events.data ?? [];
+
+  return (
+    <div>
+      <div className="admin-form" style={{ maxWidth: 520, marginBottom: 16 }}>
+        <div className="admin-section-title">Účast na akcích</div>
+        <p className="page-header__sub" style={{ margin: "0 0 12px" }}>
+          Přehled potvrzení účasti (RSVP) trenérů a dětí na akcích v kalendáři.
+        </p>
+        <div className="admin-guardian__grid">
+          <div className="admin-field">
+            <label>Měsíc</label>
+            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          </div>
+        </div>
+        <div className="admin-form__actions">
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={!month || download.isPending}
+            onClick={() => download.mutate()}
+          >
+            {download.isPending ? "Stahuji…" : "Export CSV"}
+          </button>
+        </div>
+        {download.isError && <p className="error-box">{String(download.error)}</p>}
+      </div>
+
+      {events.isLoading && <p className="admin-empty">Načítám akce…</p>}
+      {events.isError && <p className="error-box">{String(events.error)}</p>}
+      {!events.isLoading && list.length === 0 && (
+        <p className="admin-empty">V tomto měsíci nejsou žádné akce.</p>
+      )}
+
+      <div className="admin-list">
+        {list.map((event) => {
+          const when = new Date(event.starts_at).toLocaleString("cs-CZ", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const expanded = expandedId === event.event_id;
+          return (
+            <div key={event.event_id} className="admin-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start", width: "100%" }}>
+                <div className="admin-row__main">
+                  <div className="admin-row__title">{event.title}</div>
+                  <div className="admin-row__sub">
+                    {when}
+                    {event.location ? ` · ${event.location}` : ""}
+                    {" · "}
+                    {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
+                  </div>
+                  <div className="admin-row__sub">
+                    Účast: {event.yes_count} ano ({event.trainer_yes} trenérů, {event.student_yes} dětí)
+                    {event.maybe_count > 0 ? ` · ${event.maybe_count} možná` : ""}
+                    {event.no_count > 0 ? ` · ${event.no_count} ne` : ""}
+                  </div>
+                </div>
+                <div className="admin-row__actions">
+                  <button
+                    type="button"
+                    className="admin-btn-sm"
+                    onClick={() => setExpandedId(expanded ? null : event.event_id)}
+                  >
+                    {expanded ? "Skrýt" : "Účastníci"}
+                  </button>
+                </div>
+              </div>
+              {expanded && <EventParticipantsTable event={event} />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EventParticipantsTable({ event }: { event: AdminEventParticipation }) {
+  if (event.participants.length === 0) {
+    return <p className="admin-empty" style={{ margin: "12px 0 0" }}>Zatím nikdo nepotvrdil účast.</p>;
+  }
+
+  return (
+    <table className="admin-mini-table" style={{ marginTop: 12 }}>
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Jméno</th>
+          <th>Kategorie</th>
+          <th>Rodič</th>
+          <th>Účast</th>
+        </tr>
+      </thead>
+      <tbody>
+        {event.participants.map((p) => (
+          <tr key={`${p.kind}-${p.person_id}`}>
+            <td>{p.kind === "trainer" ? "Trenér" : "Dítě"}</td>
+            <td>{p.name}</td>
+            <td>{p.age_group ?? "—"}</td>
+            <td>{p.parent_name ?? "—"}</td>
+            <td>{RSVP_LABELS[p.status]}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 // --- Export ---
 
 function ExportTab() {
@@ -1039,13 +1186,16 @@ function ExportTab() {
   const [branchId, setBranchId] = useState<number | "">("");
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
-  const download = useMutation({
+  const downloadTraining = useMutation({
     mutationFn: () => api.downloadAttendanceCsv(month, branchId === "" ? undefined : branchId),
+  });
+  const downloadEvents = useMutation({
+    mutationFn: () => api.downloadEventParticipationCsv(month),
   });
 
   return (
-    <div className="admin-form" style={{ maxWidth: 420 }}>
-      <div className="admin-section-title">Export docházky do CSV</div>
+    <div className="admin-form" style={{ maxWidth: 480 }}>
+      <div className="admin-section-title">Export docházky na trénincích</div>
       <div className="admin-field">
         <label>Měsíc</label>
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
@@ -1064,15 +1214,31 @@ function ExportTab() {
           ))}
         </select>
       </div>
-      {download.isError && <p className="error-box">{String(download.error)}</p>}
+      {downloadTraining.isError && <p className="error-box">{String(downloadTraining.error)}</p>}
       <div className="admin-form__actions">
         <button
           type="button"
           className="btn btn--primary"
-          disabled={!month || download.isPending}
-          onClick={() => download.mutate()}
+          disabled={!month || downloadTraining.isPending}
+          onClick={() => downloadTraining.mutate()}
         >
-          {download.isPending ? "Stahuji…" : "Stáhnout CSV"}
+          {downloadTraining.isPending ? "Stahuji…" : "Stáhnout CSV tréninků"}
+        </button>
+      </div>
+
+      <div className="admin-section-title" style={{ marginTop: 28 }}>Export účasti na akcích</div>
+      <p className="page-header__sub" style={{ margin: "0 0 12px" }}>
+        Potvrzení účasti trenérů a dětí (RSVP) za vybraný měsíc.
+      </p>
+      {downloadEvents.isError && <p className="error-box">{String(downloadEvents.error)}</p>}
+      <div className="admin-form__actions">
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={!month || downloadEvents.isPending}
+          onClick={() => downloadEvents.mutate()}
+        >
+          {downloadEvents.isPending ? "Stahuji…" : "Stáhnout CSV akcí"}
         </button>
       </div>
     </div>

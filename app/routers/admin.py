@@ -1,10 +1,11 @@
 import csv
 import io
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,7 +15,10 @@ from app.database import get_db
 from app.models import (
     AttendanceRecord,
     Branch,
+    Event,
+    EventRsvp,
     Parent,
+    RsvpStatus,
     Student,
     Trainer,
     TrainingGroup,
@@ -25,6 +29,22 @@ from app.routers.registration import _try_send_credentials_email
 from app.security import create_admin_token, hash_pin, require_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+LOCAL_TZ = ZoneInfo("Europe/Prague")
+
+_EVENT_TYPE_LABELS = {
+    "tournament": "Turnaj",
+    "training": "Trénink",
+    "meeting": "Schůzka",
+    "seminar": "Školení",
+    "other": "Akce",
+}
+
+_RSVP_LABELS = {
+    "yes": "Ano",
+    "no": "Ne",
+    "maybe": "Možná",
+}
 
 
 class AdminLogin(BaseModel):
@@ -61,6 +81,91 @@ class ResendCredentialsRead(BaseModel):
     email: str
     email_sent: bool
     email_error: str | None
+
+
+class AdminEventParticipantRow(BaseModel):
+    kind: str = Field(description="trainer nebo student")
+    person_id: int
+    name: str
+    status: RsvpStatus
+    age_group: str | None = None
+    parent_name: str | None = None
+
+
+class AdminEventParticipationRead(BaseModel):
+    event_id: int
+    title: str
+    event_type: str
+    starts_at: datetime
+    location: str
+    yes_count: int = 0
+    no_count: int = 0
+    maybe_count: int = 0
+    trainer_yes: int = 0
+    student_yes: int = 0
+    participants: list[AdminEventParticipantRow] = Field(default_factory=list)
+
+
+def _event_load_options():
+    return (
+        selectinload(Event.rsvps).selectinload(EventRsvp.trainer),
+        selectinload(Event.rsvps).selectinload(EventRsvp.parent),
+        selectinload(Event.rsvps).selectinload(EventRsvp.student),
+    )
+
+
+def _participants_for_event(event: Event) -> list[AdminEventParticipantRow]:
+    rows: list[AdminEventParticipantRow] = []
+    for rsvp in event.rsvps:
+        if rsvp.trainer is not None:
+            rows.append(
+                AdminEventParticipantRow(
+                    kind="trainer",
+                    person_id=rsvp.trainer_id,
+                    name=f"{rsvp.trainer.first_name} {rsvp.trainer.last_name}",
+                    status=rsvp.status,
+                ),
+            )
+        elif rsvp.student is not None:
+            age = rsvp.student.age_group.value if hasattr(rsvp.student.age_group, "value") else str(rsvp.student.age_group)
+            parent_name = (
+                f"{rsvp.parent.first_name} {rsvp.parent.last_name}" if rsvp.parent is not None else None
+            )
+            rows.append(
+                AdminEventParticipantRow(
+                    kind="student",
+                    person_id=rsvp.student_id,
+                    name=f"{rsvp.student.first_name} {rsvp.student.last_name}",
+                    status=rsvp.status,
+                    age_group=age,
+                    parent_name=parent_name,
+                ),
+            )
+    rows.sort(key=lambda r: (0 if r.kind == "trainer" else 1, r.name.lower()))
+    return rows
+
+
+def _event_to_participation_read(event: Event) -> AdminEventParticipationRead:
+    participants = _participants_for_event(event)
+    yes = sum(1 for p in participants if p.status == RsvpStatus.yes)
+    no = sum(1 for p in participants if p.status == RsvpStatus.no)
+    maybe = sum(1 for p in participants if p.status == RsvpStatus.maybe)
+    trainer_yes = sum(1 for p in participants if p.kind == "trainer" and p.status == RsvpStatus.yes)
+    student_yes = sum(1 for p in participants if p.kind == "student" and p.status == RsvpStatus.yes)
+    event_type = event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type)
+    return AdminEventParticipationRead(
+        event_id=event.id,
+        title=event.title,
+        event_type=event_type,
+        starts_at=event.starts_at,
+        location=event.location,
+        yes_count=yes,
+        no_count=no,
+        maybe_count=maybe,
+        trainer_yes=trainer_yes,
+        student_yes=student_yes,
+        participants=participants,
+    )
 
 
 @router.post("/login", response_model=AdminAuthToken)
@@ -195,6 +300,76 @@ async def export_attendance_csv(
     buffer.seek(0)
     filename = f"dochazka-{month}.csv"
     # Prepend BOM so Excel opens UTF-8 with diacritics correctly.
+    content = "\ufeff" + buffer.getvalue()
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/event-participation", response_model=list[AdminEventParticipationRead])
+async def admin_event_participation(
+    month: str = Query(..., description="Měsíc ve formátu YYYY-MM."),
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> list[AdminEventParticipationRead]:
+    start, end = _month_range(month)
+    result = await db.execute(
+        select(Event)
+        .where(Event.starts_at >= start, Event.starts_at < end)
+        .options(*_event_load_options())
+        .order_by(Event.starts_at.desc(), Event.id.desc()),
+    )
+    events = result.scalars().unique().all()
+    return [_event_to_participation_read(event) for event in events]
+
+
+@router.get("/event-participation.csv")
+async def export_event_participation_csv(
+    month: str = Query(..., description="Měsíc ve formátu YYYY-MM."),
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> StreamingResponse:
+    start, end = _month_range(month)
+    result = await db.execute(
+        select(Event)
+        .where(Event.starts_at >= start, Event.starts_at < end)
+        .options(*_event_load_options())
+        .order_by(Event.starts_at.asc(), Event.id.asc()),
+    )
+    events = result.scalars().unique().all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        ["Datum", "Čas", "Akce", "Typ", "Místo", "Role", "Jméno", "Věk. kategorie", "Rodič", "Účast"],
+    )
+    for event in events:
+        local = event.starts_at.astimezone(LOCAL_TZ)
+        type_label = _EVENT_TYPE_LABELS.get(
+            event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type),
+            "Akce",
+        )
+        for participant in _participants_for_event(event):
+            status_value = participant.status.value if hasattr(participant.status, "value") else str(participant.status)
+            writer.writerow(
+                [
+                    local.date().isoformat(),
+                    local.strftime("%H:%M"),
+                    event.title,
+                    type_label,
+                    event.location,
+                    "Trenér" if participant.kind == "trainer" else "Dítě",
+                    participant.name,
+                    participant.age_group or "",
+                    participant.parent_name or "",
+                    _RSVP_LABELS.get(status_value, status_value),
+                ],
+            )
+
+    buffer.seek(0)
+    filename = f"ucast-akce-{month}.csv"
     content = "\ufeff" + buffer.getvalue()
     return StreamingResponse(
         iter([content]),

@@ -506,6 +506,20 @@ export const api = {
     if (branchId) params.set("branch_id", String(branchId));
     return downloadRequest(`/admin/attendance.csv?${params}`, `dochazka-${month}.csv`, "admin");
   },
+  adminEventParticipation: (month: string) => {
+    const params = new URLSearchParams({ month });
+    return request<import("./types").AdminEventParticipation[]>(
+      `/admin/event-participation?${params}`,
+      undefined,
+      false,
+      true,
+      "admin",
+    );
+  },
+  downloadEventParticipationCsv: (month: string) => {
+    const params = new URLSearchParams({ month });
+    return downloadRequest(`/admin/event-participation.csv?${params}`, `ucast-akce-${month}.csv`, "admin");
+  },
 };
 
 function toSummary(record: {

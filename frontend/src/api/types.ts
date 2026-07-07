@@ -545,6 +545,29 @@ export interface ResendCredentialsRead {
   email_error: string | null;
 }
 
+export interface AdminEventParticipantRow {
+  kind: "trainer" | "student";
+  person_id: number;
+  name: string;
+  status: RsvpStatus;
+  age_group?: string | null;
+  parent_name?: string | null;
+}
+
+export interface AdminEventParticipation {
+  event_id: number;
+  title: string;
+  event_type: string;
+  starts_at: string;
+  location: string;
+  yes_count: number;
+  no_count: number;
+  maybe_count: number;
+  trainer_yes: number;
+  student_yes: number;
+  participants: AdminEventParticipantRow[];
+}
+
 export interface ParentRow {
   id: number;
   first_name: string;
