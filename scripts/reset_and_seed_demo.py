@@ -16,6 +16,7 @@ from datetime import date, timedelta
 import httpx
 
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8001").rstrip("/")
+API_WRITE_KEY = os.environ.get("API_WRITE_KEY", "")
 ADMIN_USER = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "admin")
 TRAINER_PIN = os.environ.get("TRAINER_PIN", "1234")
@@ -92,6 +93,8 @@ PARENT_LAST = (
 
 def headers(token: str | None = None) -> dict[str, str]:
     h = {"Content-Type": "application/json"}
+    if API_WRITE_KEY:
+        h["X-API-Key"] = API_WRITE_KEY
     if token:
         h["Authorization"] = f"Bearer {token}"
     return h

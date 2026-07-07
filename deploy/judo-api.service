@@ -1,0 +1,16 @@
+[Unit]
+Description=Judo club API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=judo
+Group=judo
+WorkingDirectory=/opt/judo
+EnvironmentFile=/opt/judo/.env
+ExecStart=/opt/judo/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

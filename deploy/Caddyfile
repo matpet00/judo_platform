@@ -1,0 +1,23 @@
+# /etc/caddy/Caddyfile — šablona pro Oracle VPS
+#
+# Varianta A: jen veřejná IP (HTTP, rychlý start)
+#   sudo cp /opt/judo/deploy/Caddyfile /etc/caddy/Caddyfile
+#
+# Varianta B: vlastní doména (HTTPS automaticky)
+#   Nahraď :80 blok řádkem:  judo.tvujklub.cz {
+#   a stejný obsah handle/ root uvnitř.
+
+:80 {
+	root * /opt/judo/frontend/dist
+	encode gzip
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy 127.0.0.1:8001
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -114,6 +114,15 @@ Backend musí běžet na portu **8001** (CORS povolen pro `:5173`).
 
 **Migrace schématu:** při změně sloupců v SQLite smažte lokální `judo.db` a nechte aplikaci znovu vytvořit tabulky při startu. U entit pobočka, trenér, rodič a žák odpovědi obsahují `created_at` a `updated_at` (časová razítka z databáze).
 
+## Nasazení online
+
+| Platforma | Návod | Poznámka |
+|-----------|--------|----------|
+| **Render.com** | **[docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md)** | Zdarma, GitHub login, minimum údajů |
+| **Oracle Cloud VPS** | **[docs/DEPLOY_ORACLE.md](docs/DEPLOY_ORACLE.md)** | Zdarma VPS, více osobních údajů |
+
+Skripty: `render.yaml` (Render), `deploy/install.sh` (VPS)
+
 ## Skupiny věku
 
 `U8`, `U10`, `U12`, `U14`, `U16`, `U18` — pole `age_group` u `POST /students`.
