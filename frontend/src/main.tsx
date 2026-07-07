@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { TrainerProvider, useTrainer } from "./context/TrainerContext";
 import { ParentProvider, useParent } from "./context/ParentContext";
+import { AdminProvider } from "./context/AdminContext";
 import { AttendanceBootPage, BootPage } from "./pages/BootPage";
+import { AdminPage } from "./pages/AdminPage";
 import { BoardPage } from "./pages/BoardPage";
 import { TodayPage } from "./pages/TodayPage";
 import { SessionSwipePage } from "./pages/SessionSwipePage";
@@ -60,9 +62,11 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <TrainerProvider>
         <ParentProvider>
+          <AdminProvider>
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<BootPage />} />
+              <Route path="/admin" element={<AdminPage />} />
               <Route path="/attendance" element={<AttendanceBootPage />} />
               <Route path="/board" element={<BoardPage />} />
               <Route path="/today" element={<TodayPage />} />
@@ -78,6 +82,7 @@ createRoot(document.getElementById("root")!).render(
             <NotificationBell />
             <AppFooter />
           </BrowserRouter>
+          </AdminProvider>
         </ParentProvider>
       </TrainerProvider>
     </QueryClientProvider>

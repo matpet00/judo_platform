@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import init_db
 from app.reminders import reminder_loop
 from app.routers import (
+    admin,
     branches,
     chat,
     events,
@@ -61,6 +62,7 @@ async def api_write_key_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+app.include_router(admin.router)
 app.include_router(trainers.router)
 app.include_router(branches.router)
 app.include_router(parents.router)

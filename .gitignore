@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .env
 judo.db
+judo.db-shm
+judo.db-wal
 payload_examples.txt
 uploads/
 frontend/node_modules/

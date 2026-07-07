@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Branch, Trainer, student_branches, trainer_branches
+from app.models import Branch, Trainer, TrainingGroup, student_branches, trainer_branches
 from app.schemas import (
     BranchCreate,
     BranchDetailRead,
@@ -87,10 +87,13 @@ async def delete_branch(branch_id: int, db: AsyncSession = Depends(get_db)) -> N
     n_students = await db.scalar(
         select(func.count()).select_from(student_branches).where(student_branches.c.branch_id == branch_id),
     )
-    if (n_trainers or 0) > 0 or (n_students or 0) > 0:
+    n_groups = await db.scalar(
+        select(func.count()).select_from(TrainingGroup).where(TrainingGroup.branch_id == branch_id),
+    )
+    if (n_trainers or 0) > 0 or (n_students or 0) > 0 or (n_groups or 0) > 0:
         raise HTTPException(
             status_code=409,
-            detail="Branch has assigned trainers or students. Reassign or delete them first.",
+            detail="Branch has assigned trainers, students, or training groups. Reassign or delete them first.",
         )
 
     await db.delete(branch)

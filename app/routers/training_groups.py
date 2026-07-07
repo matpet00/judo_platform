@@ -45,7 +45,7 @@ from app.training_notify import (
     notify_training_series_deleted,
 )
 from app.routers.training_sessions import _session_to_read, create_session_for_group
-from app.security import require_trainer_token
+from app.security import require_trainer_or_admin, require_trainer_token
 
 router = APIRouter(prefix="/training-groups", tags=["training-groups"])
 
@@ -219,7 +219,7 @@ async def _get_students_for_group(
 async def list_training_groups(
     db: AsyncSession = Depends(get_db),
     branch_id: int | None = Query(default=None, ge=1),
-    _trainer_id: int = Depends(require_trainer_token),
+    _actor: int | None = Depends(require_trainer_or_admin),
 ) -> list[TrainingGroupDetailRead]:
     stmt = (
         select(TrainingGroup)
@@ -526,7 +526,7 @@ async def create_training_group(
 async def get_training_group(
     group_id: int,
     db: AsyncSession = Depends(get_db),
-    _trainer_id: int = Depends(require_trainer_token),
+    _actor: int | None = Depends(require_trainer_or_admin),
 ) -> TrainingGroupDetailRead:
     group = await _get_group_or_404(db, group_id)
     return _group_to_detail(group)
@@ -701,7 +701,7 @@ async def replace_training_group_students(
     group_id: int,
     payload: TrainingGroupStudentsReplace,
     db: AsyncSession = Depends(get_db),
-    _trainer_id: int = Depends(require_trainer_token),
+    _actor: int | None = Depends(require_trainer_or_admin),
 ) -> TrainingGroupDetailRead:
     group = await _get_group_or_404(db, group_id)
     students = await _get_students_for_group(db, group, payload.student_ids)

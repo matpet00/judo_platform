@@ -10,7 +10,7 @@ from app.config import settings
 
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-PUBLIC_WRITE_SUFFIXES = ("/verify-pin", "/parents/login", "/register")
+PUBLIC_WRITE_SUFFIXES = ("/verify-pin", "/parents/login", "/register", "/admin/login")
 
 
 def hash_pin(pin: str) -> str:
@@ -50,6 +50,23 @@ def decode_any_token(token: str) -> tuple[str, int]:
         return kind, int(payload["sub"])
     except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.") from exc
+
+
+def create_admin_token() -> tuple[str, datetime]:
+    expires_at = datetime.now(UTC) + timedelta(hours=settings.jwt_ttl_hours)
+    payload = {"sub": "admin", "typ": "admin", "exp": expires_at}
+    token = jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+    return token, expires_at
+
+
+def decode_admin_token(token: str) -> bool:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+        if payload.get("typ") != "admin":
+            raise ValueError("Not an admin token.")
+        return True
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token.") from exc
 
 
 def create_parent_token(parent_id: int) -> tuple[str, datetime]:
@@ -105,6 +122,26 @@ async def get_actor(authorization: str | None = Header(default=None)) -> Actor:
     if kind == "trainer":
         return Actor(kind="trainer", trainer_id=subject_id)
     return Actor(kind="parent", parent_id=subject_id)
+
+
+async def require_admin(authorization: str | None = Header(default=None)) -> bool:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing admin token.")
+    return decode_admin_token(authorization.removeprefix("Bearer ").strip())
+
+
+async def require_trainer_or_admin(authorization: str | None = Header(default=None)) -> int | None:
+    """Accept a trainer token (returns trainer id) or an admin token (returns None)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token.")
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.") from exc
+    if payload.get("typ") == "admin":
+        return None
+    return decode_trainer_token(token)
 
 
 async def require_parent_token(authorization: str | None = Header(default=None)) -> int:

@@ -114,6 +114,10 @@ export function BootPage() {
               {unreadEvents > 0 ? `${unreadEvents} novinek v plánovači` : "Akce a tréninky"}
             </span>
           </button>
+          <button type="button" className="trainer-card" onClick={() => navigate("/admin")}>
+            <span className="trainer-card__name">Admin</span>
+            <span className="trainer-card__branch">Správa klubu (heslo)</span>
+          </button>
         </div>
         <button
           type="button"

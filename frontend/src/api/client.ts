@@ -1,11 +1,17 @@
 import type { AttendanceStatus, AttendanceSummary, NotificationCreate } from "./types";
 import { parseApiError } from "../lib/apiError";
-import { getParentToken, getTrainerToken } from "../lib/auth";
+import { getAdminToken, getParentToken, getTrainerToken } from "../lib/auth";
 
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
 const WRITE_KEY = import.meta.env.VITE_API_WRITE_KEY ?? "";
 
-type Role = "trainer" | "parent";
+type Role = "trainer" | "parent" | "admin";
+
+function tokenForRole(role: Role): string | null {
+  if (role === "parent") return getParentToken();
+  if (role === "admin") return getAdminToken();
+  return getTrainerToken();
+}
 
 function buildHeaders(mutating: boolean, authenticated = false, role: Role = "trainer"): HeadersInit {
   const headers: Record<string, string> = {
@@ -15,7 +21,7 @@ function buildHeaders(mutating: boolean, authenticated = false, role: Role = "tr
     headers["X-API-Key"] = WRITE_KEY;
   }
   if (mutating || authenticated) {
-    const token = role === "parent" ? getParentToken() : getTrainerToken();
+    const token = tokenForRole(role);
     if (token) headers.Authorization = `Bearer ${token}`;
   }
   return headers;
@@ -67,7 +73,7 @@ async function uploadRequest<T>(path: string, formData: FormData, role: Role = "
 
 async function downloadRequest(path: string, filename: string, role: Role = "trainer"): Promise<void> {
   const headers: Record<string, string> = {};
-  const token = role === "parent" ? getParentToken() : getTrainerToken();
+  const token = tokenForRole(role);
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}${path}`, { headers });
   if (!res.ok) {
@@ -388,6 +394,75 @@ export const api = {
     downloadRequest(`/events/${eventId}/attachments/${attachmentId}/download`, filename, role),
   deleteEventAttachment: (eventId: number, attachmentId: number, role: Role = "trainer") =>
     request<void>(`/events/${eventId}/attachments/${attachmentId}`, { method: "DELETE" }, true, false, role),
+
+  // --- Admin ---
+  adminLogin: (username: string, password: string) =>
+    request<import("./types").AdminAuthToken>("/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }, true),
+  adminStats: () =>
+    request<import("./types").AdminStats>("/admin/stats", undefined, false, true, "admin"),
+  adminTrainingGroups: () =>
+    request<import("./types").TrainingGroup[]>("/training-groups", undefined, false, true, "admin"),
+  adminReplaceGroupStudents: (id: number, studentIds: number[]) =>
+    request<import("./types").TrainingGroup>(`/training-groups/${id}/students`, {
+      method: "PUT",
+      body: JSON.stringify({ student_ids: studentIds }),
+    }, true, false, "admin"),
+  createTrainer: (payload: import("./types").TrainerCreate) =>
+    request<import("./types").Trainer>("/trainers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  updateTrainer: (id: number, payload: import("./types").TrainerPatch) =>
+    request<import("./types").Trainer>(`/trainers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  deleteTrainer: (id: number) =>
+    request<void>(`/trainers/${id}`, { method: "DELETE" }, true, false, "admin"),
+  createStudent: (payload: import("./types").StudentCreate) =>
+    request<import("./types").StudentWithBranches>("/students", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  updateStudent: (id: number, payload: import("./types").StudentPatch) =>
+    request<import("./types").StudentWithBranches>(`/students/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  deleteStudent: (id: number) =>
+    request<void>(`/students/${id}`, { method: "DELETE" }, true, false, "admin"),
+  createBranch: (payload: import("./types").BranchCreate) =>
+    request<import("./types").BranchBrief>("/branches", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  updateBranch: (id: number, payload: import("./types").BranchCreate) =>
+    request<import("./types").BranchBrief>(`/branches/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  deleteBranch: (id: number) =>
+    request<void>(`/branches/${id}`, { method: "DELETE" }, true, false, "admin"),
+  adminParents: () => request<import("./types").ParentRow[]>("/parents", undefined, false, true, "admin"),
+  updateParent: (id: number, payload: import("./types").ParentPatch) =>
+    request<import("./types").ParentRow>(`/parents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true, false, "admin"),
+  deleteParent: (id: number) =>
+    request<void>(`/parents/${id}`, { method: "DELETE" }, true, false, "admin"),
+  resendParentCredentials: (id: number) =>
+    request<import("./types").ResendCredentialsRead>(`/admin/parents/${id}/resend-credentials`, {
+      method: "POST",
+    }, true, false, "admin"),
+  downloadAttendanceCsv: (month: string, branchId?: number) => {
+    const params = new URLSearchParams({ month });
+    if (branchId) params.set("branch_id", String(branchId));
+    return downloadRequest(`/admin/attendance.csv?${params}`, `dochazka-${month}.csv`, "admin");
+  },
 };
 
 function toSummary(record: import("./types").AttendanceRecordRead): AttendanceSummary {

@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import select, text
+from sqlalchemy import event, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -11,6 +11,24 @@ engine = create_async_engine(
     settings.database_url,
     echo=False,
 )
+
+
+if settings.database_url.startswith("sqlite"):
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+        """Tune SQLite for concurrent access.
+
+        WAL lets readers run while a single writer commits (default rollback
+        journal blocks readers during writes), and busy_timeout makes writers
+        wait for a held lock instead of instantly failing with 'database is
+        locked' under concurrency.
+        """
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 DEFAULT_TRAINER_PIN = "1234"

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import AttendanceRecord, Branch, Parent, Student, TrainingSession
+from app.models import AttendanceRecord, Branch, EventRsvp, Parent, Student, TrainingSession
 from app.schemas import (
     AttendanceRecordWithSessionRead,
     BranchRead,
@@ -177,9 +177,13 @@ async def patch_student(
         student.birth_date = data["birth_date"]
 
     await db.commit()
-    await db.refresh(student, attribute_names=["parents", "branches"])
 
-    return _student_to_read(student)
+    result = await db.execute(
+        select(Student)
+        .where(Student.id == student_id)
+        .options(selectinload(Student.parents), selectinload(Student.branches)),
+    )
+    return _student_to_read(result.scalar_one())
 
 
 @router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -187,6 +191,10 @@ async def delete_student(student_id: int, db: AsyncSession = Depends(get_db)) ->
     student = await db.get(Student, student_id)
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found.")
+    # SQLite may not enforce ON DELETE, so remove one-to-many children explicitly
+    # (attendance_records.student_id is NOT NULL and would otherwise block the delete).
+    await db.execute(delete(AttendanceRecord).where(AttendanceRecord.student_id == student_id))
+    await db.execute(delete(EventRsvp).where(EventRsvp.student_id == student_id))
     await db.delete(student)
     await db.commit()
 

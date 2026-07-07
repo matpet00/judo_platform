@@ -126,9 +126,11 @@ async def patch_trainer(
         trainer.last_name = data["last_name"]
 
     await db.commit()
-    await db.refresh(trainer, attribute_names=["branches"])
 
-    return _trainer_to_read(trainer)
+    result = await db.execute(
+        select(Trainer).where(Trainer.id == trainer_id).options(selectinload(Trainer.branches)),
+    )
+    return _trainer_to_read(result.scalar_one())
 
 
 @router.delete("/{trainer_id}", status_code=status.HTTP_204_NO_CONTENT)

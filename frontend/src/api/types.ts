@@ -147,12 +147,21 @@ export interface AttendanceMonthlyReport {
   rows: AttendanceMonthlyReportRow[];
 }
 
+export interface StudentGuardian {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+}
+
 export interface StudentWithBranches {
   id: number;
   first_name: string;
   last_name: string;
   age_group: AgeGroup;
   branches: BranchBrief[];
+  parents?: StudentGuardian[];
 }
 
 export interface StudentBrief {
@@ -494,6 +503,97 @@ export interface ClubRegistrationRead {
 export interface ParentEmailStatus {
   exists: boolean;
   has_login: boolean;
+}
+
+export interface AdminAuthToken {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+}
+
+export interface AdminCountRow {
+  label: string;
+  count: number;
+}
+
+export interface AdminStats {
+  trainers: number;
+  students: number;
+  parents: number;
+  branches: number;
+  training_groups: number;
+  parents_without_login: number;
+  students_per_branch: AdminCountRow[];
+  students_per_age_group: AdminCountRow[];
+}
+
+export interface ResendCredentialsRead {
+  parent_id: number;
+  username: string;
+  password: string | null;
+  email: string;
+  email_sent: boolean;
+  email_error: string | null;
+}
+
+export interface ParentRow {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TrainerCreate {
+  first_name: string;
+  last_name: string;
+  branch_ids: number[];
+}
+
+export interface TrainerPatch {
+  first_name?: string;
+  last_name?: string;
+  branch_ids?: number[];
+  pin?: string;
+}
+
+export interface StudentParentInput {
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+}
+
+export interface StudentCreate {
+  first_name: string;
+  last_name: string;
+  age_group: AgeGroup;
+  birth_date?: string | null;
+  branch_ids: number[];
+  parents?: StudentParentInput[];
+}
+
+export interface StudentPatch {
+  first_name?: string;
+  last_name?: string;
+  age_group?: AgeGroup;
+  birth_date?: string | null;
+  branch_ids?: number[];
+  parents?: StudentParentInput[];
+}
+
+export interface BranchCreate {
+  name: string;
+  address: string;
+}
+
+export interface ParentPatch {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface AgeGroupPreview {

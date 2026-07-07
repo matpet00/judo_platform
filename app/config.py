@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
 
     api_write_key: str | None = None
+    admin_username: str = "admin"
+    admin_password: str = "admin"
     jwt_secret: str = "dev-jwt-change-me"
     jwt_ttl_hours: int = 8
     pin_pepper: str = "dev-pin-pepper-change-me"

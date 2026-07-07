@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -529,42 +530,52 @@ async def set_rsvp(
     db: AsyncSession = Depends(get_db),
     viewer: Viewer = Depends(get_viewer),
 ) -> EventDetailRead:
-    event = await _get_visible_event_or_404(db, event_id, viewer)
+    # Concurrent submits for the same trainer/child can both try to INSERT and hit
+    # the unique constraint; re-read + retry once so the loser becomes an update.
+    for attempt in range(2):
+        event = await _get_visible_event_or_404(db, event_id, viewer)
 
-    if viewer.kind == "trainer":
-        if len(payload.responses) != 1 or payload.responses[0].student_id is not None:
-            raise HTTPException(status_code=422, detail="Trainers respond once, without a student_id.")
-        status_value = payload.responses[0].status
-        existing = next((r for r in event.rsvps if r.trainer_id == viewer.trainer_id), None)
-        if existing is not None:
-            existing.status = status_value
-        else:
-            db.add(EventRsvp(event_id=event_id, trainer_id=viewer.trainer_id, status=status_value))
-    else:
-        allowed_ids = {child.id for child in matched_children(viewer, event.targets)}
-        for item in payload.responses:
-            if item.student_id is None:
-                raise HTTPException(status_code=422, detail="Parents must respond per child (student_id required).")
-            if item.student_id not in allowed_ids:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only respond for your own children targeted by this event.",
-                )
-        existing_by_student = {r.student_id: r for r in event.rsvps if r.parent_id == viewer.parent_id}
-        for item in payload.responses:
-            existing = existing_by_student.get(item.student_id)
+        if viewer.kind == "trainer":
+            if len(payload.responses) != 1 or payload.responses[0].student_id is not None:
+                raise HTTPException(status_code=422, detail="Trainers respond once, without a student_id.")
+            status_value = payload.responses[0].status
+            existing = next((r for r in event.rsvps if r.trainer_id == viewer.trainer_id), None)
             if existing is not None:
-                existing.status = item.status
+                existing.status = status_value
             else:
-                db.add(
-                    EventRsvp(
-                        event_id=event_id,
-                        parent_id=viewer.parent_id,
-                        student_id=item.student_id,
-                        status=item.status,
-                    ),
-                )
-    await db.commit()
+                db.add(EventRsvp(event_id=event_id, trainer_id=viewer.trainer_id, status=status_value))
+        else:
+            allowed_ids = {child.id for child in matched_children(viewer, event.targets)}
+            for item in payload.responses:
+                if item.student_id is None:
+                    raise HTTPException(status_code=422, detail="Parents must respond per child (student_id required).")
+                if item.student_id not in allowed_ids:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You can only respond for your own children targeted by this event.",
+                    )
+            existing_by_student = {r.student_id: r for r in event.rsvps if r.parent_id == viewer.parent_id}
+            for item in payload.responses:
+                existing = existing_by_student.get(item.student_id)
+                if existing is not None:
+                    existing.status = item.status
+                else:
+                    db.add(
+                        EventRsvp(
+                            event_id=event_id,
+                            parent_id=viewer.parent_id,
+                            student_id=item.student_id,
+                            status=item.status,
+                        ),
+                    )
+        try:
+            await db.commit()
+            break
+        except IntegrityError:
+            await db.rollback()
+            if attempt == 1:
+                raise HTTPException(status_code=409, detail="Konflikt při ukládání odpovědi, zkuste to znovu.")
+
     db.expire_all()
     return await _load_detail(db, event_id, viewer)
 

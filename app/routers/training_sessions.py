@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -518,7 +519,16 @@ async def create_attendance_record(
         recorded_by_id=payload.recorded_by_id,
     )
     db.add(record)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # Concurrent create for the same (session, student) lost the race; the row
+        # now exists, so tell the client to PATCH instead of returning a 500.
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Attendance for this student in this session already exists. Use PATCH or PUT bulk.",
+        ) from exc
 
     result = await db.execute(
         select(AttendanceRecord)

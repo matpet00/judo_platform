@@ -1,10 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Parent, Student
+from app.models import (
+    ChatConversation,
+    ChatMessage,
+    ChatParticipant,
+    EventAttachment,
+    EventComment,
+    EventRsvp,
+    Notification,
+    NotificationComment,
+    NotificationReadReceipt,
+    NotificationTarget,
+    Parent,
+    Student,
+    TrainingOccurrenceComment,
+    student_parents,
+)
 from app.schemas import (
     ParentAuthToken,
     ParentCreate,
@@ -111,10 +126,47 @@ async def patch_parent(
     return parent
 
 
+async def _cleanup_parent_references(db: AsyncSession, parent_id: int) -> None:
+    """Detach/remove everything referencing this parent so the row can be deleted.
+
+    SQLite may not enforce ON DELETE actions on pre-existing schemas, so we do it
+    explicitly: null out authored content, drop membership rows, and remove the
+    parent's chat conversations.
+    """
+    # Authored content: keep the record but drop the author link.
+    for model, column in (
+        (TrainingOccurrenceComment, TrainingOccurrenceComment.author_parent_id),
+        (Notification, Notification.author_parent_id),
+        (NotificationComment, NotificationComment.author_parent_id),
+        (ChatMessage, ChatMessage.sender_parent_id),
+        (EventComment, EventComment.author_parent_id),
+        (EventAttachment, EventAttachment.uploaded_parent_id),
+    ):
+        await db.execute(update(model).where(column == parent_id).values({column.key: None}))
+
+    # Membership / targeting rows: safe to remove entirely.
+    await db.execute(delete(NotificationTarget).where(NotificationTarget.parent_id == parent_id))
+    await db.execute(delete(NotificationReadReceipt).where(NotificationReadReceipt.parent_id == parent_id))
+    await db.execute(delete(EventRsvp).where(EventRsvp.parent_id == parent_id))
+    await db.execute(delete(student_parents).where(student_parents.c.parent_id == parent_id))
+
+    # Chat: remove the parent's conversations along with their messages/participants.
+    conversation_ids = (
+        await db.scalars(
+            select(ChatParticipant.conversation_id).where(ChatParticipant.parent_id == parent_id),
+        )
+    ).all()
+    if conversation_ids:
+        await db.execute(delete(ChatMessage).where(ChatMessage.conversation_id.in_(conversation_ids)))
+        await db.execute(delete(ChatParticipant).where(ChatParticipant.conversation_id.in_(conversation_ids)))
+        await db.execute(delete(ChatConversation).where(ChatConversation.id.in_(conversation_ids)))
+
+
 @router.delete("/{parent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_parent(parent_id: int, db: AsyncSession = Depends(get_db)) -> None:
     parent = await db.get(Parent, parent_id)
     if parent is None:
         raise HTTPException(status_code=404, detail="Parent not found.")
+    await _cleanup_parent_references(db, parent_id)
     await db.delete(parent)
     await db.commit()
