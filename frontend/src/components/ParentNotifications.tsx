@@ -277,6 +277,12 @@ function ParentNotificationCard({
           </span>
           <h3>{notification.title}</h3>
           <p>{notification.body}</p>
+          {notification.comment_count > 0 && notification.last_comment_preview && (
+            <p className="notification-card__reply-preview">
+              <span className="notification-card__reply-label">Poslední reakce:</span>{" "}
+              {notification.last_comment_author}: {notification.last_comment_preview}
+            </p>
+          )}
           <small>
             {isExpired ? "expirováno" : `platí do ${formatDate(notification.visible_until)}`}
           </small>

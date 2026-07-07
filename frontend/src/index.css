@@ -838,6 +838,21 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.notification-card__reply-preview {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.12);
+  border-left: 3px solid var(--gold);
+  font-size: 0.82rem;
+  color: var(--cream);
+}
+
+.notification-card__reply-label {
+  color: var(--gold);
+  font-weight: 600;
+}
+
 .notification-card--expired {
   opacity: 0.58;
   border-left-color: var(--muted);

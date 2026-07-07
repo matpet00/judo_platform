@@ -556,6 +556,12 @@ function NotificationCard({ notification, branchName, currentTrainerId, onDelete
             {notification.title}
           </h3>
           <p>{notification.body}</p>
+          {notification.comment_count > 0 && notification.last_comment_preview && (
+            <p className="notification-card__reply-preview">
+              <span className="notification-card__reply-label">Poslední reakce:</span>{" "}
+              {notification.last_comment_author}: {notification.last_comment_preview}
+            </p>
+          )}
           <small>
             {notification.targets
               .map((target) => `${branchName(target.branch_id)} · ${recipientLabel(target)}`)
