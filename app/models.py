@@ -62,6 +62,11 @@ DEFAULT_BRANCHES: tuple[tuple[str, str], ...] = (
 
 # (jméno, příjmení, pobočky) — idempotentní seed při startu API
 DEFAULT_TRAINERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("Petr", "Matejcek", ("Orlova",)),
+    ("Tomas", "Sikora", ("Orlova",)),
+    ("Tomas", "Heczko", ("Orlova",)),
+    ("Viki", "Fintová", ("Orlova",)),
+    ("Tobias", "Mec", ("Orlova",)),
     ("Lukáš", "Morcin", ("Orlova",)),
     ("Eduard", "Lanča", ("Dolni Lutyne", "Orlova")),
     ("Roman", "Bielczyk", ("Orlova", "Dolni Lutyne")),

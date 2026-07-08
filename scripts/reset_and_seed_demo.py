@@ -25,6 +25,19 @@ STATE_PATH = os.environ.get("DEMO_STATE_PATH", "scripts/demo_state.json")
 KEEP_BRANCHES = ("Orlova", "Dolni Lutyne", "Petrvald")
 PER_BRANCH = 10
 
+# Všichni trenéři z lokální demo DB (idempotentně doplní chybějící přes API)
+DEMO_TRAINERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("Petr", "Matejcek", ("Orlova",)),
+    ("Tomas", "Sikora", ("Orlova",)),
+    ("Tomas", "Heczko", ("Orlova",)),
+    ("Viki", "Fintová", ("Orlova",)),
+    ("Tobias", "Mec", ("Orlova",)),
+    ("Lukáš", "Morcin", ("Orlova",)),
+    ("Eduard", "Lanča", ("Dolni Lutyne", "Orlova")),
+    ("Roman", "Bielczyk", ("Orlova", "Dolni Lutyne")),
+    ("Petr", "Steiniger", ("Petrvald",)),
+)
+
 FIRST_NAMES = (
     "Tereza", "Jan", "Eliška", "Matěj", "Anna", "Jakub", "Kateřina", "Lukáš", "Barbora", "Martin",
     "Eva", "Ondřej", "Veronika", "Petr", "Lucie", "Michal", "Markéta", "David", "Jana", "Filip",
@@ -112,6 +125,48 @@ def trainer_login(client: httpx.Client, trainer_id: int) -> str:
     return r.json()["access_token"]
 
 
+def ensure_trainers(client: httpx.Client, branches: dict[str, int]) -> list[dict]:
+    print("== ENSURE TRAINERS ==")
+    existing = client.get("/trainers", headers=headers()).json()
+    by_name = {(t["first_name"], t["last_name"]): t for t in existing}
+    trainers: list[dict] = []
+
+    for first_name, last_name, branch_names in DEMO_TRAINERS:
+        branch_ids = [branches[name] for name in branch_names if name in branches]
+        key = (first_name, last_name)
+        row = by_name.get(key)
+        if row is None:
+            r = client.post(
+                "/trainers",
+                headers=headers(),
+                json={"first_name": first_name, "last_name": last_name, "branch_ids": branch_ids},
+            )
+            r.raise_for_status()
+            row = r.json()
+            print(f"  + {first_name} {last_name}")
+        else:
+            current_ids = sorted(b["id"] for b in row["branches"])
+            if sorted(branch_ids) != current_ids:
+                r = client.patch(
+                    f"/trainers/{row['id']}",
+                    headers=headers(),
+                    json={"branch_ids": branch_ids},
+                )
+                r.raise_for_status()
+                row = r.json()
+                print(f"  ~ {first_name} {last_name} (pobočky)")
+            else:
+                print(f"  = {first_name} {last_name}")
+        client.patch(
+            f"/trainers/{row['id']}",
+            headers=headers(),
+            json={"pin": TRAINER_PIN},
+        ).raise_for_status()
+        trainers.append(row)
+
+    return trainers
+
+
 def wipe(client: httpx.Client, admin: str, trainer_tok: str) -> None:
     print("== WIPE ==")
     for s in client.get("/students", headers=headers()).json():
@@ -175,17 +230,35 @@ def seed_students(client: httpx.Client, branches: dict[str, int]) -> list[dict]:
     return created
 
 
-def seed_trainings_and_event(client: httpx.Client, trainer_tok: str, branches: dict[str, int], students: list[dict]) -> dict:
+def trainer_for_branch(trainers: list[dict], branch_name: str) -> dict:
+    for trainer in trainers:
+        names = {b["name"] for b in trainer["branches"]}
+        if branch_name in names:
+            return trainer
+    raise RuntimeError(f"No trainer for branch {branch_name!r}")
+
+
+def seed_trainings_and_event(
+    client: httpx.Client,
+    trainers: list[dict],
+    branches: dict[str, int],
+    students: list[dict],
+) -> dict:
     print("== SEED TRAININGS + EVENT ==")
     today = date.today()
     weekday = today.isoweekday()
     groups: list[dict] = []
+    event_trainer_tok: str | None = None
 
     for branch_name, branch_id in branches.items():
+        branch_trainer = trainer_for_branch(trainers, branch_name)
+        branch_tok = trainer_login(client, branch_trainer["id"])
+        if event_trainer_tok is None:
+            event_trainer_tok = branch_tok
         branch_students = [s["id"] for s in students if s["branch"] == branch_name][:6]
         r = client.post(
             "/training-groups",
-            headers=headers(trainer_tok),
+            headers=headers(branch_tok),
             json={
                 "branch_id": branch_id,
                 "name": f"{branch_name} Úterý+Čtvrtek",
@@ -197,15 +270,21 @@ def seed_trainings_and_event(client: httpx.Client, trainer_tok: str, branches: d
                 "student_ids": branch_students,
             },
         )
-        r.raise_for_status()
-        g = r.json()
+        if r.status_code == 409:
+            existing = client.get("/training-groups", headers=headers(branch_tok)).json()
+            g = next((row for row in existing if row["name"] == f"{branch_name} Úterý+Čtvrtek"), None)
+            if g is None:
+                r.raise_for_status()
+        else:
+            r.raise_for_status()
+            g = r.json()
         groups.append({"id": g["id"], "branch": branch_name, "student_ids": branch_students})
         print(f"  + group {g['name']} ({len(branch_students)} dětí)")
 
     starts = (today + timedelta(days=14)).isoformat() + "T10:00:00"
     ev = client.post(
         "/events",
-        headers=headers(trainer_tok),
+        headers=headers(event_trainer_tok or trainer_login(client, trainers[0]["id"])),
         json={
             "title": "Jarní turnaj klubu",
             "event_type": "tournament",
@@ -229,13 +308,6 @@ def main() -> int:
             return 1
 
         admin = admin_login(client)
-        trainers = client.get("/trainers").json()
-        if not trainers:
-            print("No trainers", file=sys.stderr)
-            return 1
-        trainer_tok = trainer_login(client, trainers[0]["id"])
-
-        wipe(client, admin, trainer_tok)
 
         branches_list = client.get("/branches").json()
         branches = {b["name"]: b["id"] for b in branches_list if b["name"] in KEEP_BRANCHES}
@@ -243,8 +315,16 @@ def main() -> int:
             print(f"Expected 3 branches, got {branches}", file=sys.stderr)
             return 1
 
+        trainers = ensure_trainers(client, branches)
+        if not trainers:
+            print("No trainers", file=sys.stderr)
+            return 1
+        trainer_tok = trainer_login(client, trainers[0]["id"])
+
+        wipe(client, admin, trainer_tok)
+
         students = seed_students(client, branches)
-        extras = seed_trainings_and_event(client, trainer_tok, branches, students)
+        extras = seed_trainings_and_event(client, trainers, branches, students)
 
         # Parent credentials for QA
         parent_logins: list[dict] = []
