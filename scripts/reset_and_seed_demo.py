@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reset demo data: keep 3 default branches + trainers, wipe children/parents, seed 30 students.
+"""Reset demo data: trainers, students, trainings, notifications, chat, today's attendance.
 
 Usage (API on :8001):
     python scripts/reset_and_seed_demo.py
@@ -123,6 +123,19 @@ def trainer_login(client: httpx.Client, trainer_id: int) -> str:
     r = client.post(f"/trainers/{trainer_id}/verify-pin", json={"pin": TRAINER_PIN})
     r.raise_for_status()
     return r.json()["access_token"]
+
+
+def parent_login(client: httpx.Client, username: str, password: str) -> str:
+    r = client.post("/parents/login", json={"username": username, "password": password})
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+def trainer_by_name(trainers: list[dict], first_name: str, last_name: str) -> dict:
+    for trainer in trainers:
+        if trainer["first_name"] == first_name and trainer["last_name"] == last_name:
+            return trainer
+    raise RuntimeError(f"Trainer not found: {first_name} {last_name}")
 
 
 def ensure_trainers(client: httpx.Client, branches: dict[str, int]) -> list[dict]:
@@ -264,7 +277,7 @@ def seed_trainings_and_event(
                 "name": f"{branch_name} Úterý+Čtvrtek",
                 "start_time": "17:00:00",
                 "end_time": "18:30:00",
-                "weekdays": [2, 4] if branch_name != "Petrvald" else [weekday],
+                "weekdays": sorted({2, 4, weekday}),
                 "active_from": today.isoformat(),
                 "active_until": (today + timedelta(days=365)).isoformat(),
                 "student_ids": branch_students,
@@ -298,6 +311,221 @@ def seed_trainings_and_event(
     print(f"  + event id={event_id}")
 
     return {"groups": groups, "event_id": event_id}
+
+
+def seed_notifications(
+    client: httpx.Client,
+    trainers: list[dict],
+    branches: dict[str, int],
+    parent_logins: list[dict],
+) -> list[dict]:
+    print("== SEED NOTIFICATIONS ==")
+    if len(parent_logins) < 2:
+        print("  skip (need parent_logins)")
+        return []
+
+    viki = trainer_by_name(trainers, "Viki", "Fintová")
+    tomas = trainer_by_name(trainers, "Tomas", "Sikora")
+    viki_tok = trainer_login(client, viki["id"])
+    tomas_tok = trainer_login(client, tomas["id"])
+    orlova = branches["Orlova"]
+    lutyne = branches["Dolni Lutyne"]
+    p1 = parent_logins[0]
+    p2 = parent_logins[1]
+    pt1 = parent_login(client, p1["username"], p1["password"])
+    pt2 = parent_login(client, p2["username"], p2["password"])
+    created: list[dict] = []
+
+    def post_trainer(tok: str, title: str, body: str, targets: list[dict]) -> dict:
+        r = client.post(
+            "/notifications",
+            headers=headers(tok),
+            json={
+                "title": title,
+                "body": body,
+                "duration_amount": 14,
+                "duration_unit": "days",
+                "targets": targets,
+            },
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def post_parent(tok: str, title: str, body: str, branch_id: int | None = None) -> dict:
+        payload: dict = {"title": title, "body": body}
+        if branch_id is not None:
+            payload["branch_id"] = branch_id
+        r = client.post("/notifications/to-trainers", headers=headers(tok), json=payload)
+        r.raise_for_status()
+        return r.json()
+
+    def comment(tok: str, notification_id: int, body: str) -> None:
+        client.post(
+            f"/notifications/{notification_id}/comments",
+            headers=headers(tok),
+            json={"body": body},
+        ).raise_for_status()
+
+    n1 = post_trainer(
+        viki_tok,
+        "[demo] Schůzka trenérů pátek",
+        "Pátek 18:00 sraz na Orlové — prosím potvrďte účast.",
+        [{"audience": "trainer"}],
+    )
+    comment(tomas_tok, n1["id"], "Já budu, díky za info.")
+    created.append({"id": n1["id"], "label": "trenér→trenéři", "comments": 1})
+
+    n2 = post_trainer(
+        viki_tok,
+        "[demo] Oprava šaten",
+        "Šatny budou ve čtvrtek uzavřené — převlékání v chodbě.",
+        [{"audience": "parent"}],
+    )
+    comment(pt1, n2["id"], "Díky, předám dětem.")
+    comment(viki_tok, n2["id"], "Super, díky za zpětnou vazbu!")
+    created.append({"id": n2["id"], "label": "trenér→rodiče (všichni)", "comments": 2})
+
+    n3 = post_trainer(
+        viki_tok,
+        "[demo] Turnaj U10 Orlova",
+        "Sraz v sobotu v 8:00 u haly — jen kategorie U10 z Orlové.",
+        [{"audience": "parent", "branch_id": orlova, "age_group": "U10"}],
+    )
+    created.append({"id": n3["id"], "label": "trenér→rodiče U10 @ Orlova", "comments": 0})
+
+    n4 = post_trainer(
+        viki_tok,
+        "[demo] Změna času — Dolni Lutyne",
+        "Úterní trénink posunut na 18:00 (platí jen pro tuto pobočku).",
+        [
+            {"audience": "trainer", "branch_id": lutyne},
+            {"audience": "parent", "branch_id": lutyne},
+        ],
+    )
+    comment(viki_tok, n4["id"], "Potvrzuji změnu pro Lutyň.")
+    created.append({"id": n4["id"], "label": "trenér→Lutyne (trenéři+rodiče)", "comments": 1})
+
+    n5 = post_parent(pt1, "[demo] Dotaz rodiče", "Může naše dítě chybět příští týden kvůli nemoci?")
+    comment(viki_tok, n5["id"], "Ano, stačí napsat docházku jako nemoc — ozvu se.")
+    created.append({"id": n5["id"], "label": "rodič→trenéři", "comments": 1})
+
+    n6 = post_parent(
+        pt1,
+        "[demo] Dotaz k pobočce Orlova",
+        "Je možné vyzvednout dítě o 15 min dřív?",
+        branch_id=orlova,
+    )
+    created.append({"id": n6["id"], "label": "rodič→trenéři @ Orlova", "comments": 0})
+
+    for row in created:
+        print(f"  + #{row['id']} {row['label']}")
+    return created
+
+
+def seed_chat(
+    client: httpx.Client,
+    trainers: list[dict],
+    parent_logins: list[dict],
+) -> list[dict]:
+    print("== SEED CHAT ==")
+    if len(parent_logins) < 2:
+        print("  skip (need parent_logins)")
+        return []
+
+    viki = trainer_by_name(trainers, "Viki", "Fintová")
+    tomas = trainer_by_name(trainers, "Tomas", "Sikora")
+    viki_tok = trainer_login(client, viki["id"])
+    tomas_tok = trainer_login(client, tomas["id"])
+    p1 = parent_logins[0]
+    p2 = parent_logins[1]
+    pt1 = parent_login(client, p1["username"], p1["password"])
+    pt2 = parent_login(client, p2["username"], p2["password"])
+    created: list[dict] = []
+
+    def start(tok: str, kind: str, counterpart_id: int) -> dict:
+        r = client.post(
+            "/chat/conversations",
+            headers=headers(tok),
+            json={"counterpart_kind": kind, "counterpart_id": counterpart_id},
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def send(tok: str, conversation_id: int, body: str) -> None:
+        client.post(
+            f"/chat/conversations/{conversation_id}/messages",
+            headers=headers(tok),
+            json={"body": body},
+        ).raise_for_status()
+
+    conv_tp = start(viki_tok, "parent", p1["parent_id"])
+    send(viki_tok, conv_tp["id"], "Ahoj, prosím doneste souhlas s výjezdem do pátku.")
+    send(pt1, conv_tp["id"], "Dobře, pošlu ho zítra emailem.")
+    send(viki_tok, conv_tp["id"], "Díky!")
+    created.append({"id": conv_tp["id"], "label": "Viki ↔ rodič Tereza", "messages": 3})
+
+    conv_tt = start(viki_tok, "trainer", tomas["id"])
+    send(viki_tok, conv_tt["id"], "Ahoj, zítra přebíráš Orlovou?")
+    send(tomas_tok, conv_tt["id"], "Jo, budu tam od 17h.")
+    created.append({"id": conv_tt["id"], "label": "Viki ↔ Tomas", "messages": 2})
+
+    conv_pp = start(pt1, "parent", p2["parent_id"])
+    send(pt1, conv_pp["id"], "Ahoj, víš už program turnaje na sobotu?")
+    send(pt2, conv_pp["id"], "Zatím ne, čekám na zprávu od trenéra.")
+    created.append({"id": conv_pp["id"], "label": "rodič ↔ rodič", "messages": 2})
+
+    for row in created:
+        print(f"  + #{row['id']} {row['label']}")
+    return created
+
+
+def seed_today_sessions(
+    client: httpx.Client,
+    trainers: list[dict],
+    groups: list[dict],
+) -> list[dict]:
+    print("== SEED TODAY SESSIONS ==")
+    today = date.today().isoformat()
+    statuses = ("present", "present", "present", "absent", "excused", "present")
+    opened: list[dict] = []
+
+    for group in groups:
+        branch_name = group["branch"]
+        branch_trainer = trainer_for_branch(trainers, branch_name)
+        tok = trainer_login(client, branch_trainer["id"])
+        r = client.post(
+            f"/training-groups/{group['id']}/sessions",
+            headers=headers(tok),
+            json={"session_date": today, "trainer_id": branch_trainer["id"]},
+        )
+        if r.status_code not in (200, 201):
+            r.raise_for_status()
+        session = r.json()
+        records = [
+            {"student_id": sid, "status": statuses[i % len(statuses)]}
+            for i, sid in enumerate(group["student_ids"])
+        ]
+        if records:
+            client.put(
+                f"/training-sessions/{session['id']}/attendance",
+                headers=headers(tok),
+                json={"records": records},
+            ).raise_for_status()
+        client.post(
+            f"/training-sessions/{session['id']}/trainer-attendance",
+            headers=headers(tok),
+            json={"trainer_id": branch_trainer["id"], "status": "present"},
+        ).raise_for_status()
+        opened.append({
+            "id": session["id"],
+            "group_id": group["id"],
+            "branch": branch_name,
+            "date": today,
+            "attendance_marked": len(records),
+        })
+        print(f"  + session #{session['id']} @ {branch_name} ({len(records)} docházek)")
+
+    return opened
 
 
 def main() -> int:
@@ -340,22 +568,33 @@ def main() -> int:
                     "password": j["password"],
                 })
 
+        demo_notifications = seed_notifications(client, trainers, branches, parent_logins)
+        demo_chat = seed_chat(client, trainers, parent_logins)
+        demo_sessions = seed_today_sessions(client, trainers, extras["groups"])
+
         state = {
             "base_url": BASE_URL,
             "admin_token_hint": "admin/admin",
-            "trainer_id": trainers[0]["id"],
+            "trainer_id": trainer_by_name(trainers, "Viki", "Fintová")["id"],
             "trainer_pin": TRAINER_PIN,
             "trainers": [{"id": t["id"], "name": f"{t['first_name']} {t['last_name']}"} for t in trainers],
             "branches": branches,
             "students": students,
             "parent_logins": parent_logins,
+            "demo_notifications": demo_notifications,
+            "demo_chat": demo_chat,
+            "demo_sessions": demo_sessions,
             **extras,
             "seeded_at": int(time.time()),
         }
         with open(STATE_PATH, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
 
-        print(f"\nOK: {len(students)} students, {len(trainers)} trainers, 3 branches")
+        print(
+            f"\nOK: {len(students)} students, {len(trainers)} trainers, "
+            f"{len(demo_notifications)} notifications, {len(demo_chat)} chats, "
+            f"{len(demo_sessions)} sessions",
+        )
         print(f"State: {STATE_PATH}")
         return 0
 
