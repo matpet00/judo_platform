@@ -1,11 +1,27 @@
 from collections.abc import AsyncGenerator
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import event, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.models import Base, Branch, DEFAULT_BRANCHES, DEFAULT_TRAINERS, Trainer
+from app.models import (
+    AgeGroup,
+    Base,
+    Branch,
+    DEFAULT_BRANCHES,
+    DEFAULT_DEMO_STUDENTS,
+    DEFAULT_EVENT,
+    DEFAULT_TRAINERS,
+    DEFAULT_TRAINING_GROUPS,
+    Event,
+    EventTarget,
+    NotificationAudience,
+    Student,
+    Trainer,
+    TrainingGroup,
+)
 from app.security import hash_pin
 
 engine = create_async_engine(
@@ -90,6 +106,174 @@ async def seed_trainers() -> None:
                     if existing_ids != target_ids:
                         trainer.branches.clear()
                         trainer.branches.extend(branches)
+
+
+async def _trainer_by_name(session: AsyncSession, first_name: str, last_name: str) -> Trainer | None:
+    result = await session.execute(
+        select(Trainer)
+        .where(Trainer.first_name == first_name, Trainer.last_name == last_name)
+        .options(selectinload(Trainer.branches)),
+    )
+    return result.scalar_one_or_none()
+
+
+async def seed_demo_students() -> None:
+    """Idempotentně doplní výchozí děti pro demo tréninkové série."""
+    async with async_session_maker() as session:
+        async with session.begin():
+            branch_rows = (await session.execute(select(Branch))).scalars().all()
+            by_name = {b.name: b for b in branch_rows}
+            for first_name, last_name, age_group, branch_name in DEFAULT_DEMO_STUDENTS:
+                branch = by_name.get(branch_name)
+                if branch is None:
+                    continue
+                result = await session.execute(
+                    select(Student)
+                    .where(Student.first_name == first_name, Student.last_name == last_name)
+                    .options(selectinload(Student.branches)),
+                )
+                student = result.scalar_one_or_none()
+                if student is None:
+                    student = Student(
+                        first_name=first_name,
+                        last_name=last_name,
+                        age_group=AgeGroup(age_group),
+                    )
+                    student.branches.append(branch)
+                    session.add(student)
+                else:
+                    branch_ids = {b.id for b in student.branches}
+                    if branch.id not in branch_ids:
+                        student.branches.append(branch)
+                    if student.age_group != AgeGroup(age_group):
+                        student.age_group = AgeGroup(age_group)
+
+
+async def seed_training_groups() -> None:
+    """Idempotentně doplní dvě výchozí tréninkové série s dětmi a trenéry."""
+    today = date.today()
+    active_until = today + timedelta(days=365)
+    async with async_session_maker() as session:
+        async with session.begin():
+            branch_rows = (await session.execute(select(Branch))).scalars().all()
+            branches = {b.name: b for b in branch_rows}
+            students_by_branch: dict[str, list[Student]] = {}
+            for first_name, last_name, _age_group, branch_name in DEFAULT_DEMO_STUDENTS:
+                result = await session.execute(
+                    select(Student)
+                    .where(Student.first_name == first_name, Student.last_name == last_name)
+                    .options(selectinload(Student.branches)),
+                )
+                student = result.scalar_one_or_none()
+                if student is not None:
+                    students_by_branch.setdefault(branch_name, []).append(student)
+
+            for (
+                name,
+                branch_name,
+                start_time,
+                end_time,
+                weekdays,
+                lead_trainer,
+                co_trainers,
+            ) in DEFAULT_TRAINING_GROUPS:
+                branch = branches.get(branch_name)
+                lead = await _trainer_by_name(session, lead_trainer[0], lead_trainer[1])
+                if branch is None or lead is None:
+                    continue
+                if branch.id not in {b.id for b in lead.branches}:
+                    continue
+
+                result = await session.execute(
+                    select(TrainingGroup)
+                    .where(
+                        TrainingGroup.branch_id == branch.id,
+                        TrainingGroup.name == name,
+                        TrainingGroup.start_time == start_time,
+                        TrainingGroup.end_time == end_time,
+                    )
+                    .options(
+                        selectinload(TrainingGroup.students),
+                        selectinload(TrainingGroup.trainers),
+                    ),
+                )
+                group = result.scalar_one_or_none()
+                if group is None:
+                    group = TrainingGroup(
+                        branch_id=branch.id,
+                        name=name,
+                        start_time=start_time,
+                        end_time=end_time,
+                        weekdays=list(weekdays),
+                        active_from=today,
+                        active_until=active_until,
+                    )
+                    session.add(group)
+                    await session.flush()
+
+                group.weekdays = list(weekdays)
+                group.active_from = today
+                group.active_until = active_until
+
+                roster = students_by_branch.get(branch_name, [])[:6]
+                if roster:
+                    group.students.clear()
+                    group.students.extend(roster)
+
+                trainer_ids = {lead.id}
+                group_trainers = [lead]
+                for co_first, co_last in co_trainers:
+                    co = await _trainer_by_name(session, co_first, co_last)
+                    if co is None or branch.id not in {b.id for b in co.branches}:
+                        continue
+                    if co.id not in trainer_ids:
+                        trainer_ids.add(co.id)
+                        group_trainers.append(co)
+                group.trainers.clear()
+                group.trainers.extend(group_trainers)
+
+
+async def seed_default_event() -> None:
+    """Idempotentně doplní výchozí klubovou akci."""
+    title, event_type, location, days_ahead, start_time, author = DEFAULT_EVENT
+    event_day = date.today() + timedelta(days=days_ahead)
+    starts_at = datetime.combine(event_day, start_time, tzinfo=UTC)
+    async with async_session_maker() as session:
+        async with session.begin():
+            author_trainer = await _trainer_by_name(session, author[0], author[1])
+            if author_trainer is None:
+                return
+
+            result = await session.execute(
+                select(Event)
+                .where(Event.title == title)
+                .options(selectinload(Event.targets)),
+            )
+            event = result.scalar_one_or_none()
+            if event is None:
+                event = Event(
+                    title=title,
+                    description="Klubový turnaj pro všechny kategorie. Sraz u hlavní haly.",
+                    event_type=event_type,
+                    location=location,
+                    starts_at=starts_at,
+                    author_trainer_id=author_trainer.id,
+                )
+                event.targets.extend([
+                    EventTarget(audience=NotificationAudience.parent),
+                    EventTarget(audience=NotificationAudience.trainer),
+                ])
+                session.add(event)
+            else:
+                event.event_type = event_type
+                event.location = location
+                event.starts_at = starts_at
+                event.author_trainer_id = author_trainer.id
+                if not event.targets:
+                    event.targets.extend([
+                        EventTarget(audience=NotificationAudience.parent),
+                        EventTarget(audience=NotificationAudience.trainer),
+                    ])
 
 
 async def migrate_schema() -> None:
@@ -306,3 +490,6 @@ async def init_db() -> None:
     await seed_branches()
     await seed_trainers()
     await seed_trainer_pins()
+    await seed_demo_students()
+    await seed_training_groups()
+    await seed_default_event()

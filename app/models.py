@@ -73,6 +73,57 @@ DEFAULT_TRAINERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("Petr", "Steiniger", ("Petrvald",)),
 )
 
+# (jméno, příjmení, věkovka, pobočka) — idempotentní seed při startu API (2×6 dětí pro výchozí série)
+DEFAULT_DEMO_STUDENTS: tuple[tuple[str, str, str, str], ...] = (
+    ("Tereza", "Nováková", "U8", "Orlova"),
+    ("Jan", "Svoboda", "U10", "Orlova"),
+    ("Eliška", "Novotná", "U12", "Orlova"),
+    ("Matěj", "Dvořák", "U14", "Orlova"),
+    ("Anna", "Černá", "U16", "Orlova"),
+    ("Jakub", "Procházka", "U18", "Orlova"),
+    ("Eva", "Pospíšilová", "U8", "Dolni Lutyne"),
+    ("Ondřej", "Hájek", "U10", "Dolni Lutyne"),
+    ("Veronika", "Jelínková", "U12", "Dolni Lutyne"),
+    ("Petr", "Urban", "U14", "Dolni Lutyne"),
+    ("Lucie", "Blažková", "U16", "Dolni Lutyne"),
+    ("Michal", "Krejčí", "U18", "Dolni Lutyne"),
+)
+
+# (název, pobočka, začátek, konec, weekdays ISO, trenér, spolutrenéři) — idempotentní seed při startu
+DEFAULT_TRAINING_GROUPS: tuple[
+    tuple[str, str, time, time, tuple[int, ...], tuple[str, str], tuple[tuple[str, str], ...]],
+    ...,
+] = (
+    (
+        "Orlova Úterý+Čtvrtek",
+        "Orlova",
+        time(17, 0),
+        time(18, 30),
+        (2, 4),
+        ("Lukáš", "Morcin"),
+        (),
+    ),
+    (
+        "Dolni Lutyne Úterý+Čtvrtek",
+        "Dolni Lutyne",
+        time(17, 0),
+        time(18, 30),
+        (2, 4),
+        ("Eduard", "Lanča"),
+        (("Roman", "Bielczyk"),),
+    ),
+)
+
+# (název, typ, místo, dní od dneška, čas začátku, autor) — idempotentní seed při startu
+DEFAULT_EVENT: tuple[str, EventType, str, int, time, tuple[str, str]] = (
+    "Jarní turnaj klubu",
+    EventType.tournament,
+    "Orlova",
+    14,
+    time(10, 0),
+    ("Viki", "Fintová"),
+)
+
 
 class Base(DeclarativeBase):
     pass
