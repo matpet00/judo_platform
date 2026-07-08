@@ -73,7 +73,7 @@ DEFAULT_TRAINERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("Petr", "Steiniger", ("Petrvald",)),
 )
 
-# (jméno, příjmení, věkovka, pobočka) — idempotentní seed při startu API (2×6 dětí pro výchozí série)
+# (jméno, příjmení, věkovka, pobočka) — idempotentní seed při startu API (min. 5 dětí na pobočku)
 DEFAULT_DEMO_STUDENTS: tuple[tuple[str, str, str, str], ...] = (
     ("Tereza", "Nováková", "U8", "Orlova"),
     ("Jan", "Svoboda", "U10", "Orlova"),
@@ -87,6 +87,11 @@ DEFAULT_DEMO_STUDENTS: tuple[tuple[str, str, str, str], ...] = (
     ("Petr", "Urban", "U14", "Dolni Lutyne"),
     ("Lucie", "Blažková", "U16", "Dolni Lutyne"),
     ("Michal", "Krejčí", "U18", "Dolni Lutyne"),
+    ("Hana", "Benešová", "U8", "Petrvald"),
+    ("Pavel", "Šimek", "U10", "Petrvald"),
+    ("Zuzana", "Moravcová", "U12", "Petrvald"),
+    ("Daniel", "Navrátil", "U14", "Petrvald"),
+    ("Alena", "Tůmová", "U16", "Petrvald"),
 )
 
 # (název, pobočka, začátek, konec, weekdays ISO, trenér, spolutrenéři) — idempotentní seed při startu
