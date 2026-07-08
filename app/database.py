@@ -117,6 +117,18 @@ async def _trainer_by_name(session: AsyncSession, first_name: str, last_name: st
     return result.scalar_one_or_none()
 
 
+async def _training_group_with_relations(session: AsyncSession, group_id: int) -> TrainingGroup:
+    result = await session.execute(
+        select(TrainingGroup)
+        .where(TrainingGroup.id == group_id)
+        .options(
+            selectinload(TrainingGroup.students),
+            selectinload(TrainingGroup.trainers),
+        ),
+    )
+    return result.scalar_one()
+
+
 async def seed_demo_students() -> None:
     """Idempotentně doplní výchozí děti pro demo tréninkové série."""
     async with async_session_maker() as session:
@@ -199,7 +211,7 @@ async def seed_training_groups() -> None:
                 )
                 group = result.scalar_one_or_none()
                 if group is None:
-                    group = TrainingGroup(
+                    new_group = TrainingGroup(
                         branch_id=branch.id,
                         name=name,
                         start_time=start_time,
@@ -208,8 +220,9 @@ async def seed_training_groups() -> None:
                         active_from=today,
                         active_until=active_until,
                     )
-                    session.add(group)
+                    session.add(new_group)
                     await session.flush()
+                    group = await _training_group_with_relations(session, new_group.id)
 
                 group.weekdays = list(weekdays)
                 group.active_from = today
