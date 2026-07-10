@@ -1,5 +1,5 @@
 export const BIRTH_DATE_PLACEHOLDER = "DD/MM/YYYY";
-export const BIRTH_DATE_HINT = "Datum narození ve formátu DD/MM/YYYY.";
+export const BIRTH_DATE_HINT = "Pište jen čísla, lomítka doplníme automaticky.";
 
 /** Formátuje psaní: jen číslice, automaticky lomítka. */
 export function formatBirthDateInput(raw: string): string {

@@ -444,10 +444,12 @@ export function RegisterPage() {
       };
 
       const result = await api.registerToClub(payload);
+      const submittedEmail = email.trim().toLowerCase();
       setSuccess(result.message ?? "Registrace přijata.");
       setSubmitted(true);
-      setStatusEmail(email.trim().toLowerCase());
+      setStatusEmail(submittedEmail);
       void queryClient.invalidateQueries({ queryKey: ["parent-me"] });
+      void checkRegistrationStatus(submittedEmail);
     } catch (e) {
       setError(String(e));
     } finally {

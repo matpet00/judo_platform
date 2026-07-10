@@ -168,6 +168,10 @@ async def test_admin_reject_sets_reason_and_allows_new_request(client):
     )
     assert again.status_code == 200
 
+    status_after_resubmit = await client.get("/register/status", params={"email": email})
+    assert status_after_resubmit.json()["status"] == "pending"
+    assert status_after_resubmit.json()["rejection_reason"] is None
+
 
 @pytest.mark.asyncio
 async def test_admin_approve_with_second_guardian(client):

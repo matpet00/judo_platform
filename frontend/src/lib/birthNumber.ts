@@ -1,5 +1,5 @@
 export const BIRTH_NUMBER_PLACEHOLDER = "RRMMDD/XXXX";
-export const BIRTH_NUMBER_HINT = "Rodné číslo ve formátu RRMMDD/XXXX (s lomítkem).";
+export const BIRTH_NUMBER_HINT = "Pište jen čísla, lomítka doplníme automaticky.";
 
 /** Formátuje psaní: jen číslice, automaticky lomítko po 6. číslici. */
 export function formatBirthNumberInput(raw: string): string {
