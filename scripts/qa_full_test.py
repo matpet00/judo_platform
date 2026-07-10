@@ -104,6 +104,18 @@ class QAClient:
         expect: int | tuple[int, ...] = 200,
         params: dict | None = None,
     ) -> httpx.Response | None:
+        if token is None:
+            admin_paths = ("/branches", "/students", "/parents", "/trainers", "/mail")
+            if write and self.admin_token and any(
+                path == p or path.startswith(f"{p}/") for p in admin_paths
+            ):
+                token = self.admin_token
+            elif method == "GET" and (
+                path.startswith("/students")
+                or path.startswith("/training-sessions")
+                or (path.startswith("/branches/") and path != "/branches")
+            ):
+                token = self.trainer_token or self.admin_token
         t0 = time.perf_counter()
         try:
             resp = self.client.request(
@@ -880,13 +892,13 @@ def run_tests() -> Report:
         try_delete(f"delete student {sid}", "DELETE", f"/students/{sid}", qa.admin_token)
 
     for tid in report.created_ids.get("trainers", []):
-        try_delete(f"delete trainer {tid}", "DELETE", f"/trainers/{tid}")
+        try_delete(f"delete trainer {tid}", "DELETE", f"/trainers/{tid}", qa.admin_token)
 
     for pid in report.created_ids.get("parents", []):
-        try_delete(f"delete parent {pid}", "DELETE", f"/parents/{pid}")
+        try_delete(f"delete parent {pid}", "DELETE", f"/parents/{pid}", qa.admin_token)
 
     for bid in report.created_ids.get("branches", []):
-        try_delete(f"delete branch {bid}", "DELETE", f"/branches/{bid}")
+        try_delete(f"delete branch {bid}", "DELETE", f"/branches/{bid}", qa.admin_token)
 
     report.cleanup = {
         "attempted": True,

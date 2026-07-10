@@ -3,7 +3,7 @@ import io
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -46,7 +46,15 @@ from app.schemas import (
     RegistrationRequestDetail,
     RegistrationRequestListItem,
 )
-from app.security import create_admin_token, hash_pin, require_admin
+from app.security import (
+    check_rate_limit,
+    clear_rate_limit,
+    client_ip,
+    create_admin_token,
+    hash_pin,
+    record_failed_attempt,
+    require_admin,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -190,14 +198,18 @@ def _event_to_participation_read(event: Event) -> AdminEventParticipationRead:
 
 
 @router.post("/login", response_model=AdminAuthToken)
-async def admin_login(payload: AdminLogin) -> AdminAuthToken:
+async def admin_login(payload: AdminLogin, request: Request) -> AdminAuthToken:
+    rate_key = f"{client_ip(request)}:{payload.username.strip().lower()}"
+    check_rate_limit("admin_login", rate_key)
     valid = (
         settings.admin_password
         and payload.username.strip().lower() == settings.admin_username.strip().lower()
         and payload.password == settings.admin_password
     )
     if not valid:
+        record_failed_attempt("admin_login", rate_key)
         raise HTTPException(status_code=401, detail="Neplatné přihlašovací údaje.")
+    clear_rate_limit("admin_login", rate_key)
     token, expires_at = create_admin_token()
     return AdminAuthToken(access_token=token, expires_at=expires_at)
 
@@ -455,7 +467,6 @@ async def resend_parent_credentials(
         )
 
     password = generate_password()
-    parent.password_plain = password
     parent.password_hash = hash_pin(password)
     await db.commit()
     await db.refresh(parent, attribute_names=["children"])

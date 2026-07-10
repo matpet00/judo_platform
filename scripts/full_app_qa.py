@@ -213,7 +213,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
             return False
         state.second_branch_id = data["id"]
 
-    students = qa.client.get("/students").json()
+    students = qa.client.get("/students", headers=ah).json()
     qa_students = find_by_name(students, "first_name", f"{TAG}")
     orlova_ids = [s["id"] for s in students if any(b["id"] == state.orlova_branch_id for b in s["branches"])]
     state.orlova_student_ids = orlova_ids[:6]
@@ -340,7 +340,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
             roster = [s["id"] for s in group.get("students", [])]
             for j, student_id in enumerate(roster):
                 status = statuses[(idx + j) % 3]
-                detail = qa.client.get(f"/training-sessions/{sid}").json()
+                detail = qa.client.get(f"/training-sessions/{sid}", headers=th).json()
                 existing = next((s for s in detail.get("students", []) if s["id"] == student_id), None)
                 att = existing.get("attendance") if existing else None
                 if att:
@@ -573,7 +573,7 @@ def test_guest_on_session(qa: QAClient, state: SeedState) -> None:
     else:
         qa.record("guest_on_session_mark", True)
 
-    detail = qa.client.get(f"/training-sessions/{sid}").json()
+    detail = qa.client.get(f"/training-sessions/{sid}", headers=th).json()
     guest_rows = [s for s in detail.get("students", []) if s.get("is_guest")]
     qa.record("guest_on_session_detail", any(s["id"] == guest_id for s in guest_rows),
               f"guest_rows={len(guest_rows)}")
@@ -635,7 +635,7 @@ def test_delete_student_with_attendance(qa: QAClient, state: SeedState) -> None:
     dresp = qa.client.delete(f"/students/{student_id}", headers=ah)
     qa.record("delete_student_with_attendance", dresp.status_code == 204, f"HTTP {dresp.status_code}")
 
-    all_students = qa.client.get("/students").json()
+    all_students = qa.client.get("/students", headers=ah).json()
     still_there = any(s["id"] == student_id for s in all_students)
     qa.record("delete_student_gone", not still_there, f"in_list={still_there}")
 
@@ -646,7 +646,7 @@ async def test_concurrent_rsvp(qa: QAClient, state: SeedState) -> None:
         return
 
     ah = auth_headers(state.admin_token)
-    students = qa.client.get("/students").json()
+    students = qa.client.get("/students", headers=ah).json()
     candidate = next(
         (s for s in students if s.get("parents") and any(b["id"] == state.second_branch_id for b in s["branches"])),
         None,

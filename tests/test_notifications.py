@@ -5,7 +5,7 @@ import pytest
 from app.main import app
 from app.routers.notifications import notification_now
 from app.security import create_parent_token, create_trainer_token
-from tests.conftest import login_trainer, write_headers
+from tests.conftest import login_admin, login_trainer, write_headers
 
 
 def _parent_bearer(parent_id: int = 1) -> dict[str, str]:
@@ -568,10 +568,11 @@ async def test_branch_scoped_notification_visibility(client):
     orlova_id = branch_by_name["Orlova"]
     petrvald_id = branch_by_name["Petrvald"]
 
+    admin = await login_admin(client)
     created = await client.post(
         "/trainers",
         json={"first_name": "Petr", "last_name": "Vald", "branch_ids": [petrvald_id]},
-        headers=write_headers(author_token),
+        headers=write_headers(admin),
     )
     assert created.status_code == 200
     petrvald_trainer_id = created.json()["id"]
@@ -666,10 +667,11 @@ async def test_parent_message_scoped_to_branch_and_edit_permissions(client):
     petrvald_id = branch_by_name["Petrvald"]
 
     author_token = await login_trainer(client, trainer_id=1)
+    admin = await login_admin(client)
     petrvald = await client.post(
         "/trainers",
         json={"first_name": "Petr", "last_name": "Vald", "branch_ids": [petrvald_id]},
-        headers=write_headers(author_token),
+        headers=write_headers(admin),
     )
     petrvald_token, _ = create_trainer_token(petrvald.json()["id"])
 

@@ -143,7 +143,9 @@ export const api = {
     if (referenceYear) params.set("reference_year", String(referenceYear));
     return request<import("./types").AgeGroupPreview>(`/age-group?${params}`);
   },
-  branches: () => request<import("./types").BranchDetail[]>("/branches"),
+  branches: () => request<import("./types").BranchBrief[]>("/branches"),
+  branch: (id: number, role: Role = "trainer") =>
+    request<import("./types").BranchDetail>(`/branches/${id}`, undefined, false, true, role),
   verifyPin: (trainerId: number, pin: string) =>
     request<import("./types").TrainerAuthToken>(`/trainers/${trainerId}/verify-pin`, {
       method: "POST",
@@ -170,7 +172,8 @@ export const api = {
       true,
       role,
     ),
-  students: () => request<import("./types").StudentWithBranches[]>("/students"),
+  students: (role: Role = "trainer") =>
+    request<import("./types").StudentWithBranches[]>("/students", undefined, false, true, role),
   trainingGroup: (id: number) =>
     request<import("./types").TrainingGroup>(`/training-groups/${id}`, undefined, false, true),
   createTrainingGroup: (payload: import("./types").TrainingGroupCreate) =>
@@ -271,7 +274,13 @@ export const api = {
   listSessions: (sessionDate: string, branchId?: number) => {
     const params = new URLSearchParams({ session_date: sessionDate });
     if (branchId) params.set("branch_id", String(branchId));
-    return request<import("./types").TrainingSessionSummary[]>(`/training-sessions?${params}`);
+    return request<import("./types").TrainingSessionSummary[]>(
+      `/training-sessions?${params}`,
+      undefined,
+      false,
+      true,
+      "trainer",
+    );
   },
   openGroupSession: (groupId: number, sessionDate: string, trainerId?: number) =>
     request<import("./types").TrainingSessionSummary>(`/training-groups/${groupId}/sessions`, {
@@ -282,7 +291,7 @@ export const api = {
       }),
     }, true),
   session: (id: number) =>
-    request<import("./types").TrainingSessionDetail>(`/training-sessions/${id}`),
+    request<import("./types").TrainingSessionDetail>(`/training-sessions/${id}`, undefined, false, true, "trainer"),
   setAttendance: async (
     sessionId: number,
     studentId: number,
@@ -316,7 +325,13 @@ export const api = {
     } catch (error) {
       const message = String(error);
       if (!message.includes("already exists") && !message.includes("409")) throw error;
-      const session = await request<import("./types").TrainingSessionDetail>(`/training-sessions/${sessionId}`);
+      const session = await request<import("./types").TrainingSessionDetail>(
+        `/training-sessions/${sessionId}`,
+        undefined,
+        false,
+        true,
+        "trainer",
+      );
       const student = session.students.find((s) => s.id === studentId);
       if (!student?.attendance?.id) throw error;
       const record = await patch(student.attendance.id);
@@ -366,7 +381,13 @@ export const api = {
     } catch (error) {
       const message = String(error);
       if (!message.includes("already exists") && !message.includes("409")) throw error;
-      const session = await request<import("./types").TrainingSessionDetail>(`/training-sessions/${sessionId}`);
+      const session = await request<import("./types").TrainingSessionDetail>(
+        `/training-sessions/${sessionId}`,
+        undefined,
+        false,
+        true,
+        "trainer",
+      );
       const trainer = session.trainers.find((t) => t.id === trainerId);
       if (!trainer?.attendance?.id) throw error;
       const record = await patch(trainer.attendance.id);

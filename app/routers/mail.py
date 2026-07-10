@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models import Parent
 from app.schemas import MailToParentsRequest, MailToParentsResponse
 from app.mail import send_email, _smtp_configured
+from app.security import require_admin
 
 router = APIRouter(prefix="/mail", tags=["mail"])
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/mail", tags=["mail"])
 async def mail_parents(
     payload: MailToParentsRequest,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> MailToParentsResponse:
     if not _smtp_configured():
         raise HTTPException(

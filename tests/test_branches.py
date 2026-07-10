@@ -4,30 +4,30 @@ from sqlalchemy import func, select
 
 from app.database import async_session_maker
 from app.models import Branch, Student, Trainer, TrainingGroup, student_branches, trainer_branches
-from tests.conftest import login_admin, login_trainer, write_headers
+from tests.conftest import admin_headers, login_admin, login_trainer, write_headers
 
 
 @pytest.mark.asyncio
 async def test_delete_branch_cascades_assignments(client: AsyncClient) -> None:
+    admin = await admin_headers(client)
     create = await client.post(
         "/branches",
-        headers=write_headers(),
+        headers=admin,
         json={"name": "QA Delete Branch", "address": "Test"},
     )
     assert create.status_code == 201
     branch_id = create.json()["id"]
 
-    admin = await login_admin(client)
     patch_trainer = await client.patch(
         "/trainers/1",
-        headers=write_headers(admin),
+        headers=admin,
         json={"branch_ids": [1, branch_id]},
     )
     assert patch_trainer.status_code == 200
 
     student = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=admin,
         json={
             "first_name": "Del",
             "last_name": "Student",
@@ -60,7 +60,7 @@ async def test_delete_branch_cascades_assignments(client: AsyncClient) -> None:
     )
     assert group.status_code == 201
 
-    delete = await client.delete(f"/branches/{branch_id}", headers=write_headers())
+    delete = await client.delete(f"/branches/{branch_id}", headers=admin)
     assert delete.status_code == 204
 
     async with async_session_maker() as session:
@@ -90,9 +90,11 @@ async def test_delete_branch_cascades_assignments(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_delete_branch_moves_orphans_to_orlova(client: AsyncClient) -> None:
+    admin = await admin_headers(client)
+    trainer = await login_trainer(client)
     create = await client.post(
         "/branches",
-        headers=write_headers(),
+        headers=admin,
         json={"name": "QA Orphan Branch", "address": "Test"},
     )
     assert create.status_code == 201
@@ -100,7 +102,7 @@ async def test_delete_branch_moves_orphans_to_orlova(client: AsyncClient) -> Non
 
     student = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=admin,
         json={
             "first_name": "Orphan",
             "last_name": "Move",
@@ -117,19 +119,21 @@ async def test_delete_branch_moves_orphans_to_orlova(client: AsyncClient) -> Non
     assert student.status_code == 200
     student_id = student.json()["id"]
 
-    delete = await client.delete(f"/branches/{branch_id}", headers=write_headers())
+    delete = await client.delete(f"/branches/{branch_id}", headers=admin)
     assert delete.status_code == 204
 
-    students = await client.get("/students", headers=write_headers())
+    students = await client.get("/students", headers=write_headers(trainer))
     row = next(s for s in students.json() if s["id"] == student_id)
     assert [b["name"] for b in row["branches"]] == ["Orlova"]
 
 
 @pytest.mark.asyncio
 async def test_delete_branch_keeps_student_on_other_branch(client: AsyncClient) -> None:
+    admin = await admin_headers(client)
+    trainer = await login_trainer(client)
     create = await client.post(
         "/branches",
-        headers=write_headers(),
+        headers=admin,
         json={"name": "QA Second Branch", "address": "Test 2"},
     )
     assert create.status_code == 201
@@ -137,7 +141,7 @@ async def test_delete_branch_keeps_student_on_other_branch(client: AsyncClient) 
 
     student = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=admin,
         json={
             "first_name": "Multi",
             "last_name": "Branch",
@@ -154,10 +158,10 @@ async def test_delete_branch_keeps_student_on_other_branch(client: AsyncClient) 
     assert student.status_code == 200
     student_id = student.json()["id"]
 
-    delete = await client.delete(f"/branches/{second_branch_id}", headers=write_headers())
+    delete = await client.delete(f"/branches/{second_branch_id}", headers=admin)
     assert delete.status_code == 204
 
-    detail = await client.get(f"/students", headers=write_headers())
+    detail = await client.get("/students", headers=write_headers(trainer))
     assert detail.status_code == 200
     row = next(s for s in detail.json() if s["id"] == student_id)
     assert [b["id"] for b in row["branches"]] == [1]
@@ -165,9 +169,10 @@ async def test_delete_branch_keeps_student_on_other_branch(client: AsyncClient) 
 
 @pytest.mark.asyncio
 async def test_patch_student_requires_branch(client: AsyncClient) -> None:
+    admin = await admin_headers(client)
     resp = await client.patch(
         "/students/1",
-        headers=write_headers(),
+        headers=admin,
         json={"branch_ids": []},
     )
     assert resp.status_code == 422

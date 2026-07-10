@@ -23,9 +23,11 @@ from app.schemas import (
     BranchCreate,
     BranchDetailRead,
     BranchPatch,
+    BranchRead,
     StudentBrief,
     TrainerBrief,
 )
+from app.security import require_admin, require_trainer_or_admin
 
 router = APIRouter(prefix="/branches", tags=["branches"])
 
@@ -87,19 +89,18 @@ async def _cleanup_branch_references(db: AsyncSession, branch_id: int) -> None:
     await db.execute(delete(EventTarget).where(EventTarget.branch_id == branch_id))
 
 
-@router.get("", response_model=list[BranchDetailRead])
-async def list_branches(db: AsyncSession = Depends(get_db)) -> list[BranchDetailRead]:
-    result = await db.execute(
-        select(Branch).options(*_branch_load_options()).order_by(Branch.id),
-    )
-    branches = result.scalars().unique().all()
-    return [_branch_to_detail(b) for b in branches]
+@router.get("", response_model=list[BranchRead])
+async def list_branches(db: AsyncSession = Depends(get_db)) -> list[BranchRead]:
+    result = await db.execute(select(Branch).order_by(Branch.id))
+    branches = result.scalars().all()
+    return [BranchRead.model_validate(b, from_attributes=True) for b in branches]
 
 
 @router.post("", response_model=BranchDetailRead, status_code=status.HTTP_201_CREATED)
 async def create_branch(
     payload: BranchCreate,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> BranchDetailRead:
     existing = await db.execute(select(Branch).where(Branch.name == payload.name))
     if existing.scalar_one_or_none() is not None:
@@ -118,7 +119,11 @@ async def create_branch(
 
 
 @router.get("/{branch_id}", response_model=BranchDetailRead)
-async def get_branch(branch_id: int, db: AsyncSession = Depends(get_db)) -> BranchDetailRead:
+async def get_branch(
+    branch_id: int,
+    db: AsyncSession = Depends(get_db),
+    _staff: int | None = Depends(require_trainer_or_admin),
+) -> BranchDetailRead:
     result = await db.execute(
         select(Branch).where(Branch.id == branch_id).options(*_branch_load_options()),
     )
@@ -129,7 +134,11 @@ async def get_branch(branch_id: int, db: AsyncSession = Depends(get_db)) -> Bran
 
 
 @router.delete("/{branch_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_branch(branch_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_branch(
+    branch_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> None:
     branch = await db.get(Branch, branch_id)
     if branch is None:
         raise HTTPException(status_code=404, detail="Branch not found.")
@@ -144,6 +153,7 @@ async def patch_branch(
     branch_id: int,
     payload: BranchPatch,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> BranchDetailRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:

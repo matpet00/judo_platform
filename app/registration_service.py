@@ -137,7 +137,6 @@ async def ensure_parent_credentials(
     )
     password = generate_password()
     parent.username = username
-    parent.password_plain = password
     parent.password_hash = hash_pin(password)
     if not parent.first_name:
         parent.first_name = first_name
@@ -208,7 +207,6 @@ async def apply_registration(
             email=normalized_email,
             phone=payload.phone,
             username=username,
-            password_plain=password,
             password_hash=hash_pin(password),
         )
         db.add(parent)

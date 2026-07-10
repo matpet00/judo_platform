@@ -4,7 +4,7 @@ import pytest
 
 from app.reminders import run_reminder_sweep
 from app.security import create_parent_token
-from tests.conftest import login_trainer, write_headers
+from tests.conftest import admin_headers as admin_auth_headers, login_admin, login_trainer, write_headers
 
 
 def _parent_token(parent_id: int = 1) -> str:
@@ -74,14 +74,12 @@ async def test_admin_branch_attendance_report(client):
         headers=write_headers(trainer),
     )
 
-    admin_resp = await client.post("/admin/login", json={"username": "admin", "password": "admin"})
-    assert admin_resp.status_code == 200
-    admin_headers = write_headers()
-    admin_headers["Authorization"] = f"Bearer {admin_resp.json()['access_token']}"
+    admin_token = await login_admin(client)
+    admin_hdrs = write_headers(admin_token)
 
     report = await client.get(
         f"/admin/attendance-report?branch_id={branch_id}&month={month}",
-        headers=admin_headers,
+        headers=admin_hdrs,
     )
     assert report.status_code == 200, report.text
     body = report.json()
@@ -99,14 +97,12 @@ async def test_admin_can_read_attendance_report(client):
     today = date.today()
     month = f"{today.year}-{today.month:02d}"
 
-    admin_resp = await client.post("/admin/login", json={"username": "admin", "password": "admin"})
-    assert admin_resp.status_code == 200
-    admin_headers = write_headers()
-    admin_headers["Authorization"] = f"Bearer {admin_resp.json()['access_token']}"
+    admin_token = await login_admin(client)
+    admin_hdrs = write_headers(admin_token)
 
     report = await client.get(
         f"/training-groups/{group_id}/attendance-report?month={month}",
-        headers=admin_headers,
+        headers=admin_hdrs,
     )
     assert report.status_code == 200, report.text
     body = report.json()
@@ -420,7 +416,7 @@ async def test_delete_training_group_cascades_sessions(client):
     assert resp.status_code == 204
 
     assert (await client.get(f"/training-groups/{group_id}", headers=write_headers(trainer))).status_code == 404
-    assert (await client.get(f"/training-sessions/{session['id']}")).status_code == 404
+    assert (await client.get(f"/training-sessions/{session['id']}", headers=write_headers(trainer))).status_code == 404
 
 
 @pytest.mark.asyncio
@@ -514,7 +510,7 @@ async def test_guest_attendance_is_flagged_and_counts(client):
     assert guest_mark.status_code == 201, guest_mark.text
     guest_attendance_id = guest_mark.json()["id"]
 
-    detail = (await client.get(f"/training-sessions/{session_id}")).json()
+    detail = (await client.get(f"/training-sessions/{session_id}", headers=write_headers(trainer))).json()
     by_id = {s["id"]: s for s in detail["students"]}
     assert by_id[1]["is_guest"] is False
     assert by_id[2]["is_guest"] is True
@@ -536,7 +532,7 @@ async def test_guest_attendance_is_flagged_and_counts(client):
         headers=write_headers(trainer),
     )
     assert delete.status_code == 204
-    detail_after = (await client.get(f"/training-sessions/{session_id}")).json()
+    detail_after = (await client.get(f"/training-sessions/{session_id}", headers=write_headers(trainer))).json()
     assert all(s["id"] != 2 for s in detail_after["students"])
 
 
@@ -562,7 +558,7 @@ async def test_trainer_attendance_on_session(client):
     assert mark.status_code == 201, mark.text
     attendance_id = mark.json()["id"]
 
-    detail = (await client.get(f"/training-sessions/{session_id}")).json()
+    detail = (await client.get(f"/training-sessions/{session_id}", headers=write_headers(trainer))).json()
     by_id = {t["id"]: t for t in detail["trainers"]}
     assert 1 in by_id
     assert by_id[1]["is_guest"] is False
@@ -584,7 +580,7 @@ async def test_trainer_attendance_on_session(client):
         headers=write_headers(trainer),
     )
     assert delete.status_code == 204
-    detail_after = (await client.get(f"/training-sessions/{session_id}")).json()
+    detail_after = (await client.get(f"/training-sessions/{session_id}", headers=write_headers(trainer))).json()
     by_id_after = {t["id"]: t for t in detail_after["trainers"]}
     assert 1 in by_id_after
     assert 2 not in by_id_after

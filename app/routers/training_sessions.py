@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -29,7 +29,8 @@ from app.schemas import (
     TrainerBrief,
     StudentBrief,
 )
-from app.security import require_trainer_token
+from app.security import require_trainer_or_admin, require_trainer_token
+from app.timezone_util import LOCAL_TZ
 from app.training_notify import notify_training_term_canceled
 
 router = APIRouter(prefix="/training-sessions", tags=["training-sessions"])
@@ -54,11 +55,11 @@ def _session_load_options():
 
 
 def _starts_at_from_group(session_date: date, group: TrainingGroup) -> datetime:
-    return datetime.combine(session_date, group.start_time, tzinfo=timezone.utc)
+    return datetime.combine(session_date, group.start_time, tzinfo=LOCAL_TZ)
 
 
 def _starts_at_from_date_and_time(session_date: date, start_time) -> datetime:
-    return datetime.combine(session_date, start_time, tzinfo=timezone.utc)
+    return datetime.combine(session_date, start_time, tzinfo=LOCAL_TZ)
 
 
 def _session_end_time(session: TrainingSession, group: TrainingGroup):
@@ -66,7 +67,7 @@ def _session_end_time(session: TrainingSession, group: TrainingGroup):
 
 
 def _session_date_from_starts_at(starts_at: datetime) -> date:
-    return starts_at.date()
+    return starts_at.astimezone(LOCAL_TZ).date()
 
 
 def _attendance_to_read(record: AttendanceRecord) -> AttendanceRecordRead:
@@ -357,7 +358,8 @@ async def list_training_sessions(
     branch_id: int | None = Query(default=None, ge=1),
     trainer_id: int | None = Query(default=None, ge=1),
     training_group_id: int | None = Query(default=None, ge=1),
-    session_date: date | None = Query(default=None, description="Filter by session calendar date (UTC, YYYY-MM-DD)"),
+    session_date: date | None = Query(default=None, description="Filter by session calendar date (Europe/Prague, YYYY-MM-DD)"),
+    _staff: int | None = Depends(require_trainer_or_admin),
 ) -> list[TrainingSessionRead]:
     stmt = (
         select(TrainingSession)
@@ -375,7 +377,7 @@ async def list_training_sessions(
     if training_group_id is not None:
         stmt = stmt.where(TrainingSession.training_group_id == training_group_id)
     if session_date is not None:
-        day_start = datetime.combine(session_date, datetime.min.time(), tzinfo=timezone.utc)
+        day_start = datetime.combine(session_date, datetime.min.time(), tzinfo=LOCAL_TZ)
         day_end = day_start + timedelta(days=1)
         stmt = stmt.where(
             TrainingSession.starts_at >= day_start,
@@ -412,6 +414,7 @@ async def create_training_session(
 async def get_training_session(
     session_id: int,
     db: AsyncSession = Depends(get_db),
+    _staff: int | None = Depends(require_trainer_or_admin),
 ) -> TrainingSessionDetailRead:
     session = await _get_session_or_404(db, session_id)
     return _session_to_detail(session)
@@ -519,6 +522,7 @@ async def delete_training_session(
 async def list_session_attendance(
     session_id: int,
     db: AsyncSession = Depends(get_db),
+    _staff: int | None = Depends(require_trainer_or_admin),
 ) -> list[AttendanceRecordRead]:
     session = await _get_session_or_404(db, session_id)
     records_sorted = sorted(session.attendance_records, key=lambda r: r.student_id)
@@ -631,6 +635,7 @@ async def get_attendance_record(
     session_id: int,
     attendance_id: int,
     db: AsyncSession = Depends(get_db),
+    _staff: int | None = Depends(require_trainer_or_admin),
 ) -> AttendanceRecordRead:
     record = await _get_attendance_in_session_or_404(db, session_id, attendance_id)
     return _attendance_to_read(record)

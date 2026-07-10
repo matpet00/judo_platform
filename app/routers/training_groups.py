@@ -48,6 +48,7 @@ from app.training_notify import (
 )
 from app.routers.training_sessions import _get_session_or_404, _session_to_read, create_session_for_group
 from app.security import require_trainer_or_admin, require_trainer_token
+from app.timezone_util import LOCAL_TZ
 
 router = APIRouter(prefix="/training-groups", tags=["training-groups"])
 
@@ -336,8 +337,8 @@ async def list_training_occurrences(
     group_ids = [g.id for g in groups]
     session_by_group_date: dict[tuple[int, date], TrainingSession] = {}
     if group_ids:
-        day_start = datetime.combine(from_date, datetime.min.time(), tzinfo=UTC)
-        day_end = datetime.combine(to_date, datetime.min.time(), tzinfo=UTC) + timedelta(days=1)
+        day_start = datetime.combine(from_date, datetime.min.time(), tzinfo=LOCAL_TZ)
+        day_end = datetime.combine(to_date, datetime.min.time(), tzinfo=LOCAL_TZ) + timedelta(days=1)
         sessions_result = await db.execute(
             select(TrainingSession)
             .where(
@@ -348,7 +349,7 @@ async def list_training_occurrences(
             .options(selectinload(TrainingSession.attendance_records)),
         )
         for session in sessions_result.scalars().unique().all():
-            session_by_group_date[(session.training_group_id, session.starts_at.date())] = session
+            session_by_group_date[(session.training_group_id, session.starts_at.astimezone(LOCAL_TZ).date())] = session
 
     occurrences: list[TrainingOccurrence] = []
     for group in groups:
@@ -638,7 +639,7 @@ async def patch_occurrence_schedule(
         session_date=training_date,
         trainer_id=_trainer_id,
     )
-    session.starts_at = datetime.combine(training_date, payload.start_time, tzinfo=UTC)
+    session.starts_at = datetime.combine(training_date, payload.start_time, tzinfo=LOCAL_TZ)
     session.end_time = payload.end_time
     await db.commit()
     return _session_to_read(await _get_session_or_404(db, session.id))

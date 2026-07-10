@@ -92,7 +92,7 @@ async def _assert_trainer_features(client, token: str) -> None:
     assert session.status_code in (200, 201)
     session_id = session.json()["id"]
 
-    detail = await client.get(f"/training-sessions/{session_id}")
+    detail = await client.get(f"/training-sessions/{session_id}", headers=write_headers(token))
     assert detail.status_code == 200
     student = detail.json()["students"][0]
     if student.get("attendance"):

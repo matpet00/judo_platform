@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from tests.conftest import first_group_id, login_trainer, write_headers
+from tests.conftest import admin_headers, first_group_id, login_trainer, write_headers
 
 
 async def _branch_id(client, name: str) -> int:
@@ -55,7 +55,7 @@ async def test_trainer_does_not_see_student_outside_groups(client):
 
     isolated = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={
             "first_name": "Solo",
             "last_name": "Lutyn",
@@ -89,7 +89,7 @@ async def test_guest_from_attendance_appears_as_guest(client):
 
     guest = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={
             "first_name": "Host",
             "last_name": "Navstevnik",

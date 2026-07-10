@@ -17,7 +17,7 @@ from app.schemas import (
 )
 from app.student_delete import delete_student_cascade
 from app.routers.training_sessions import attendance_with_session_to_read
-from app.security import require_admin
+from app.security import require_admin, require_trainer_or_admin
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -77,6 +77,7 @@ def _student_to_read(student: Student) -> StudentRead:
 async def create_student(
     payload: StudentCreate,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> StudentRead:
     if len(payload.parents) > MAX_PARENTS_PER_STUDENT:
         raise HTTPException(
@@ -114,7 +115,10 @@ async def create_student(
 
 
 @router.get("", response_model=list[StudentRead])
-async def list_students(db: AsyncSession = Depends(get_db)) -> list[StudentRead]:
+async def list_students(
+    db: AsyncSession = Depends(get_db),
+    _staff: int | None = Depends(require_trainer_or_admin),
+) -> list[StudentRead]:
     result = await db.execute(
         select(Student)
         .options(
@@ -132,6 +136,7 @@ async def patch_student(
     student_id: int,
     payload: StudentPatch,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> StudentRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -227,6 +232,7 @@ async def list_student_attendance(
     student_id: int,
     db: AsyncSession = Depends(get_db),
     session_id: int | None = Query(default=None, ge=1),
+    _staff: int | None = Depends(require_trainer_or_admin),
 ) -> list[AttendanceRecordWithSessionRead]:
     student = await db.get(Student, student_id)
     if student is None:

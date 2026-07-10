@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.birth_number import validate_birth_number
 from app.database import async_session_maker
 from app.models import Student
-from tests.conftest import login_admin, write_headers
+from tests.conftest import admin_headers, login_admin, write_headers
 
 
 def test_validate_birth_number_requires_slash() -> None:
@@ -93,7 +93,7 @@ async def test_register_rejects_duplicate_birth_number_in_db(client):
     branch_id = await _branch_id(client)
     existing = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={
             "first_name": "Exist",
             "last_name": "Student",
@@ -147,7 +147,7 @@ async def test_birth_number_status_endpoint(client):
     branch_id = await _branch_id(client)
     await client.post(
         "/students",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={
             "first_name": "Taken",
             "last_name": "RC",
@@ -200,7 +200,7 @@ async def test_admin_patch_student_rejects_duplicate_birth_number(client):
     branch_id = await _branch_id(client)
     first = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={
             "first_name": "One",
             "last_name": "Kid",
@@ -218,7 +218,7 @@ async def test_admin_patch_student_rejects_duplicate_birth_number(client):
     )
     second = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={
             "first_name": "Two",
             "last_name": "Kid",
@@ -236,7 +236,7 @@ async def test_admin_patch_student_rejects_duplicate_birth_number(client):
     )
     patch = await client.patch(
         f"/students/{second.json()['id']}",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={"birth_number": "200505/1111"},
     )
     assert patch.status_code == 409
@@ -247,7 +247,7 @@ async def test_legacy_student_without_birth_number_still_works(client):
     branch_id = await _branch_id(client)
     resp = await client.post(
         "/students",
-        headers=write_headers(),
+        headers=await admin_headers(client),
         json={
             "first_name": "Legacy",
             "last_name": "Kid",

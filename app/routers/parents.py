@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -34,7 +34,18 @@ from app.schemas import (
 )
 from app.age_group import compute_age_group
 from app.birth_number import assert_birth_numbers_available
-from app.security import create_parent_token, hash_pin, require_parent_token, verify_pin
+from app.security import (
+    check_rate_limit,
+    clear_rate_limit,
+    client_ip,
+    create_parent_token,
+    hash_pin,
+    needs_rehash,
+    record_failed_attempt,
+    require_admin,
+    require_parent_token,
+    verify_pin,
+)
 
 router = APIRouter(prefix="/parents", tags=["parents"])
 
@@ -110,6 +121,7 @@ async def _get_parent_with_children_or_404(db: AsyncSession, parent_id: int) -> 
 async def create_parent(
     payload: ParentCreate,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> Parent:
     normalized_email = _normalize_email(str(payload.email))
     existing = await db.execute(select(Parent).where(Parent.email == normalized_email))
@@ -131,13 +143,22 @@ async def create_parent(
 @router.post("/login", response_model=ParentAuthToken)
 async def parent_login(
     payload: ParentLogin,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ParentAuthToken:
+    rate_key = f"{client_ip(request)}:{payload.username}"
+    check_rate_limit("parent_login", rate_key)
     result = await db.execute(select(Parent).where(Parent.username == payload.username))
     parent = result.scalar_one_or_none()
     if parent is None or not verify_pin(payload.password, parent.password_hash):
+        record_failed_attempt("parent_login", rate_key)
         raise HTTPException(status_code=401, detail="Neplatné přihlašovací údaje.")
 
+    if needs_rehash(parent.password_hash):
+        parent.password_hash = hash_pin(payload.password)
+        await db.commit()
+
+    clear_rate_limit("parent_login", rate_key)
     token, expires_at = create_parent_token(parent.id)
     return ParentAuthToken(access_token=token, expires_at=expires_at, parent_id=parent.id)
 
@@ -178,7 +199,6 @@ async def change_parent_password(
     if not verify_pin(payload.current_password, parent.password_hash):
         raise HTTPException(status_code=401, detail="Invalid current password.")
     parent.password_hash = hash_pin(payload.new_password)
-    parent.password_plain = payload.new_password
     await db.commit()
 
 
@@ -227,7 +247,10 @@ async def patch_parent_child(
 
 
 @router.get("", response_model=list[ParentRead])
-async def list_parents(db: AsyncSession = Depends(get_db)) -> list[Parent]:
+async def list_parents(
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> list[Parent]:
     result = await db.execute(select(Parent).order_by(Parent.id))
     return list(result.scalars().all())
 
@@ -237,6 +260,7 @@ async def patch_parent(
     parent_id: int,
     payload: ParentPatch,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> Parent:
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -290,7 +314,11 @@ async def _cleanup_parent_references(db: AsyncSession, parent_id: int) -> None:
 
 
 @router.delete("/{parent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_parent(parent_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_parent(
+    parent_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> None:
     parent = await db.get(Parent, parent_id)
     if parent is None:
         raise HTTPException(status_code=404, detail="Parent not found.")

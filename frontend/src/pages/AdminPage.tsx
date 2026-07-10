@@ -548,7 +548,7 @@ function StudentsTab() {
   const [editing, setEditing] = useState<StudentWithBranches | "new" | null>(null);
   const [viewing, setViewing] = useState<StudentWithBranches | null>(null);
 
-  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students() });
+  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students("admin") });
   const branchesQ = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
 
   const del = useMutation({
@@ -896,7 +896,7 @@ function ParentsTab() {
   const [credentials, setCredentials] = useState<ResendCredentialsRead | null>(null);
 
   const parents = useQuery({ queryKey: ["admin", "parents"], queryFn: () => api.adminParents() });
-  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students() });
+  const students = useQuery({ queryKey: ["admin", "students"], queryFn: () => api.students("admin") });
 
   const del = useMutation({
     mutationFn: (id: number) => api.deleteParent(id),
@@ -1281,7 +1281,14 @@ function BranchesTab() {
               <button
                 type="button"
                 className="admin-btn-sm"
-                onClick={() => setViewing(branches.data?.find((x) => x.id === b.id) ?? b)}
+                onClick={async () => {
+                  try {
+                    const detail = await api.branch(b.id, "admin");
+                    setViewing(detail);
+                  } catch (err) {
+                    alert(String(err));
+                  }
+                }}
               >
                 Zobrazit
               </button>

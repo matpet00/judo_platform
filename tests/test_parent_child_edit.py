@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from tests.conftest import login_parent, write_headers
+from tests.conftest import admin_headers, login_parent, write_headers
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_parent_child_patch_rejects_duplicate_birth_number(client):
     token = await login_parent(client)
     await client.post(
         "/students",
-        headers={"X-API-Key": "test-api-key"},
+        headers=await admin_headers(client),
         json={
             "first_name": "Other",
             "last_name": "Kid",

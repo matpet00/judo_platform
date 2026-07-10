@@ -66,7 +66,7 @@ def main() -> None:
         session_id = session_resp.json()["id"]
 
         for student_id in student_ids:
-            detail_before = client.get(f"/training-sessions/{session_id}").json()
+            detail_before = client.get(f"/training-sessions/{session_id}", headers=headers(token)).json()
             existing = next(
                 (s["attendance"] for s in detail_before["students"] if s["id"] == student_id),
                 None,
@@ -91,7 +91,7 @@ def main() -> None:
             if create.status_code == 201:
                 attendance_id = create.json()["id"]
             elif create.status_code == 409:
-                detail_retry = client.get(f"/training-sessions/{session_id}").json()
+                detail_retry = client.get(f"/training-sessions/{session_id}", headers=headers(token)).json()
                 row = next(s for s in detail_retry["students"] if s["id"] == student_id)
                 if not row.get("attendance"):
                     fail(f"POST 409 but no attendance for student {student_id}", create)
@@ -106,7 +106,7 @@ def main() -> None:
             if patch.status_code != 200:
                 fail(f"PATCH attendance student {student_id}", patch)
 
-        detail = client.get(f"/training-sessions/{session_id}")
+        detail = client.get(f"/training-sessions/{session_id}", headers=headers(token))
         if detail.status_code != 200:
             fail("GET session detail", detail)
 

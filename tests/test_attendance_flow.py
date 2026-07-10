@@ -18,7 +18,7 @@ async def test_attendance_post_patch_and_conflict(client):
     assert session_resp.status_code in (200, 201)
     session_id = session_resp.json()["id"]
 
-    detail = await client.get(f"/training-sessions/{session_id}")
+    detail = await client.get(f"/training-sessions/{session_id}", headers=write_headers(token))
     students = detail.json()["students"]
     assert students
     student_id = students[0]["id"]
@@ -58,7 +58,7 @@ async def test_attendance_roster_flow(client):
         headers=write_headers(token),
     )
     session_id = session_resp.json()["id"]
-    students = (await client.get(f"/training-sessions/{session_id}")).json()["students"]
+    students = (await client.get(f"/training-sessions/{session_id}", headers=write_headers(token))).json()["students"]
 
     for student in students[:5]:
         response = await client.post(

@@ -141,7 +141,7 @@ def main() -> None:
         check("open session", session, {200, 201})
         session_id = session.json()["id"]
 
-        detail = client.get(f"/training-sessions/{session_id}")
+        detail = client.get(f"/training-sessions/{session_id}", headers=headers(new_token))
         check("GET session detail", detail)
         student_id = student_ids[0]
         row = next(s for s in detail.json()["students"] if s["id"] == student_id)

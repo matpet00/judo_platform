@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,7 +15,18 @@ from app.schemas import (
     TrainerRead,
     TrainerStudentRead,
 )
-from app.security import create_trainer_token, hash_pin, require_admin, require_trainer_token, verify_pin
+from app.security import (
+    check_rate_limit,
+    clear_rate_limit,
+    client_ip,
+    create_trainer_token,
+    hash_pin,
+    needs_rehash,
+    record_failed_attempt,
+    require_admin,
+    require_trainer_token,
+    verify_pin,
+)
 from app.trainer_students import list_trainer_students
 
 router = APIRouter(prefix="/trainers", tags=["trainers"])
@@ -56,6 +67,7 @@ async def list_trainers(db: AsyncSession = Depends(get_db)) -> list[TrainerRead]
 async def create_trainer(
     payload: TrainerCreate,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> TrainerRead:
     branches_list = await get_branches_by_ids(db, payload.branch_ids)
 
@@ -75,14 +87,23 @@ async def create_trainer(
 async def verify_trainer_pin(
     trainer_id: int,
     payload: TrainerPinVerify,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TrainerAuthToken:
+    rate_key = f"{client_ip(request)}:{trainer_id}"
+    check_rate_limit("trainer_pin", rate_key)
     trainer = await db.get(Trainer, trainer_id)
     if trainer is None:
         raise HTTPException(status_code=404, detail="Trainer not found.")
     if not verify_pin(payload.pin, trainer.pin_hash):
+        record_failed_attempt("trainer_pin", rate_key)
         raise HTTPException(status_code=401, detail="Invalid PIN.")
 
+    if needs_rehash(trainer.pin_hash):
+        trainer.pin_hash = hash_pin(payload.pin)
+        await db.commit()
+
+    clear_rate_limit("trainer_pin", rate_key)
     token, expires_at = create_trainer_token(trainer.id)
     return TrainerAuthToken(
         access_token=token,
@@ -162,7 +183,11 @@ async def patch_trainer(
 
 
 @router.delete("/{trainer_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_trainer(trainer_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_trainer(
+    trainer_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> None:
     trainer = await db.get(Trainer, trainer_id)
     if trainer is None:
         raise HTTPException(status_code=404, detail="Trainer not found.")
