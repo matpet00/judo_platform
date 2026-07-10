@@ -1130,7 +1130,37 @@ textarea {
   gap: 10px;
 }
 
-.register-add-child {
+.register-add-action {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1.5px solid var(--gold-dim);
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.08);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.register-add-action:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.24);
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 0 14px rgba(212, 175, 55, 0.18);
+}
+
+.register-add-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.register-add-action--block {
+  width: 100%;
+  justify-content: center;
+}
+
+.register-remove-action {
   min-height: 32px;
   padding: 0 10px;
   font-size: 0.8rem;

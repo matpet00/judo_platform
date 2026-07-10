@@ -485,7 +485,7 @@ export function RegisterPage() {
             {!showSecondGuardian ? (
               <button
                 type="button"
-                className="btn btn--ghost register-add-child"
+                className="btn register-add-action register-add-action--block"
                 onClick={() => setShowSecondGuardian(true)}
               >
                 + Druhý zákonný zástupce
@@ -509,7 +509,7 @@ export function RegisterPage() {
                   )}
                 <button
                   type="button"
-                  className="btn btn--ghost register-add-child"
+                  className="btn btn--ghost register-remove-action"
                   onClick={() => {
                     setShowSecondGuardian(false);
                     setSecondGuardian(emptyGuardian());
@@ -526,7 +526,7 @@ export function RegisterPage() {
               <h2 className="register-section__title">Děti</h2>
               <button
                 type="button"
-                className="btn btn--ghost register-add-child"
+                className="btn register-add-action"
                 onClick={addChild}
                 disabled={children.length >= 5}
               >
