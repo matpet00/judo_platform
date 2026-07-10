@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calendar overflow stress fixture</title>
+    <link rel="stylesheet" href="../../frontend/src/index.css" />
+  </head>
+  <body>
+    <div id="root">
+      <div class="app-shell notification-board events-page">
+        <section class="event-calendar" data-testid="calendar-container">
+          <div class="event-calendar__title">červenec 2026</div>
+          <div class="event-calendar__weekdays">
+            <span>Po</span><span>Út</span><span>St</span><span>Čt</span><span>Pá</span><span>So</span><span>Ne</span>
+          </div>
+          <div class="event-calendar__grid" data-testid="calendar-grid">
+            <!-- Empty cells before stress day -->
+            <div class="event-calendar__cell is-muted"><span class="event-calendar__day">29</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell is-muted"><span class="event-calendar__day">30</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">1</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">2</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">3</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">4</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">5</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">6</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">7</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">8</span><div class="event-calendar__events"></div></div>
+            <!-- Stress day: 6 long-named events in one cell -->
+            <div class="event-calendar__cell is-today" data-testid="stress-cell">
+              <span class="event-calendar__day">9</span>
+              <div class="event-calendar__events">
+                <button type="button" class="event-calendar__pill event-type--training">17:00 Orlova Úterý+Čtvrtek</button>
+                <button type="button" class="event-calendar__pill event-type--training">18:30 Dolni Lutyne Středa+Pátek</button>
+                <button type="button" class="event-calendar__pill event-type--tournament">09:00 Mistrovství ČR kadeti+junioři</button>
+                <button type="button" class="event-calendar__pill event-type--seminar">10:00 Seminář techniky hodů a úchopů</button>
+                <button type="button" class="event-calendar__pill event-type--meeting">19:00 Schůze rodičů a trenérů pobočky</button>
+                <button type="button" class="event-calendar__pill event-type--other">20:00 Společenské setkání klubu Orlova</button>
+              </div>
+            </div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">10</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">11</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">12</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">13</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">14</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">15</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">16</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">17</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">18</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">19</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">20</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">21</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">22</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">23</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">24</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">25</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">26</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">27</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">28</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">29</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">30</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell"><span class="event-calendar__day">31</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell is-muted"><span class="event-calendar__day">1</span><div class="event-calendar__events"></div></div>
+            <div class="event-calendar__cell is-muted"><span class="event-calendar__day">2</span><div class="event-calendar__events"></div></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>

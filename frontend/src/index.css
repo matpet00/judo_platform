@@ -2180,6 +2180,8 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 .event-calendar__toolbar {
   display: flex;
@@ -2259,15 +2261,18 @@ textarea {
 .event-calendar__agenda {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 .event-calendar__agenda--week {
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow-x: auto;
 }
 .event-calendar__agenda--day {
   grid-template-columns: 1fr;
 }
 .event-calendar__agenda-day {
   min-height: 120px;
+  min-width: 0;
   background: var(--bg-elevated);
   border: 1px solid transparent;
   border-radius: 8px;
@@ -2312,8 +2317,9 @@ textarea {
 }
 .event-calendar__weekdays {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
+  min-width: 0;
   color: var(--muted);
   font-size: 0.75rem;
   text-align: center;
@@ -2321,11 +2327,13 @@ textarea {
 }
 .event-calendar__grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
+  min-width: 0;
 }
 .event-calendar__cell {
   min-height: 74px;
+  min-width: 0;
   background: var(--bg-elevated);
   border: 1px solid transparent;
   border-radius: 8px;
@@ -2355,6 +2363,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
   overflow: hidden;
 }
 .event-calendar__pill {
@@ -2367,9 +2376,21 @@ textarea {
   font-size: 0.68rem;
   text-align: left;
   cursor: pointer;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.event-calendar__more {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.65rem;
+  padding: 0 2px;
+  text-align: left;
+  cursor: pointer;
 }
 .event-calendar__pill.is-active {
   outline: 2px solid var(--cream);

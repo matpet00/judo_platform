@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -423,6 +423,7 @@ function formatOccurrenceWhen(occ: TrainingOccurrence): string {
 }
 
 type CalView = "month" | "week" | "day";
+const MONTH_CELL_PILL_LIMIT = 3;
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
@@ -2024,6 +2025,38 @@ function CalendarView({
     </button>
   );
 
+  const renderDayItems = (day: Date, dayEvents: EventItem[], dayOccurrences: TrainingOccurrence[], limit?: number) => {
+    const items: { key: string; node: React.ReactNode }[] = [
+      ...dayEvents.map((event) => ({ key: `e${event.id}`, node: pill(event) })),
+      ...dayOccurrences.map((occ) => ({
+        key: `t${occ.group_id}-${occ.date}`,
+        node: occPill(occ),
+      })),
+    ];
+    const visible = limit != null ? items.slice(0, limit) : items;
+    const hidden = limit != null ? Math.max(0, items.length - limit) : 0;
+    return (
+      <>
+        {visible.map((item) => (
+          <Fragment key={item.key}>{item.node}</Fragment>
+        ))}
+        {hidden > 0 && (
+          <button
+            type="button"
+            className="event-calendar__more"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewChange("day");
+              onAnchorChange(startOfDay(day));
+            }}
+          >
+            +{hidden} další
+          </button>
+        )}
+      </>
+    );
+  };
+
   return (
     <section className="event-calendar">
       <div className="event-calendar__toolbar">
@@ -2100,8 +2133,7 @@ function CalendarView({
                 >
                   <span className="event-calendar__day">{day.getDate()}</span>
                   <div className="event-calendar__events">
-                    {dayEvents.map(pill)}
-                    {dayOccurrences.map(occPill)}
+                    {renderDayItems(day, dayEvents, dayOccurrences, MONTH_CELL_PILL_LIMIT)}
                   </div>
                 </div>
               );
@@ -2133,8 +2165,7 @@ function CalendarView({
                   </span>
                 </div>
                 <div className="event-calendar__events">
-                  {dayEvents.map(pill)}
-                  {dayOccurrences.map(occPill)}
+                  {renderDayItems(day, dayEvents, dayOccurrences)}
                   {empty && <span className="event-calendar__agenda-empty">—</span>}
                 </div>
               </div>
