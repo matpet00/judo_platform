@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { TrainerStudentRead } from "../api/types";
+import type { StudentWithBranches, TrainerStudentRead } from "../api/types";
 import { useTrainer } from "../context/TrainerContext";
 import "../components/StudentSwipeDeck.css";
 import "../pages/AdminPage.css";
@@ -14,23 +14,48 @@ function formatDate(value: string | null): string {
   return `${day}.${month}.${year}`;
 }
 
-function matchesStudent(query: string, student: TrainerStudentRead): boolean {
+function studentToTrainerRead(
+  student: StudentWithBranches,
+  rosterById: Map<number, TrainerStudentRead>,
+): TrainerStudentRead {
+  const roster = rosterById.get(student.id);
+  if (roster) return roster;
+  const branchNames = student.branches.map((branch) => branch.name).join(", ");
+  return {
+    id: student.id,
+    first_name: student.first_name,
+    last_name: student.last_name,
+    age_group: student.age_group,
+    birth_date: student.birth_date ?? null,
+    birth_number: student.birth_number ?? null,
+    health_insurance: student.health_insurance ?? null,
+    branches: student.branches,
+    parents: student.parents ?? [],
+    training_groups: [],
+    is_guest: false,
+    home_branch: branchNames || null,
+  };
+}
+
+function matchesClubStudent(query: string, student: StudentWithBranches): boolean {
   const q = query.trim().toLowerCase();
-  if (!q) return true;
+  if (!q) return false;
   const haystack = [
     student.first_name,
     student.last_name,
+    `${student.first_name} ${student.last_name}`,
+    `${student.last_name} ${student.first_name}`,
     student.age_group,
     student.birth_number ?? "",
-    student.health_insurance ?? "",
-    student.home_branch ?? "",
-    ...student.training_groups,
-    ...student.branches.map((b) => b.name),
-    ...student.parents.map((p) => `${p.first_name} ${p.last_name} ${p.email} ${p.phone}`),
+    ...student.branches.map((branch) => branch.name),
   ]
     .join(" ")
     .toLowerCase();
   return haystack.includes(q);
+}
+
+function isExternalToRoster(studentId: number, rosterById: Map<number, TrainerStudentRead>): boolean {
+  return !rosterById.has(studentId);
 }
 
 function StudentDetailModal({
@@ -85,7 +110,13 @@ function StudentDetailModal({
                 <dd className="admin-detail__value">{student.home_branch || "—"}</dd>
               </div>
             )}
-            {!student.is_guest && (
+            {!student.is_guest && student.training_groups.length === 0 && student.home_branch && (
+              <div className="admin-detail__row">
+                <dt className="admin-detail__label">Pobočka v klubu</dt>
+                <dd className="admin-detail__value">{student.home_branch}</dd>
+              </div>
+            )}
+            {!student.is_guest && student.training_groups.length > 0 && (
               <div className="admin-detail__row">
                 <dt className="admin-detail__label">Tréninkové skupiny</dt>
                 <dd className="admin-detail__value">{student.training_groups.join(", ") || "—"}</dd>
@@ -127,10 +158,25 @@ export function TrainerStudentsPage() {
     enabled: isAuthenticated && branchId !== null,
   });
 
-  const list = useMemo(
-    () => (studentsQuery.data ?? []).filter((student) => matchesStudent(search, student)),
-    [studentsQuery.data, search],
+  const clubStudentsQuery = useQuery({
+    queryKey: ["students"],
+    queryFn: () => api.students(),
+    enabled: isAuthenticated,
+  });
+
+  const roster = studentsQuery.data ?? [];
+  const rosterById = useMemo(
+    () => new Map(roster.map((student) => [student.id, student])),
+    [roster],
   );
+
+  const searchQuery = search.trim();
+  const searchMatches = useMemo(() => {
+    if (!searchQuery) return [];
+    return (clubStudentsQuery.data ?? [])
+      .filter((student) => matchesClubStudent(searchQuery, student))
+      .slice(0, 8);
+  }, [clubStudentsQuery.data, searchQuery]);
 
   if (!trainersLoading && !isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -171,19 +217,54 @@ export function TrainerStudentsPage() {
         </label>
       )}
 
-      <label className="notification-field">
-        Hledat
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Jméno, rodné číslo, skupina…"
-        />
-      </label>
+      <div className="guest-picker">
+        <label className="notification-field guest-picker__field">
+          Hledat v celém klubu
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Jméno, rodné číslo, pobočka…"
+            autoComplete="off"
+          />
+        </label>
+        {searchQuery && (
+          <div className="guest-picker__list">
+            {clubStudentsQuery.isLoading && <div className="guest-picker__empty">Načítám…</div>}
+            {!clubStudentsQuery.isLoading && searchMatches.length === 0 && (
+              <div className="guest-picker__empty">Nikdo nenalezen.</div>
+            )}
+            {searchMatches.map((student) => {
+              const external = isExternalToRoster(student.id, rosterById);
+              return (
+                <button
+                  key={student.id}
+                  type="button"
+                  className="guest-picker__item"
+                  onClick={() => {
+                    setViewing(studentToTrainerRead(student, rosterById));
+                    setSearch("");
+                  }}
+                >
+                  <span className="guest-picker__name">
+                    {student.first_name} {student.last_name}
+                    {external && <span className="attendance-guest-badge">Jiná pobočka</span>}
+                  </span>
+                  <span className="guest-picker__meta">
+                    {student.age_group}
+                    {student.branches.length ? ` · ${student.branches.map((b) => b.name).join(", ")}` : ""}
+                    {student.birth_number ? ` · ${student.birth_number}` : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {studentsQuery.isError && <p className="error-box">{String(studentsQuery.error)}</p>}
 
       <div className="admin-list" style={{ marginTop: 16 }}>
-        {list.map((student) => (
+        {roster.map((student) => (
           <div key={`${student.is_guest ? "guest" : "roster"}-${student.id}`} className="admin-row">
             <div className="admin-row__main">
               <div className="admin-row__title">
@@ -205,7 +286,7 @@ export function TrainerStudentsPage() {
             </div>
           </div>
         ))}
-        {list.length === 0 && !studentsQuery.isLoading && (
+        {roster.length === 0 && !studentsQuery.isLoading && (
           <p className="admin-empty">Žádní žáci pro vybranou pobočku.</p>
         )}
       </div>
