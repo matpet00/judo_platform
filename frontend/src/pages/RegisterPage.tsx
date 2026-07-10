@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { GuardianCredentialsRead } from "../api/types";
+import type { RegistrationStatusRead } from "../api/types";
 import { computeAgeGroup, ageGroupHint } from "../lib/ageGroup";
 import {
   BIRTH_DATE_HINT,
@@ -238,7 +238,7 @@ function ChildFields({
 export function RegisterPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { parent: loggedInParent, isAuthenticated, setParentSession } = useParent();
+  const { parent: loggedInParent } = useParent();
 
   const branchesQuery = useQuery({
     queryKey: ["branches"],
@@ -257,9 +257,10 @@ export function RegisterPage() {
   const [checkingEmail, setCheckingEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [createdCredentialSets, setCreatedCredentialSets] = useState<
-    { label: string; guardian: GuardianCredentialsRead }[]
-  >([]);
+  const [submitted, setSubmitted] = useState(false);
+  const [statusEmail, setStatusEmail] = useState("");
+  const [statusResult, setStatusResult] = useState<RegistrationStatusRead | null>(null);
+  const [statusPending, setStatusPending] = useState(false);
   const [pending, setPending] = useState(false);
 
   const referenceYear = new Date().getFullYear();
@@ -337,18 +338,31 @@ export function RegisterPage() {
     secondGuardianValid;
 
   const primaryEmailHint = isExistingParent
-    ? `Účet s tímto e-mailem už existuje — přidáme další dítě k tvému účtu.${
-        emailStatus?.has_login
-          ? " Přihlas se stejným uživatelským jménem jako dříve."
-          : " Pokud ještě nemáš přihlášení, vygenerujeme ti ho po odeslání."
-      }`
-    : "Po registraci klub vygeneruje přihlašovací jméno (3 znaky příjmení + 3 znaky jména) a heslo pro každého zástupce.";
+    ? "Účet s tímto e-mailem už existuje — po schválení klubem přidá další dítě k tvému účtu."
+    : "Po schválení registrace klubem vám e-mailem pošleme přihlašovací údaje.";
+
+  const checkRegistrationStatus = async (value?: string) => {
+    const trimmed = (value ?? statusEmail).trim().toLowerCase();
+    if (!trimmed.includes("@")) return;
+    setStatusPending(true);
+    setStatusResult(null);
+    try {
+      const result = await api.registrationStatus(trimmed);
+      setStatusResult(result);
+      setStatusEmail(trimmed);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setStatusPending(false);
+    }
+  };
 
   const submit = async () => {
     setPending(true);
     setError(null);
     setSuccess(null);
-    setCreatedCredentialSets([]);
+    setSubmitted(false);
+    setStatusResult(null);
     try {
       const payload = {
         parent_first_name: parentFirst.trim(),
@@ -372,45 +386,10 @@ export function RegisterPage() {
       };
 
       const result = await api.registerToClub(payload);
-      setSuccess(result.message ?? "Registrace proběhla úspěšně.");
-
-      const credentialSets: { label: string; guardian: GuardianCredentialsRead }[] = [];
-      if (result.credentials_created && result.username) {
-        credentialSets.push({
-          label: "1. zákonný zástupce",
-          guardian: {
-            parent_id: result.parent_id,
-            first_name: parentFirst.trim(),
-            last_name: parentLast.trim(),
-            email: email.trim().toLowerCase(),
-            username: result.username,
-            password: result.password,
-            credentials_created: true,
-            credentials_email_sent: result.credentials_email_sent,
-            credentials_email_error: result.credentials_email_error,
-          },
-        });
-      }
-      if (result.second_guardian) {
-        credentialSets.push({
-          label: "2. zákonný zástupce",
-          guardian: result.second_guardian,
-        });
-      }
-      setCreatedCredentialSets(credentialSets);
-
+      setSuccess(result.message ?? "Registrace přijata.");
+      setSubmitted(true);
+      setStatusEmail(email.trim().toLowerCase());
       void queryClient.invalidateQueries({ queryKey: ["parent-me"] });
-
-      if (result.access_token && result.parent_id_token) {
-        setParentSession(result.parent_id_token, result.access_token);
-        if (credentialSets.every((c) => !c.guardian.credentials_created)) {
-          setTimeout(() => navigate("/parent", { replace: true }), 1200);
-        }
-      } else if (isAuthenticated) {
-        setTimeout(() => navigate("/parent", { replace: true }), 1500);
-      } else if (result.existing_parent) {
-        setTimeout(() => navigate("/", { replace: true }), 2500);
-      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -431,9 +410,61 @@ export function RegisterPage() {
           className="auth-form register-form"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!pending && canSubmit) void submit();
+            if (!pending && !submitted && canSubmit) void submit();
           }}
         >
+          {submitted ? (
+            <section className="register-section">
+              <p className="register-success">{success}</p>
+              <p className="register-hint">
+                Klub registraci zkontroluje. Přihlašovací údaje dostanete e-mailem až po schválení.
+              </p>
+              <div className="register-status-check">
+                <label>
+                  Zkontrolovat stav podle e-mailu
+                  <input
+                    value={statusEmail}
+                    onChange={(e) => setStatusEmail(e.target.value)}
+                    placeholder="vas@email.cz"
+                    type="email"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={statusPending || !statusEmail.trim().includes("@")}
+                  onClick={() => void checkRegistrationStatus()}
+                >
+                  {statusPending ? "Kontroluji…" : "Zkontrolovat stav"}
+                </button>
+                {statusResult && (
+                  <div className="register-status-result">
+                    <p>{statusResult.message}</p>
+                    {statusResult.status === "rejected" && statusResult.rejection_reason && (
+                      <p className="error-box">{statusResult.rejection_reason}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="confirm-card__actions">
+                <button type="button" className="btn btn--ghost" onClick={() => navigate("/")}>
+                  Zpět na úvod
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => {
+                    setSubmitted(false);
+                    setSuccess(null);
+                    setStatusResult(null);
+                  }}
+                >
+                  Nová registrace
+                </button>
+              </div>
+            </section>
+          ) : (
+            <>
           <section className="register-section">
             <GuardianFields
               title="1. zákonný zástupce"
@@ -518,39 +549,6 @@ export function RegisterPage() {
           </section>
 
           {error && <p className="error-box trainer-pin-gate__error">{error}</p>}
-          {success && <p className="register-success">{success}</p>}
-          {createdCredentialSets.length > 0 && (
-            <div className="register-credentials-list">
-              {createdCredentialSets.map((entry) => (
-                <div key={entry.label} className="register-credentials">
-                  <p className="register-credentials__title">{entry.label}</p>
-                  <p>
-                    Uživatel: <strong>{entry.guardian.username}</strong>
-                  </p>
-                  {entry.guardian.credentials_created && entry.guardian.password ? (
-                    <p>
-                      Heslo: <strong>{entry.guardian.password}</strong>
-                    </p>
-                  ) : (
-                    <p className="register-hint">Účet už existuje — použij stávající heslo.</p>
-                  )}
-                  {entry.guardian.credentials_email_sent ? (
-                    <p className="register-hint register-hint--ok">Odesláno e-mailem na {entry.guardian.email}.</p>
-                  ) : entry.guardian.credentials_email_error ? (
-                    <p className="register-hint register-hint--warn">{entry.guardian.credentials_email_error}</p>
-                  ) : null}
-                </div>
-              ))}
-              <p className="register-hint">Ulož si údaje — heslo se v aplikaci znovu nezobrazí.</p>
-              <button
-                type="button"
-                className="btn btn--primary auth-back"
-                onClick={() => navigate("/parent", { replace: true })}
-              >
-                Pokračovat do aplikace
-              </button>
-            </div>
-          )}
 
           <div className="confirm-card__actions">
             <button type="button" className="btn btn--ghost" disabled={pending} onClick={() => navigate("/")}>
@@ -560,6 +558,39 @@ export function RegisterPage() {
               {pending ? "Odesílám…" : children.length > 1 ? "Registrovat děti" : "Registrovat dítě"}
             </button>
           </div>
+            </>
+          )}
+
+          {!submitted && (
+            <section className="register-section register-status-panel">
+              <h2 className="register-section__title">Stav registrace</h2>
+              <p className="register-hint">Už jsi odeslal/a žádost? Zkontroluj stav podle e-mailu.</p>
+              <div className="register-status-check">
+                <input
+                  value={statusEmail}
+                  onChange={(e) => setStatusEmail(e.target.value)}
+                  placeholder="vas@email.cz"
+                  type="email"
+                />
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={statusPending || !statusEmail.trim().includes("@")}
+                  onClick={() => void checkRegistrationStatus()}
+                >
+                  {statusPending ? "Kontroluji…" : "Zkontrolovat stav"}
+                </button>
+              </div>
+              {statusResult && (
+                <div className="register-status-result">
+                  <p>{statusResult.message}</p>
+                  {statusResult.status === "rejected" && statusResult.rejection_reason && (
+                    <p className="error-box">{statusResult.rejection_reason}</p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </form>
       </div>
     </div>

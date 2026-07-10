@@ -1,14 +1,12 @@
 from datetime import date
 
 import pytest
-from sqlalchemy import select
 
 from app.age_group import age_at_year_end, compute_age_group
-from app.database import async_session_maker
-from app.models import AgeGroup, Parent
+from app.models import AgeGroup
 from app.parent_credentials import build_username_base, name_part
 from app.phone import validate_e164_phone
-from app.security import verify_pin
+from tests.conftest import login_admin, write_headers
 
 
 @pytest.mark.parametrize(
@@ -86,66 +84,6 @@ def _parent(**overrides: object) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_register_generates_username_and_stores_password(client):
-    branches = (await client.get("/branches")).json()
-    branch_id = branches[0]["id"]
-
-    resp = await client.post(
-        "/register",
-        json=_parent(
-            email="jana.novakova@example.com",
-            parent_first_name="Jana",
-            parent_last_name="Nováková",
-            children=[_child(branch_id, first_name="Ema", last_name="Nováková")],
-        ),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["credentials_created"] is True
-    assert data["username"] == "novjan"
-    assert data["password"]
-    assert len(data["password"]) == 8
-
-    async with async_session_maker() as session:
-        parent = (
-            await session.execute(select(Parent).where(Parent.email == "jana.novakova@example.com"))
-        ).scalar_one()
-        assert parent.username == "novjan"
-        assert parent.password_plain == data["password"]
-        assert verify_pin(data["password"], parent.password_hash)
-
-
-@pytest.mark.asyncio
-async def test_register_username_collision_gets_suffix(client):
-    branches = (await client.get("/branches")).json()
-    branch_id = branches[0]["id"]
-
-    first = await client.post(
-        "/register",
-        json=_parent(
-            email="first.novak@example.com",
-            parent_first_name="Jan",
-            parent_last_name="Novák",
-            children=[_child(branch_id)],
-        ),
-    )
-    assert first.status_code == 200
-    assert first.json()["username"] == "novjan"
-
-    second = await client.post(
-        "/register",
-        json=_parent(
-            email="second.novak@example.com",
-            parent_first_name="Jan",
-            parent_last_name="Novák",
-            children=[_child(branch_id, first_name="Tom")],
-        ),
-    )
-    assert second.status_code == 200
-    assert second.json()["username"] == "novjan2"
-
-
-@pytest.mark.asyncio
 async def test_register_rejects_invalid_phone(client):
     branches = (await client.get("/branches")).json()
     branch_id = branches[0]["id"]
@@ -162,86 +100,6 @@ async def test_register_rejects_invalid_phone(client):
 
 
 @pytest.mark.asyncio
-async def test_register_with_second_guardian_gets_credentials(client):
-    branches = (await client.get("/branches")).json()
-    branch_id = branches[0]["id"]
-
-    resp = await client.post(
-        "/register",
-        json=_parent(
-            email="anna.kralova@example.com",
-            parent_first_name="Anna",
-            parent_last_name="Králová",
-            second_guardian={
-                "first_name": "Pavel",
-                "last_name": "Král",
-                "email": "pavel.kral@example.com",
-                "phone": "+420602222222",
-            },
-            children=[_child(branch_id, first_name="Ema", last_name="Králová")],
-        ),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["credentials_created"] is True
-    assert data["username"] == build_username_base("Králová", "Anna")
-    assert data["second_guardian"]["username"] == build_username_base("Král", "Pavel")
-    assert data["second_guardian"]["credentials_created"] is True
-    assert data["second_guardian"]["password"]
-
-    async with async_session_maker() as session:
-        second = (
-            await session.execute(select(Parent).where(Parent.email == "pavel.kral@example.com"))
-        ).scalar_one()
-        assert second.username == build_username_base("Král", "Pavel")
-        assert second.password_plain == data["second_guardian"]["password"]
-        assert verify_pin(data["second_guardian"]["password"], second.password_hash)
-
-    student = data["students"][0]
-    parent_emails = {p["email"] for p in student["parents"]}
-    assert parent_emails == {"anna.kralova@example.com", "pavel.kral@example.com"}
-
-
-@pytest.mark.asyncio
-async def test_register_existing_parent_reuses_account(client):
-    branches = (await client.get("/branches")).json()
-    branch_id = branches[0]["id"]
-
-    first = await client.post(
-        "/register",
-        json=_parent(
-            email="marie.dvorakova@example.com",
-            parent_first_name="Marie",
-            parent_last_name="Dvořáková",
-            children=[_child(branch_id, first_name="Klára", last_name="Dvořáková", birth_date="2018-04-12")],
-        ),
-    )
-    assert first.status_code == 200
-    parent_id = first.json()["parent_id"]
-    first_username = first.json()["username"]
-
-    second = await client.post(
-        "/register",
-        json=_parent(
-            email="marie.dvorakova@example.com",
-            phone="+420609999999",
-            children=[_child(branch_id, first_name="Filip", last_name="Dvořáková", birth_date="2016-08-01")],
-        ),
-    )
-    assert second.status_code == 200
-    data = second.json()
-    assert data["existing_parent"] is True
-    assert data["parent_id"] == parent_id
-    assert data["credentials_created"] is False
-    assert data["password"] is None
-    assert data["username"] == first_username
-
-    parents = (await client.get("/parents", headers={"X-API-Key": "test-api-key"})).json()
-    marie_rows = [p for p in parents if p["email"] == "marie.dvorakova@example.com"]
-    assert len(marie_rows) == 1
-
-
-@pytest.mark.asyncio
 async def test_age_group_preview_defaults_to_current_year(client):
     year = date.today().year
     birth_year = year - 9
@@ -253,21 +111,71 @@ async def test_age_group_preview_defaults_to_current_year(client):
 
 
 @pytest.mark.asyncio
-async def test_parent_email_status(client):
+async def test_parent_email_status_without_account(client):
+    unknown = await client.get("/register/parent-status", params={"email": "neexistuje@example.com"})
+    assert unknown.json() == {"exists": False, "has_login": False}
+
+
+@pytest.mark.asyncio
+async def test_register_then_approve_username_collision_gets_suffix(client):
     branches = (await client.get("/branches")).json()
     branch_id = branches[0]["id"]
-    await client.post(
+    admin = await login_admin(client)
+
+    first = await client.post(
         "/register",
         json=_parent(
-            email="test.rodic@example.com",
+            email="first.novak@example.com",
+            parent_first_name="Jan",
+            parent_last_name="Novák",
+            children=[_child(branch_id)],
+        ),
+    )
+    first_id = first.json()["request_id"]
+    first_approve = await client.post(
+        f"/admin/registration-requests/{first_id}/approve",
+        headers=write_headers(admin),
+    )
+    assert first_approve.status_code == 200
+    assert first_approve.json()["username"] == "novjan"
+
+    second = await client.post(
+        "/register",
+        json=_parent(
+            email="second.novak@example.com",
+            parent_first_name="Jan",
+            parent_last_name="Novák",
+            children=[_child(branch_id, first_name="Tom")],
+        ),
+    )
+    second_id = second.json()["request_id"]
+    second_approve = await client.post(
+        f"/admin/registration-requests/{second_id}/approve",
+        headers=write_headers(admin),
+    )
+    assert second_approve.status_code == 200
+    assert second_approve.json()["username"] == "novjan2"
+
+
+@pytest.mark.asyncio
+async def test_parent_email_status_after_approval(client):
+    branches = (await client.get("/branches")).json()
+    branch_id = branches[0]["id"]
+    email = "test.rodic@example.com"
+    reg = await client.post(
+        "/register",
+        json=_parent(
+            email=email,
             parent_first_name="Test",
             parent_last_name="Rodič",
             children=[_child(branch_id, first_name="Dítě", last_name="Test", birth_date="2019-01-01")],
         ),
     )
+    admin = await login_admin(client)
+    await client.post(
+        f"/admin/registration-requests/{reg.json()['request_id']}/approve",
+        headers=write_headers(admin),
+    )
 
-    unknown = await client.get("/register/parent-status", params={"email": "neexistuje@example.com"})
-    assert unknown.json() == {"exists": False, "has_login": False}
-
-    known = await client.get("/register/parent-status", params={"email": "test.rodic@example.com"})
+    known = await client.get("/register/parent-status", params={"email": email})
     assert known.json() == {"exists": True, "has_login": True}

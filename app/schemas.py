@@ -396,6 +396,53 @@ class ParentEmailStatus(BaseModel):
     has_login: bool = False
 
 
+class RegistrationSubmittedRead(BaseModel):
+    request_id: int
+    message: str
+    confirmation_email_sent: bool = False
+    confirmation_email_error: str | None = None
+
+
+class RegistrationStatusRead(BaseModel):
+    status: str = Field(description="none | pending | approved | rejected")
+    message: str
+    rejection_reason: str | None = None
+    request_id: int | None = None
+    reviewed_at: datetime | None = None
+
+
+class RegistrationRejectBody(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class RegistrationRequestChildRead(BaseModel):
+    first_name: str
+    last_name: str
+    birth_date: date
+    branch_names: list[str]
+    age_group: AgeGroup
+
+
+class RegistrationRequestListItem(BaseModel):
+    id: int
+    status: str
+    parent_first_name: str
+    parent_last_name: str
+    parent_email: str
+    parent_phone: str
+    children_count: int
+    has_second_guardian: bool
+    created_at: datetime
+    reviewed_at: datetime | None = None
+
+
+class RegistrationRequestDetail(RegistrationRequestListItem):
+    children: list[RegistrationRequestChildRead]
+    second_guardian: StudentParentInput | None = None
+    rejection_reason: str | None = None
+    approved_parent_id: int | None = None
+
+
 class StudentPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

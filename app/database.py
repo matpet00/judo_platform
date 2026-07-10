@@ -491,6 +491,27 @@ async def migrate_schema() -> None:
                 ),
             )
 
+        await conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS registration_requests ("
+                "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                "status VARCHAR(16) NOT NULL DEFAULT 'pending', "
+                "parent_email VARCHAR(320) NOT NULL, "
+                "payload_json JSON NOT NULL, "
+                "rejection_reason VARCHAR(1000), "
+                "approved_parent_id INTEGER REFERENCES parents(id), "
+                "reviewed_at DATETIME, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")",
+            ),
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_registration_requests_parent_email "
+                "ON registration_requests (parent_email)",
+            ),
+        )
+
         from app.student_delete import cleanup_students_without_branches
 
         await cleanup_students_without_branches(conn)

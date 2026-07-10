@@ -108,10 +108,14 @@ export const api = {
       `/register/parent-status?email=${encodeURIComponent(email)}`,
     ),
   registerToClub: (payload: import("./types").ClubRegistrationCreate) =>
-    request<import("./types").ClubRegistrationRead>("/register", {
+    request<import("./types").RegistrationSubmittedRead>("/register", {
       method: "POST",
       body: JSON.stringify(payload),
     }, true),
+  registrationStatus: (email: string) =>
+    request<import("./types").RegistrationStatusRead>(
+      `/register/status?email=${encodeURIComponent(email)}`,
+    ),
   previewAgeGroup: (birthDate: string, referenceYear?: number) => {
     const params = new URLSearchParams({ birth_date: birthDate });
     if (referenceYear) params.set("reference_year", String(referenceYear));
@@ -478,6 +482,38 @@ export const api = {
     }, true),
   adminStats: () =>
     request<import("./types").AdminStats>("/admin/stats", undefined, false, true, "admin"),
+  adminRegistrationRequests: (status?: import("./types").RegistrationRequestListItem["status"]) =>
+    request<import("./types").RegistrationRequestListItem[]>(
+      status ? `/admin/registration-requests?status=${status}` : "/admin/registration-requests",
+      undefined,
+      false,
+      true,
+      "admin",
+    ),
+  adminRegistrationRequest: (id: number) =>
+    request<import("./types").RegistrationRequestDetail>(
+      `/admin/registration-requests/${id}`,
+      undefined,
+      false,
+      true,
+      "admin",
+    ),
+  approveRegistrationRequest: (id: number) =>
+    request<import("./types").ClubRegistrationRead>(
+      `/admin/registration-requests/${id}/approve`,
+      { method: "POST" },
+      true,
+      true,
+      "admin",
+    ),
+  rejectRegistrationRequest: (id: number, reason: string) =>
+    request<import("./types").RegistrationRequestDetail>(
+      `/admin/registration-requests/${id}/reject`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+      true,
+      true,
+      "admin",
+    ),
   createTrainer: (payload: import("./types").TrainerCreate) =>
     request<import("./types").Trainer>("/trainers", {
       method: "POST",

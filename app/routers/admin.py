@@ -23,6 +23,8 @@ from app.models import (
     Event,
     EventRsvp,
     Parent,
+    RegistrationRequest,
+    RegistrationRequestStatus,
     RsvpStatus,
     Student,
     Trainer,
@@ -30,8 +32,20 @@ from app.models import (
     TrainingSession,
 )
 from app.parent_credentials import allocate_username, generate_password
-from app.routers.registration import _try_send_credentials_email
-from app.schemas import AttendanceMonthlyReport
+from app.registration_service import (
+    approve_registration_request,
+    reject_registration_request,
+    request_to_detail,
+    request_to_list_item,
+    try_send_credentials_email,
+)
+from app.schemas import (
+    AttendanceMonthlyReport,
+    ClubRegistrationRead,
+    RegistrationRejectBody,
+    RegistrationRequestDetail,
+    RegistrationRequestListItem,
+)
 from app.security import create_admin_token, hash_pin, require_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -76,6 +90,7 @@ class AdminStats(BaseModel):
     branches: int
     training_groups: int
     parents_without_login: int
+    pending_registrations: int
     students_per_branch: list[AdminCountRow]
     students_per_age_group: list[AdminCountRow]
 
@@ -203,6 +218,14 @@ async def admin_stats(
         )
         or 0
     )
+    pending_registrations = (
+        await db.scalar(
+            select(func.count())
+            .select_from(RegistrationRequest)
+            .where(RegistrationRequest.status == RegistrationRequestStatus.pending),
+        )
+        or 0
+    )
 
     branch_rows_result = await db.execute(
         select(Branch.name, func.count(Student.id))
@@ -235,6 +258,7 @@ async def admin_stats(
         branches=branches,
         training_groups=groups,
         parents_without_login=parents_without_login,
+        pending_registrations=pending_registrations,
         students_per_branch=students_per_branch,
         students_per_age_group=students_per_age_group,
     )
@@ -436,7 +460,7 @@ async def resend_parent_credentials(
     await db.commit()
     await db.refresh(parent, attribute_names=["children"])
 
-    sent, error = await _try_send_credentials_email(
+    sent, error = await try_send_credentials_email(
         parent=parent,
         password=password,
         children=list(parent.children),
@@ -450,3 +474,48 @@ async def resend_parent_credentials(
         email_sent=sent,
         email_error=error,
     )
+
+
+@router.get("/registration-requests", response_model=list[RegistrationRequestListItem])
+async def list_registration_requests(
+    status: RegistrationRequestStatus | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> list[RegistrationRequestListItem]:
+    query = select(RegistrationRequest).order_by(RegistrationRequest.created_at.desc())
+    if status is not None:
+        query = query.where(RegistrationRequest.status == status)
+    result = await db.execute(query)
+    rows = result.scalars().all()
+    return [await request_to_list_item(db, row) for row in rows]
+
+
+@router.get("/registration-requests/{request_id}", response_model=RegistrationRequestDetail)
+async def get_registration_request(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> RegistrationRequestDetail:
+    request = await db.get(RegistrationRequest, request_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail="Registration request not found.")
+    return await request_to_detail(db, request)
+
+
+@router.post("/registration-requests/{request_id}/approve", response_model=ClubRegistrationRead)
+async def approve_registration(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> ClubRegistrationRead:
+    return await approve_registration_request(db, request_id)
+
+
+@router.post("/registration-requests/{request_id}/reject", response_model=RegistrationRequestDetail)
+async def reject_registration(
+    request_id: int,
+    payload: RegistrationRejectBody,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> RegistrationRequestDetail:
+    return await reject_registration_request(db, request_id, payload.reason)

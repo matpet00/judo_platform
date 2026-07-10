@@ -521,6 +521,54 @@ export interface ClubRegistrationRead {
   message: string | null;
 }
 
+export interface RegistrationSubmittedRead {
+  request_id: number;
+  message: string;
+  confirmation_email_sent: boolean;
+  confirmation_email_error: string | null;
+}
+
+export interface RegistrationStatusRead {
+  status: "none" | "pending" | "approved" | "rejected";
+  message: string;
+  rejection_reason: string | null;
+  request_id: number | null;
+  reviewed_at: string | null;
+}
+
+export interface RegistrationRequestChildRead {
+  first_name: string;
+  last_name: string;
+  birth_date: string;
+  branch_names: string[];
+  age_group: AgeGroup;
+}
+
+export interface RegistrationRequestListItem {
+  id: number;
+  status: "pending" | "approved" | "rejected";
+  parent_first_name: string;
+  parent_last_name: string;
+  parent_email: string;
+  parent_phone: string;
+  children_count: number;
+  has_second_guardian: boolean;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface RegistrationRequestDetail extends RegistrationRequestListItem {
+  children: RegistrationRequestChildRead[];
+  second_guardian: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+  } | null;
+  rejection_reason: string | null;
+  approved_parent_id: number | null;
+}
+
 export interface ParentEmailStatus {
   exists: boolean;
   has_login: boolean;
@@ -544,6 +592,7 @@ export interface AdminStats {
   branches: number;
   training_groups: number;
   parents_without_login: number;
+  pending_registrations: number;
   students_per_branch: AdminCountRow[];
   students_per_age_group: AdminCountRow[];
 }

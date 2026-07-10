@@ -19,6 +19,8 @@ import type {
   BranchBrief,
   BranchDetail,
   ParentRow,
+  RegistrationRequestDetail,
+  RegistrationRequestListItem,
   ResendCredentialsRead,
   RsvpStatus,
   StudentWithBranches,
@@ -26,13 +28,14 @@ import type {
 } from "../api/types";
 import "./AdminPage.css";
 
-type TabId = "dashboard" | "trainers" | "students" | "parents" | "branches" | "attendance" | "events" | "export";
+type TabId = "dashboard" | "trainers" | "students" | "parents" | "registrations" | "branches" | "attendance" | "events" | "export";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "dashboard", label: "Přehled" },
   { id: "trainers", label: "Trenéři" },
   { id: "students", label: "Děti" },
   { id: "parents", label: "Rodiče" },
+  { id: "registrations", label: "Registrace" },
   { id: "branches", label: "Pobočky" },
   { id: "attendance", label: "Docházka" },
   { id: "events", label: "Akce" },
@@ -105,6 +108,7 @@ export function AdminPage() {
       {tab === "trainers" && <TrainersTab />}
       {tab === "students" && <StudentsTab />}
       {tab === "parents" && <ParentsTab />}
+      {tab === "registrations" && <RegistrationsTab />}
       {tab === "branches" && <BranchesTab />}
       {tab === "attendance" && <MonthlyAttendanceReport role="admin" />}
       {tab === "events" && <EventsTab />}
@@ -301,6 +305,7 @@ function DashboardTab() {
     { label: "Pobočky", value: s.branches },
     { label: "Skupiny", value: s.training_groups },
     { label: "Bez přihlášení", value: s.parents_without_login },
+    { label: "Čekající registrace", value: s.pending_registrations },
   ];
 
   const branchChart = s.students_per_branch.map((r) => ({
@@ -1027,6 +1032,165 @@ function ParentForm({
         </div>
       </form>
     </Modal>
+  );
+}
+
+// --- Registrations ---
+
+const REGISTRATION_STATUS_LABELS: Record<RegistrationRequestListItem["status"], string> = {
+  pending: "Čeká",
+  approved: "Schváleno",
+  rejected: "Zamítnuto",
+};
+
+function RegistrationsTab() {
+  const qc = useQueryClient();
+  const [filter, setFilter] = useState<RegistrationRequestListItem["status"] | "all">("pending");
+  const [viewing, setViewing] = useState<RegistrationRequestDetail | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const list = useQuery({
+    queryKey: ["admin", "registration-requests", filter],
+    queryFn: () =>
+      api.adminRegistrationRequests(filter === "all" ? undefined : filter),
+  });
+
+  const approve = useMutation({
+    mutationFn: (id: number) => api.approveRegistrationRequest(id),
+    onSuccess: (result) => {
+      setViewing(null);
+      setActionError(null);
+      qc.invalidateQueries({ queryKey: ["admin", "registration-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin", "stats"] });
+      qc.invalidateQueries({ queryKey: ["admin", "parents"] });
+      qc.invalidateQueries({ queryKey: ["admin", "students"] });
+      alert(
+        result.credentials_email_sent
+          ? "Registrace schválena. Přihlašovací údaje odeslány e-mailem."
+          : `Registrace schválena. E-mail neodeslán: ${result.credentials_email_error ?? "neznámá chyba"}.`,
+      );
+    },
+    onError: (e) => setActionError(String(e)),
+  });
+
+  const reject = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
+      api.rejectRegistrationRequest(id, reason),
+    onSuccess: () => {
+      setViewing(null);
+      setRejectReason("");
+      setActionError(null);
+      qc.invalidateQueries({ queryKey: ["admin", "registration-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin", "stats"] });
+    },
+    onError: (e) => setActionError(String(e)),
+  });
+
+  const openDetail = async (id: number) => {
+    setActionError(null);
+    setRejectReason("");
+    try {
+      const detail = await api.adminRegistrationRequest(id);
+      setViewing(detail);
+    } catch (e) {
+      setActionError(String(e));
+    }
+  };
+
+  const rows = list.data ?? [];
+
+  return (
+    <div>
+      <div className="admin-toolbar">
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as RegistrationRequestListItem["status"] | "all")}
+        >
+          <option value="pending">Čekající</option>
+          <option value="approved">Schválené</option>
+          <option value="rejected">Zamítnuté</option>
+          <option value="all">Vše</option>
+        </select>
+      </div>
+
+      {list.isError && <p className="error-box">{String(list.error)}</p>}
+      {actionError && <p className="error-box">{actionError}</p>}
+
+      <div className="admin-list">
+        {rows.map((row) => (
+          <div key={row.id} className="admin-list__row">
+            <div>
+              <strong>
+                {row.parent_first_name} {row.parent_last_name}
+              </strong>
+              <div className="admin-list__sub">
+                {row.parent_email} · {row.children_count} dětí ·{" "}
+                {REGISTRATION_STATUS_LABELS[row.status]}
+              </div>
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => void openDetail(row.id)}>
+              Detail
+            </button>
+          </div>
+        ))}
+        {rows.length === 0 && !list.isLoading && <p className="admin-empty">Žádné registrace.</p>}
+      </div>
+
+      {viewing && (
+        <AdminDetailModal title={`Registrace #${viewing.id}`} onClose={() => setViewing(null)}>
+          <DetailRow label="Stav" value={REGISTRATION_STATUS_LABELS[viewing.status]} />
+          <DetailRow label="Rodič" value={`${viewing.parent_first_name} ${viewing.parent_last_name}`} />
+          <DetailRow label="E-mail" value={viewing.parent_email} />
+          <DetailRow label="Telefon" value={viewing.parent_phone} />
+          <DetailRow
+            label="Děti"
+            value={viewing.children.map(
+              (c) =>
+                `${c.first_name} ${c.last_name} (${c.age_group}, ${c.branch_names.join(", ")}, ${c.birth_date})`,
+            ).join("; ")}
+          />
+          {viewing.second_guardian && (
+            <DetailRow
+              label="2. zástupce"
+              value={`${viewing.second_guardian.first_name} ${viewing.second_guardian.last_name}, ${viewing.second_guardian.email}`}
+            />
+          )}
+          {viewing.rejection_reason && <DetailRow label="Důvod zamítnutí" value={viewing.rejection_reason} />}
+          {viewing.status === "pending" && (
+            <div style={{ marginTop: 16 }}>
+              <div className="admin-field">
+                <label>Důvod zamítnutí (povinný při zamítnutí)</label>
+                <textarea
+                  rows={3}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Např. špatná pobočka, neúplné údaje…"
+                />
+              </div>
+              <div className="admin-form__actions">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={approve.isPending}
+                  onClick={() => approve.mutate(viewing.id)}
+                >
+                  {approve.isPending ? "Schvaluji…" : "Schválit"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={reject.isPending || !rejectReason.trim()}
+                  onClick={() => reject.mutate({ id: viewing.id, reason: rejectReason.trim() })}
+                >
+                  {reject.isPending ? "Zamítám…" : "Zamítnout"}
+                </button>
+              </div>
+            </div>
+          )}
+        </AdminDetailModal>
+      )}
+    </div>
   );
 }
 

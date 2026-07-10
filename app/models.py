@@ -53,6 +53,12 @@ class RsvpStatus(str, enum.Enum):
     maybe = "maybe"
 
 
+class RegistrationRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
 # (název v API/DB, fiktivní adresa pro vývoj — seed při startu)
 DEFAULT_BRANCHES: tuple[tuple[str, str], ...] = (
     ("Orlova", "Hlavní třída 1285/45, 735 14 Orlová"),
@@ -714,3 +720,24 @@ class EventRsvp(Base):
     trainer: Mapped[Trainer | None] = relationship()
     parent: Mapped[Parent | None] = relationship()
     student: Mapped["Student | None"] = relationship()
+
+
+class RegistrationRequest(Base):
+    __tablename__ = "registration_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    status: Mapped[RegistrationRequestStatus] = mapped_column(
+        Enum(
+            RegistrationRequestStatus,
+            values_callable=lambda obj: [e.value for e in obj],
+            native_enum=False,
+            length=16,
+        ),
+        default=RegistrationRequestStatus.pending,
+    )
+    parent_email: Mapped[str] = mapped_column(String(320), index=True)
+    payload_json: Mapped[dict] = mapped_column(JSON)
+    rejection_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    approved_parent_id: Mapped[int | None] = mapped_column(ForeignKey("parents.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
