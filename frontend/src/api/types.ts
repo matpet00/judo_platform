@@ -59,7 +59,18 @@ export interface ParentChild {
   first_name: string;
   last_name: string;
   age_group: AgeGroup;
+  birth_date: string | null;
+  birth_number: string | null;
+  health_insurance: string | null;
   branches: BranchBrief[];
+}
+
+export interface ParentChildPatch {
+  first_name?: string;
+  last_name?: string;
+  birth_date?: string | null;
+  birth_number?: string | null;
+  health_insurance?: string | null;
 }
 
 export interface ParentSelf {

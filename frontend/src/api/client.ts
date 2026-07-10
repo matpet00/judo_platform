@@ -103,6 +103,24 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }, true),
   parentMe: () => request<import("./types").ParentSelf>("/parents/me", undefined, false, true, "parent"),
+  updateParentMe: (payload: import("./types").ParentPatch) =>
+    request<import("./types").ParentSelf>("/parents/me", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true, true, "parent"),
+  changeParentPassword: (currentPassword: string, newPassword: string) =>
+    request<void>("/parents/me/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }, true, true, "parent"),
+  updateParentChild: (studentId: number, payload: import("./types").ParentChildPatch) =>
+    request<import("./types").ParentChild>(
+      `/parents/me/children/${studentId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+      true,
+      true,
+      "parent",
+    ),
   parentEmailStatus: (email: string) =>
     request<import("./types").ParentEmailStatus>(
       `/register/parent-status?email=${encodeURIComponent(email)}`,

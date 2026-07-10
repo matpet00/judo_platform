@@ -208,6 +208,11 @@ class ParentLogin(BaseModel):
         return v
 
 
+class ParentPasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class ParentAuthToken(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -221,9 +226,39 @@ class ParentChildRead(BaseModel):
     last_name: str
     age_group: AgeGroup
     birth_date: date | None = None
+    birth_number: str | None = None
+    health_insurance: str | None = None
     branches: list[BranchRead]
 
     model_config = {"from_attributes": True}
+
+
+class ParentChildPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    birth_date: date | None = None
+    birth_number: str | None = None
+    health_insurance: str | None = Field(default=None, max_length=100)
+
+    @field_validator("birth_number", mode="before")
+    @classmethod
+    def normalize_birth_number_patch(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        if isinstance(v, str):
+            return validate_birth_number(v)
+        return v
+
+    @field_validator("health_insurance", mode="before")
+    @classmethod
+    def normalize_health_insurance_patch(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
 
 class ParentSelf(BaseModel):

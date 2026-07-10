@@ -42,7 +42,12 @@ async def seed_test_data() -> None:
                 last_name="Novakova",
                 email="marie.novakova@example.com",
                 phone="+420601234567",
+                username="testparent",
+                password_hash=hash_pin("testpass"),
             )
+            students[0].birth_date = __import__("datetime").date(2018, 3, 15)
+            students[0].birth_number = "180315/1234"
+            students[0].health_insurance = "VZP ČR"
             students[0].parents.append(parent)
 
             session.add(trainer)
@@ -87,6 +92,19 @@ async def login_trainer(client: AsyncClient, trainer_id: int = 1, pin: str = DEF
     )
     assert response.status_code == 200
     return response.json()["access_token"]
+
+
+async def login_parent(client: AsyncClient, username: str = "testparent", password: str = "testpass") -> str:
+    response = await client.post(
+        "/parents/login",
+        json={"username": username, "password": password},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+def parent_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
 
 
 async def login_admin(client: AsyncClient) -> str:

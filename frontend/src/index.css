@@ -391,6 +391,18 @@ textarea {
   opacity: 0.85;
 }
 
+.hub-card__profile-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0.5rem;
+}
+
+.hub-card__profile-actions .hub-card__pin-link {
+  margin: 0;
+}
+
 .notification-board {
   max-width: 720px;
 }
@@ -1009,6 +1021,19 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(18, 18, 22, 0.86);
+}
+
+.parent-child__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.parent-child__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
 }
 
 .parent-child__name {
