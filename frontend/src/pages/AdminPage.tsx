@@ -498,7 +498,7 @@ function TrainerForm({
           />
         </div>
         <div className="admin-field">
-          <label>PIN {trainer ? "(nový – prázdné = beze změny)" : "(povinný, 4–8 číslic)"}</label>
+          <label>PIN {trainer ? "(přepíše stávající – prázdné = beze změny)" : "(povinný, 4–8 číslic)"}</label>
           <input
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}

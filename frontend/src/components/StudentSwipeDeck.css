@@ -1052,6 +1052,18 @@
   font-weight: 600;
 }
 
+.trainer-pin-gate__label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.trainer-pin-gate__label .trainer-pin-gate__input {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
 .trainer-pin-gate__input {
   width: 100%;
   margin-bottom: 16px;

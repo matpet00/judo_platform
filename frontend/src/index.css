@@ -374,6 +374,23 @@ textarea {
   margin-top: 18px;
 }
 
+.hub-card__pin-link {
+  display: inline-block;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.95rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hub-card__pin-link:hover {
+  opacity: 0.85;
+}
+
 .notification-board {
   max-width: 720px;
 }

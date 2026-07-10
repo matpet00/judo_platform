@@ -10,10 +10,11 @@ from app.schemas import (
     TrainerAuthToken,
     TrainerCreate,
     TrainerPatch,
+    TrainerPinChange,
     TrainerPinVerify,
     TrainerRead,
 )
-from app.security import create_trainer_token, hash_pin, verify_pin
+from app.security import create_trainer_token, hash_pin, require_admin, require_trainer_token, verify_pin
 
 router = APIRouter(prefix="/trainers", tags=["trainers"])
 
@@ -88,11 +89,27 @@ async def verify_trainer_pin(
     )
 
 
+@router.post("/me/change-pin", status_code=status.HTTP_204_NO_CONTENT)
+async def change_trainer_pin(
+    payload: TrainerPinChange,
+    trainer_id: int = Depends(require_trainer_token),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    trainer = await db.get(Trainer, trainer_id)
+    if trainer is None:
+        raise HTTPException(status_code=404, detail="Trainer not found.")
+    if not verify_pin(payload.current_pin, trainer.pin_hash):
+        raise HTTPException(status_code=401, detail="Invalid current PIN.")
+    trainer.pin_hash = hash_pin(payload.new_pin)
+    await db.commit()
+
+
 @router.patch("/{trainer_id}", response_model=TrainerRead)
 async def patch_trainer(
     trainer_id: int,
     payload: TrainerPatch,
     db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ) -> TrainerRead:
     data = payload.model_dump(exclude_unset=True)
     if not data:

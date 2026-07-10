@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 
 from app.database import async_session_maker
 from app.models import Branch, Student, Trainer, TrainingGroup, student_branches, trainer_branches
-from tests.conftest import login_trainer, write_headers
+from tests.conftest import login_admin, login_trainer, write_headers
 
 
 @pytest.mark.asyncio
@@ -17,9 +17,10 @@ async def test_delete_branch_cascades_assignments(client: AsyncClient) -> None:
     assert create.status_code == 201
     branch_id = create.json()["id"]
 
+    admin = await login_admin(client)
     patch_trainer = await client.patch(
         "/trainers/1",
-        headers=write_headers(),
+        headers=write_headers(admin),
         json={"branch_ids": [1, branch_id]},
     )
     assert patch_trainer.status_code == 200

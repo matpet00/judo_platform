@@ -123,6 +123,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ pin }),
     }, true),
+  changeTrainerPin: (currentPin: string, newPin: string) =>
+    request<void>("/trainers/me/change-pin", {
+      method: "POST",
+      body: JSON.stringify({ current_pin: currentPin, new_pin: newPin }),
+    }, true, true, "trainer"),
   trainingGroups: (branchId?: number, role: Role = "trainer") =>
     request<import("./types").TrainingGroup[]>(
       branchId ? `/training-groups?branch_id=${branchId}` : "/training-groups",

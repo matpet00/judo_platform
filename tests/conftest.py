@@ -79,11 +79,17 @@ def write_headers(token: str | None = None) -> dict[str, str]:
     return headers
 
 
-async def login_trainer(client: AsyncClient, trainer_id: int = 1) -> str:
+async def login_trainer(client: AsyncClient, trainer_id: int = 1, pin: str = DEFAULT_PIN) -> str:
     response = await client.post(
         f"/trainers/{trainer_id}/verify-pin",
-        json={"pin": DEFAULT_PIN},
+        json={"pin": pin},
     )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+async def login_admin(client: AsyncClient) -> str:
+    response = await client.post("/admin/login", json={"username": "admin", "password": "admin"})
     assert response.status_code == 200
     return response.json()["access_token"]
 

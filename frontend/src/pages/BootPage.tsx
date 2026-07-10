@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api, todayIso } from "../api/client";
@@ -7,6 +7,7 @@ import { ClubLogo } from "../components/ClubLogo";
 import { trainerNotificationsKey } from "../api/queryKeys";
 import { countUnreadBoard, countUnreadPlanner } from "../lib/notificationNavigation";
 import { TrainerLoginFlow } from "../components/TrainerSwitcher";
+import { TrainerChangePinForm } from "../components/TrainerChangePinForm";
 import { trainerRoleLabel } from "../components/TrainerPicker";
 import { useParent } from "../context/ParentContext";
 import { useTrainer } from "../context/TrainerContext";
@@ -45,6 +46,13 @@ export function BootPage() {
   const unreadBoard = countUnreadBoard(notifications);
   const unreadEvents = countUnreadPlanner(notifications);
   const unreadChat = (conversationsQuery.data ?? []).reduce((sum, c) => sum + c.unread_count, 0);
+  const [changePinOpen, setChangePinOpen] = useState(false);
+
+  const handlePinChanged = useCallback(() => {
+    setChangePinOpen(false);
+    clearTrainer();
+    navigate("/", { replace: true });
+  }, [clearTrainer, navigate]);
 
   if (!isAuthenticated && parentAuthenticated) {
     return <Navigate to="/parent" replace />;
@@ -88,6 +96,13 @@ export function BootPage() {
         <p className="trainer-picker__sub">
           {trainerRoleLabel(trainer)}
         </p>
+        <button
+          type="button"
+          className="hub-card__pin-link"
+          onClick={() => setChangePinOpen(true)}
+        >
+          Změnit PIN
+        </button>
         <div className="hub-card__actions">
           <button type="button" className="trainer-card" onClick={() => navigate("/board")}>
             {unreadBoard > 0 && <span className="trainer-card__badge">{unreadBoard}</span>}
@@ -130,6 +145,16 @@ export function BootPage() {
           Odhlásit
         </button>
       </div>
+      {changePinOpen && (
+        <div className="trainer-overlay" role="dialog" aria-modal="true" aria-label="Změnit PIN">
+          <div className="trainer-overlay__panel app-shell">
+            <TrainerChangePinForm
+              onClose={() => setChangePinOpen(false)}
+              onSuccess={handlePinChanged}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
