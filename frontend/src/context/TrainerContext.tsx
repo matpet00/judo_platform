@@ -24,6 +24,8 @@ export function TrainerProvider({ children }: { children: ReactNode }) {
   const trainersQuery = useQuery({
     queryKey: ["trainers"],
     queryFn: () => api.trainers(),
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
   });
 
   const trainers = trainersQuery.data ?? [];
