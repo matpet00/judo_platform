@@ -15,6 +15,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import { ParentBoardPage } from "./pages/ParentBoardPage";
 import { ChatPage } from "./pages/ChatPage";
 import { EventsPage } from "./pages/EventsPage";
+import { TrainerStudentsPage } from "./pages/TrainerStudentsPage";
 import { NotificationBell } from "./components/NotificationBell";
 import { AppFooter } from "./components/AppFooter";
 import "./index.css";
@@ -51,6 +52,12 @@ function TrainerEventsRoute() {
   return <EventsPage role="trainer" selfId={trainer.id} homePath="/" />;
 }
 
+function TrainerStudentsRoute() {
+  const { trainer, isAuthenticated } = useTrainer();
+  if (!isAuthenticated || !trainer) return <Navigate to="/" replace />;
+  return <TrainerStudentsPage />;
+}
+
 function ParentEventsRoute() {
   const { parent, isAuthenticated } = useParent();
   if (!isAuthenticated || !parent) return <Navigate to="/" replace />;
@@ -73,6 +80,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/session/:id" element={<SessionRoute />} />
               <Route path="/chat" element={<TrainerChatRoute />} />
               <Route path="/events" element={<TrainerEventsRoute />} />
+              <Route path="/students" element={<TrainerStudentsRoute />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/parent" element={<ParentHomePage />} />
               <Route path="/parent/board" element={<ParentBoardPage />} />

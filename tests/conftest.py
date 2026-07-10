@@ -56,6 +56,7 @@ async def seed_test_data() -> None:
                 end_time=__import__("datetime").time(17, 30),
             )
             group.students.extend(students)
+            group.trainers.append(trainer)
             session.add(group)
 
 

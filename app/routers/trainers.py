@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,8 +13,10 @@ from app.schemas import (
     TrainerPinChange,
     TrainerPinVerify,
     TrainerRead,
+    TrainerStudentRead,
 )
 from app.security import create_trainer_token, hash_pin, require_admin, require_trainer_token, verify_pin
+from app.trainer_students import list_trainer_students
 
 router = APIRouter(prefix="/trainers", tags=["trainers"])
 
@@ -102,6 +104,15 @@ async def change_trainer_pin(
         raise HTTPException(status_code=401, detail="Invalid current PIN.")
     trainer.pin_hash = hash_pin(payload.new_pin)
     await db.commit()
+
+
+@router.get("/me/students", response_model=list[TrainerStudentRead])
+async def trainer_students(
+    branch_id: int = Query(..., ge=1),
+    trainer_id: int = Depends(require_trainer_token),
+    db: AsyncSession = Depends(get_db),
+) -> list[TrainerStudentRead]:
+    return await list_trainer_students(db, trainer_id, branch_id)
 
 
 @router.patch("/{trainer_id}", response_model=TrainerRead)

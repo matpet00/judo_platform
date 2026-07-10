@@ -181,6 +181,21 @@ class ParentRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TrainerStudentRead(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    age_group: AgeGroup
+    birth_date: date | None = None
+    birth_number: str | None = None
+    health_insurance: str | None = None
+    branches: list[BranchRead]
+    parents: list[ParentRead]
+    training_groups: list[str]
+    is_guest: bool = False
+    home_branch: str | None = None
+
+
 class ParentLogin(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)

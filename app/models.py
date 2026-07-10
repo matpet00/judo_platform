@@ -112,7 +112,7 @@ DEFAULT_TRAINING_GROUPS: tuple[
         time(18, 30),
         (2, 4),
         ("Lukáš", "Morcin"),
-        (),
+        (("Petr", "Matejcek"),),
     ),
     (
         "Dolni Lutyne Úterý+Čtvrtek",

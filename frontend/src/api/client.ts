@@ -136,6 +136,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ current_pin: currentPin, new_pin: newPin }),
     }, true, true, "trainer"),
+  trainerStudents: (branchId: number) =>
+    request<import("./types").TrainerStudentRead[]>(
+      `/trainers/me/students?branch_id=${branchId}`,
+      undefined,
+      false,
+      true,
+      "trainer",
+    ),
   trainingGroups: (branchId?: number, role: Role = "trainer") =>
     request<import("./types").TrainingGroup[]>(
       branchId ? `/training-groups?branch_id=${branchId}` : "/training-groups",

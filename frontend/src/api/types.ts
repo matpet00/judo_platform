@@ -17,6 +17,21 @@ export interface Trainer {
   branches: BranchBrief[];
 }
 
+export interface TrainerStudentRead {
+  id: number;
+  first_name: string;
+  last_name: string;
+  age_group: AgeGroup;
+  birth_date: string | null;
+  birth_number: string | null;
+  health_insurance: string | null;
+  branches: BranchBrief[];
+  parents: StudentGuardian[];
+  training_groups: string[];
+  is_guest: boolean;
+  home_branch: string | null;
+}
+
 export interface Parent {
   id: number;
   first_name: string;
