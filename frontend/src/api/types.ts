@@ -164,6 +164,9 @@ export interface StudentWithBranches {
   first_name: string;
   last_name: string;
   age_group: AgeGroup;
+  birth_date?: string | null;
+  birth_number?: string | null;
+  health_insurance?: string | null;
   branches: BranchBrief[];
   parents?: StudentGuardian[];
 }
@@ -475,6 +478,8 @@ export interface ChildRegistrationInput {
   first_name: string;
   last_name: string;
   birth_date: string;
+  birth_number: string;
+  health_insurance: string;
   branch_ids: number[];
 }
 
@@ -540,6 +545,8 @@ export interface RegistrationRequestChildRead {
   first_name: string;
   last_name: string;
   birth_date: string;
+  birth_number: string;
+  health_insurance: string;
   branch_names: string[];
   age_group: AgeGroup;
 }
@@ -572,6 +579,10 @@ export interface RegistrationRequestDetail extends RegistrationRequestListItem {
 export interface ParentEmailStatus {
   exists: boolean;
   has_login: boolean;
+}
+
+export interface BirthNumberStatus {
+  available: boolean;
 }
 
 export interface AdminAuthToken {
@@ -664,6 +675,8 @@ export interface StudentCreate {
   last_name: string;
   age_group: AgeGroup;
   birth_date?: string | null;
+  birth_number?: string | null;
+  health_insurance?: string | null;
   branch_ids: number[];
   parents?: StudentParentInput[];
 }
@@ -673,6 +686,8 @@ export interface StudentPatch {
   last_name?: string;
   age_group?: AgeGroup;
   birth_date?: string | null;
+  birth_number?: string | null;
+  health_insurance?: string | null;
   branch_ids?: number[];
   parents?: StudentParentInput[];
 }

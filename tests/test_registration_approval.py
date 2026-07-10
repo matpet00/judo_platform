@@ -13,6 +13,8 @@ def _child(branch_id: int, **overrides: object) -> dict:
         "first_name": "Pepa",
         "last_name": "Novák",
         "birth_date": "2017-05-10",
+        "birth_number": "170510/1234",
+        "health_insurance": "VZP ČR",
         "branch_ids": [branch_id],
     }
     base.update(overrides)
@@ -42,7 +44,7 @@ async def test_register_creates_pending_request_not_parent_login(client):
         "/register",
         json=_parent(
             email="pending.parent@example.com",
-            children=[_child(branch_id, first_name="Ema", last_name="Nováková")],
+            children=[_child(branch_id, first_name="Ema", last_name="Nováková", birth_number="170510/1001")],
         ),
     )
     assert resp.status_code == 200
@@ -66,7 +68,7 @@ async def test_register_duplicate_pending_email_returns_409(client):
     branch_id = await _branch_id(client)
     payload = _parent(
         email="dup.pending@example.com",
-        children=[_child(branch_id)],
+        children=[_child(branch_id, birth_number="170510/1002")],
     )
     first = await client.post("/register", json=payload)
     assert first.status_code == 200
@@ -80,7 +82,7 @@ async def test_registration_status_endpoints(client):
     email = "status.check@example.com"
     created = await client.post(
         "/register",
-        json=_parent(email=email, children=[_child(branch_id)]),
+        json=_parent(email=email, children=[_child(branch_id, birth_number="170510/1003")]),
     )
     request_id = created.json()["request_id"]
 
@@ -103,7 +105,7 @@ async def test_admin_approve_creates_parent_and_login(client):
             email=email,
             parent_first_name="Jana",
             parent_last_name="Nováková",
-            children=[_child(branch_id, first_name="Ema", last_name="Nováková")],
+            children=[_child(branch_id, first_name="Ema", last_name="Nováková", birth_number="170510/1004")],
         ),
     )
     request_id = reg.json()["request_id"]
@@ -142,7 +144,7 @@ async def test_admin_reject_sets_reason_and_allows_new_request(client):
     email = "reject.me@example.com"
     reg = await client.post(
         "/register",
-        json=_parent(email=email, children=[_child(branch_id)]),
+        json=_parent(email=email, children=[_child(branch_id, birth_number="170510/1005")]),
     )
     request_id = reg.json()["request_id"]
     admin = await login_admin(client)
@@ -162,7 +164,7 @@ async def test_admin_reject_sets_reason_and_allows_new_request(client):
 
     again = await client.post(
         "/register",
-        json=_parent(email=email, children=[_child(branch_id, first_name="Oprava")]),
+        json=_parent(email=email, children=[_child(branch_id, first_name="Oprava", birth_number="170510/1006")]),
     )
     assert again.status_code == 200
 
@@ -182,7 +184,7 @@ async def test_admin_approve_with_second_guardian(client):
                 "email": "pavel.kral@example.com",
                 "phone": "+420602222222",
             },
-            children=[_child(branch_id, first_name="Ema", last_name="Králová")],
+            children=[_child(branch_id, first_name="Ema", last_name="Králová", birth_number="170510/1007")],
         ),
     )
     admin = await login_admin(client)
@@ -200,7 +202,10 @@ async def test_admin_approve_with_second_guardian(client):
 @pytest.mark.asyncio
 async def test_admin_registration_requests_list(client):
     branch_id = await _branch_id(client)
-    await client.post("/register", json=_parent(email="list@example.com", children=[_child(branch_id)]))
+    await client.post(
+        "/register",
+        json=_parent(email="list@example.com", children=[_child(branch_id, birth_number="170510/1008")]),
+    )
     admin = await login_admin(client)
     listing = await client.get("/admin/registration-requests", headers=write_headers(admin))
     assert listing.status_code == 200

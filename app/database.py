@@ -412,6 +412,16 @@ async def migrate_schema() -> None:
         student_columns = {row[1] for row in result.fetchall()}
         if student_columns and "birth_date" not in student_columns:
             await conn.execute(text("ALTER TABLE students ADD COLUMN birth_date DATE"))
+        if student_columns and "birth_number" not in student_columns:
+            await conn.execute(text("ALTER TABLE students ADD COLUMN birth_number VARCHAR(11)"))
+        if student_columns and "health_insurance" not in student_columns:
+            await conn.execute(text("ALTER TABLE students ADD COLUMN health_insurance VARCHAR(100)"))
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_students_birth_number "
+                "ON students(birth_number) WHERE birth_number IS NOT NULL",
+            ),
+        )
 
         result = await conn.execute(text("PRAGMA table_info(parents)"))
         parent_columns = {row[1] for row in result.fetchall()}

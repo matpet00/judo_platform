@@ -13,6 +13,14 @@ import {
 import { MonthlyAttendanceReport } from "../components/MonthlyAttendanceReport";
 import { useAdmin } from "../context/AdminContext";
 import { computeAgeGroup } from "../lib/ageGroup";
+import {
+  BIRTH_NUMBER_HINT,
+  BIRTH_NUMBER_PLACEHOLDER,
+  birthNumberError,
+  formatBirthNumberInput,
+  normalizeBirthNumber,
+} from "../lib/birthNumber";
+import { HEALTH_INSURERS } from "../lib/healthInsurers";
 import type {
   AgeGroup,
   AdminEventParticipation,
@@ -549,7 +557,15 @@ function StudentsTab() {
   });
 
   const list = (students.data ?? []).filter((s) =>
-    matches(search, s.first_name, s.last_name, s.age_group, s.branches.map((b) => b.name).join(" ")),
+    matches(
+      search,
+      s.first_name,
+      s.last_name,
+      s.age_group,
+      s.birth_number,
+      s.health_insurance,
+      s.branches.map((b) => b.name).join(" "),
+    ),
   );
 
   return (
@@ -572,6 +588,8 @@ function StudentsTab() {
               </div>
               <div className="admin-row__sub">
                 {s.branches.map((b) => b.name).join(", ") || "Bez pobočky"}
+                {s.birth_number ? ` · ${s.birth_number}` : ""}
+                {s.health_insurance ? ` · ${s.health_insurance}` : ""}
               </div>
             </div>
             <div className="admin-row__actions">
@@ -600,6 +618,8 @@ function StudentsTab() {
         <AdminDetailModal title={`${viewing.first_name} ${viewing.last_name}`} onClose={() => setViewing(null)}>
           <DetailRow label="Jméno" value={`${viewing.first_name} ${viewing.last_name}`} />
           <DetailRow label="Věková kategorie" value={viewing.age_group} />
+          <DetailRow label="Rodné číslo" value={viewing.birth_number || "—"} />
+          <DetailRow label="Zdravotní pojišťovna" value={viewing.health_insurance || "—"} />
           <DetailRow label="Pobočky" value={viewing.branches.map((b) => b.name).join(", ") || "—"} />
           <DetailRow
             label="Rodiče"
@@ -653,7 +673,9 @@ function StudentForm({
   const [firstName, setFirstName] = useState(student?.first_name ?? "");
   const [lastName, setLastName] = useState(student?.last_name ?? "");
   const [ageGroup, setAgeGroup] = useState<AgeGroup>(student?.age_group ?? "U10");
-  const [birthDate, setBirthDate] = useState("");
+  const [birthDate, setBirthDate] = useState(student?.birth_date ?? "");
+  const [birthNumber, setBirthNumber] = useState(student?.birth_number ?? "");
+  const [healthInsurance, setHealthInsurance] = useState(student?.health_insurance ?? "");
   const [branchIds, setBranchIds] = useState<number[]>(student?.branches.map((b) => b.id) ?? []);
 
   const initialGuardians: GuardianDraft[] = (student?.parents ?? []).map((p) => ({
@@ -688,6 +710,9 @@ function StudentForm({
     if (parentsPayload.some((g) => !guardianComplete(g)))
       return "Vyplň u zástupce jméno, příjmení, e-mail i telefon.";
     if (duplicateEmail) return "Zástupci nemohou mít stejný e-mail.";
+    if (!student && !birthNumber.trim()) return "U nového dítěte je rodné číslo povinné.";
+    if (birthNumber.trim() && birthNumberError(birthNumber)) return birthNumberError(birthNumber);
+    if (!student && !healthInsurance) return "U nového dítěte je zdravotní pojišťovna povinná.";
     return null;
   })();
 
@@ -707,6 +732,8 @@ function StudentForm({
           branch_ids: branchIds,
           parents,
           ...(birthDate ? { birth_date: birthDate } : {}),
+          ...(birthNumber.trim() ? { birth_number: normalizeBirthNumber(birthNumber) } : { birth_number: null }),
+          ...(healthInsurance ? { health_insurance: healthInsurance } : { health_insurance: null }),
         });
       } else {
         await api.createStudent({
@@ -716,6 +743,8 @@ function StudentForm({
           branch_ids: branchIds,
           parents,
           ...(birthDate ? { birth_date: birthDate } : {}),
+          birth_number: normalizeBirthNumber(birthNumber),
+          health_insurance: healthInsurance,
         });
       }
     },
@@ -744,6 +773,26 @@ function StudentForm({
         <div className="admin-field">
           <label>Datum narození (nepovinné, dopočítá kategorii)</label>
           <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+        </div>
+        <div className="admin-field">
+          <label>Rodné číslo {student ? "(nepovinné u starých záznamů)" : ""}</label>
+          <input
+            value={birthNumber}
+            onChange={(e) => setBirthNumber(formatBirthNumberInput(e.target.value))}
+            placeholder={BIRTH_NUMBER_PLACEHOLDER}
+          />
+          <p className="register-hint">{BIRTH_NUMBER_HINT}</p>
+        </div>
+        <div className="admin-field">
+          <label>Zdravotní pojišťovna</label>
+          <select value={healthInsurance} onChange={(e) => setHealthInsurance(e.target.value)}>
+            <option value="">—</option>
+            {HEALTH_INSURERS.map((insurer) => (
+              <option key={insurer} value={insurer}>
+                {insurer}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="admin-field">
           <label>Kategorie {derivedAge ? "(dopočítáno)" : ""}</label>
@@ -1147,7 +1196,7 @@ function RegistrationsTab() {
             label="Děti"
             value={viewing.children.map(
               (c) =>
-                `${c.first_name} ${c.last_name} (${c.age_group}, ${c.branch_names.join(", ")}, ${c.birth_date})`,
+                `${c.first_name} ${c.last_name} (${c.age_group}, ${c.branch_names.join(", ")}, ${c.birth_date}, RC ${c.birth_number}, ${c.health_insurance})`,
             ).join("; ")}
           />
           {viewing.second_guardian && (

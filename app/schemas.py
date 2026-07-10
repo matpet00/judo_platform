@@ -12,6 +12,7 @@ from app.models import (
     RsvpStatus,
 )
 from app.phone import validate_e164_phone
+from app.birth_number import validate_birth_number
 
 _EX_BRANCH_NAME, _EX_BRANCH_ADDR = DEFAULT_BRANCHES[0]
 
@@ -275,8 +276,28 @@ class StudentCreate(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     age_group: AgeGroup
     birth_date: date | None = None
+    birth_number: str | None = None
+    health_insurance: str | None = Field(default=None, max_length=100)
     branch_ids: list[int] = Field(min_length=1, description="Jedna nebo více poboček (M:N).")
     parents: list[StudentParentInput] = Field(default_factory=list, max_length=2)
+
+    @field_validator("birth_number", mode="before")
+    @classmethod
+    def normalize_birth_number_create(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        if isinstance(v, str):
+            return validate_birth_number(v)
+        return v
+
+    @field_validator("health_insurance", mode="before")
+    @classmethod
+    def normalize_health_insurance_create(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("branch_ids", mode="after")
     @classmethod
@@ -292,7 +313,23 @@ class ChildRegistrationInput(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     birth_date: date
+    birth_number: str = Field(min_length=10, max_length=11)
+    health_insurance: str = Field(min_length=1, max_length=100)
     branch_ids: list[int] = Field(min_length=1)
+
+    @field_validator("birth_number", mode="before")
+    @classmethod
+    def normalize_child_birth_number(cls, v: object) -> object:
+        if isinstance(v, str):
+            return validate_birth_number(v)
+        return v
+
+    @field_validator("health_insurance", mode="before")
+    @classmethod
+    def normalize_child_health_insurance(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("branch_ids", mode="after")
     @classmethod
@@ -351,6 +388,8 @@ class StudentRead(BaseModel):
     last_name: str = Field(examples=["Zelený"])
     age_group: AgeGroup = Field(examples=[AgeGroup.U10])
     birth_date: date | None = None
+    birth_number: str | None = None
+    health_insurance: str | None = None
     created_at: datetime
     updated_at: datetime
     branches: list[BranchRead]
@@ -396,6 +435,10 @@ class ParentEmailStatus(BaseModel):
     has_login: bool = False
 
 
+class BirthNumberStatus(BaseModel):
+    available: bool
+
+
 class RegistrationSubmittedRead(BaseModel):
     request_id: int
     message: str
@@ -419,6 +462,8 @@ class RegistrationRequestChildRead(BaseModel):
     first_name: str
     last_name: str
     birth_date: date
+    birth_number: str
+    health_insurance: str
     branch_names: list[str]
     age_group: AgeGroup
 
@@ -450,8 +495,28 @@ class StudentPatch(BaseModel):
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     age_group: AgeGroup | None = None
     birth_date: date | None = None
+    birth_number: str | None = None
+    health_insurance: str | None = Field(default=None, max_length=100)
     branch_ids: list[int] | None = Field(default=None, min_length=1)
     parents: list[StudentParentInput] | None = Field(default=None, max_length=2)
+
+    @field_validator("birth_number", mode="before")
+    @classmethod
+    def normalize_birth_number_patch(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        if isinstance(v, str):
+            return validate_birth_number(v)
+        return v
+
+    @field_validator("health_insurance", mode="before")
+    @classmethod
+    def normalize_health_insurance_patch(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("branch_ids", mode="after")
     @classmethod

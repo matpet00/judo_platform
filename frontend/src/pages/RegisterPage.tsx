@@ -11,6 +11,14 @@ import {
   birthDateToIso,
   formatBirthDateInput,
 } from "../lib/birthDate";
+import {
+  BIRTH_NUMBER_HINT,
+  BIRTH_NUMBER_PLACEHOLDER,
+  birthNumberError,
+  formatBirthNumberInput,
+  normalizeBirthNumber,
+} from "../lib/birthNumber";
+import { HEALTH_INSURERS } from "../lib/healthInsurers";
 import { formatPhoneInput, phoneError, PHONE_HINT, PHONE_PLACEHOLDER } from "../lib/phone";
 import { ClubLogo } from "../components/ClubLogo";
 import { useParent } from "../context/ParentContext";
@@ -20,6 +28,8 @@ type ChildForm = {
   first_name: string;
   last_name: string;
   birth_date: string;
+  birth_number: string;
+  health_insurance: string;
   branch_id: string;
 };
 
@@ -36,6 +46,8 @@ function emptyChild(): ChildForm {
     first_name: "",
     last_name: "",
     birth_date: "",
+    birth_number: "",
+    health_insurance: "",
     branch_id: "",
   };
 }
@@ -141,6 +153,7 @@ function ChildFields({
   referenceYear: number;
 }) {
   const dateErr = child.birth_date ? birthDateError(child.birth_date) : null;
+  const birthNumberErr = child.birth_number ? birthNumberError(child.birth_number) : null;
 
   const agePreview = useMemo(() => {
     if (dateErr) return null;
@@ -208,6 +221,36 @@ function ChildFields({
         />
       </label>
       <p className="register-hint">{BIRTH_DATE_HINT}</p>
+
+      <label className="notification-field">
+        Rodné číslo
+        <input
+          type="text"
+          inputMode="numeric"
+          value={child.birth_number}
+          onChange={(e) => onChange({ ...child, birth_number: formatBirthNumberInput(e.target.value) })}
+          placeholder={BIRTH_NUMBER_PLACEHOLDER}
+          required
+        />
+      </label>
+      <p className="register-hint">{BIRTH_NUMBER_HINT}</p>
+      {birthNumberErr && <p className="error-box register-age-error">{birthNumberErr}</p>}
+
+      <label className="notification-field">
+        Zdravotní pojišťovna
+        <select
+          value={child.health_insurance}
+          onChange={(e) => onChange({ ...child, health_insurance: e.target.value })}
+          required
+        >
+          <option value="">Vyber pojišťovnu</option>
+          {HEALTH_INSURERS.map((insurer) => (
+            <option key={insurer} value={insurer}>
+              {insurer}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {agePreview && (
         <p className="register-age-preview">
@@ -317,9 +360,22 @@ export function RegisterPage() {
   };
 
   const validChildren = useMemo(() => {
+    const birthNumbers = children.map((c) => normalizeBirthNumber(c.birth_number)).filter(Boolean);
+    if (birthNumbers.length !== new Set(birthNumbers).size) return false;
+
     return children.every((c) => {
-      if (!c.first_name.trim() || !c.last_name.trim() || !c.birth_date || !c.branch_id) return false;
+      if (
+        !c.first_name.trim() ||
+        !c.last_name.trim() ||
+        !c.birth_date ||
+        !c.birth_number ||
+        !c.health_insurance ||
+        !c.branch_id
+      ) {
+        return false;
+      }
       if (birthDateError(c.birth_date)) return false;
+      if (birthNumberError(c.birth_number)) return false;
       try {
         computeAgeGroup(birthDateToIso(c.birth_date), referenceYear);
         return true;
@@ -381,6 +437,8 @@ export function RegisterPage() {
           first_name: c.first_name.trim(),
           last_name: c.last_name.trim(),
           birth_date: birthDateToIso(c.birth_date),
+          birth_number: normalizeBirthNumber(c.birth_number),
+          health_insurance: c.health_insurance,
           branch_ids: [Number(c.branch_id)],
         })),
       };

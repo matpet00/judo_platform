@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.birth_number import assert_birth_numbers_available
 from app.age_group import compute_age_group
 from app.config import settings
 from app.mail import _smtp_configured, send_email
@@ -215,6 +216,10 @@ async def apply_registration(
         created_credentials = (username, password)
 
     created_students: list[Student] = []
+    await assert_birth_numbers_available(
+        db,
+        [child.birth_number for child in payload.children],
+    )
     for child in payload.children:
         try:
             age_group = compute_age_group(child.birth_date)
@@ -230,6 +235,8 @@ async def apply_registration(
             last_name=child.last_name,
             age_group=age_group,
             birth_date=child.birth_date,
+            birth_number=child.birth_number,
+            health_insurance=child.health_insurance,
         )
         student.branches.extend(branches_list)
         student.parents.append(parent)
@@ -354,6 +361,11 @@ async def submit_registration_request(
             detail="Registrace s tímto e-mailem už čeká na schválení.",
         )
 
+    await assert_birth_numbers_available(
+        db,
+        [child.birth_number for child in payload.children],
+    )
+
     request = RegistrationRequest(
         status=RegistrationRequestStatus.pending,
         parent_email=normalized_email,
@@ -461,6 +473,8 @@ async def request_to_detail(db: AsyncSession, request: RegistrationRequest) -> R
                 first_name=child.first_name,
                 last_name=child.last_name,
                 birth_date=child.birth_date,
+                birth_number=child.birth_number,
+                health_insurance=child.health_insurance,
                 branch_names=await branch_names_by_ids(db, child.branch_ids),
                 age_group=age_group,
             ),

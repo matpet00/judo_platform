@@ -65,6 +65,8 @@ def _child(branch_id: int, **overrides: object) -> dict:
         "first_name": "Pepa",
         "last_name": "Novák",
         "birth_date": "2017-05-10",
+        "birth_number": "170510/1234",
+        "health_insurance": "VZP ČR",
         "branch_ids": [branch_id],
     }
     base.update(overrides)
@@ -128,7 +130,7 @@ async def test_register_then_approve_username_collision_gets_suffix(client):
             email="first.novak@example.com",
             parent_first_name="Jan",
             parent_last_name="Novák",
-            children=[_child(branch_id)],
+            children=[_child(branch_id, birth_number="170510/2001")],
         ),
     )
     first_id = first.json()["request_id"]
@@ -145,7 +147,7 @@ async def test_register_then_approve_username_collision_gets_suffix(client):
             email="second.novak@example.com",
             parent_first_name="Jan",
             parent_last_name="Novák",
-            children=[_child(branch_id, first_name="Tom")],
+            children=[_child(branch_id, first_name="Tom", birth_number="170510/2002")],
         ),
     )
     second_id = second.json()["request_id"]
@@ -168,7 +170,7 @@ async def test_parent_email_status_after_approval(client):
             email=email,
             parent_first_name="Test",
             parent_last_name="Rodič",
-            children=[_child(branch_id, first_name="Dítě", last_name="Test", birth_date="2019-01-01")],
+            children=[_child(branch_id, first_name="Dítě", last_name="Test", birth_date="2019-01-01", birth_number="190101/2003")],
         ),
     )
     admin = await login_admin(client)

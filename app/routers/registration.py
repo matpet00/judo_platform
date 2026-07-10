@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.birth_number import validate_birth_number
 from app.age_group import age_at_year_end, compute_age_group
 from app.database import get_db
-from app.models import Parent
+from app.models import Parent, Student
 from app.registration_service import (
     normalize_email,
     registration_status_for_email,
@@ -15,6 +16,7 @@ from app.registration_service import (
 )
 from app.schemas import (
     AgeGroupPreview,
+    BirthNumberStatus,
     ClubRegistrationCreate,
     ParentEmailStatus,
     RegistrationStatusRead,
@@ -62,6 +64,19 @@ async def parent_email_status(
         exists=True,
         has_login=bool(parent.username and parent.password_hash),
     )
+
+
+@router.get("/register/birth-number-status", response_model=BirthNumberStatus)
+async def birth_number_status(
+    birth_number: str = Query(..., min_length=10, max_length=11),
+    db: AsyncSession = Depends(get_db),
+) -> BirthNumberStatus:
+    try:
+        normalized = validate_birth_number(birth_number)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = await db.execute(select(Student.id).where(Student.birth_number == normalized))
+    return BirthNumberStatus(available=result.scalar_one_or_none() is None)
 
 
 @router.get("/register/status", response_model=RegistrationStatusRead)

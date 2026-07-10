@@ -107,6 +107,10 @@ export const api = {
     request<import("./types").ParentEmailStatus>(
       `/register/parent-status?email=${encodeURIComponent(email)}`,
     ),
+  birthNumberStatus: (birthNumber: string) =>
+    request<import("./types").BirthNumberStatus>(
+      `/register/birth-number-status?birth_number=${encodeURIComponent(birthNumber)}`,
+    ),
   registerToClub: (payload: import("./types").ClubRegistrationCreate) =>
     request<import("./types").RegistrationSubmittedRead>("/register", {
       method: "POST",

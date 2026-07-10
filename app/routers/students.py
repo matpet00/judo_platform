@@ -3,6 +3,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.birth_number import assert_birth_numbers_available
 from app.database import get_db
 from app.models import AttendanceRecord, Branch, EventRsvp, Parent, Student, TrainingSession
 from app.schemas import (
@@ -63,6 +64,8 @@ def _student_to_read(student: Student) -> StudentRead:
         last_name=student.last_name,
         age_group=student.age_group,
         birth_date=student.birth_date,
+        birth_number=student.birth_number,
+        health_insurance=student.health_insurance,
         created_at=student.created_at,
         updated_at=student.updated_at,
         branches=[BranchRead.model_validate(b, from_attributes=True) for b in branches_sorted],
@@ -86,6 +89,9 @@ async def create_student(
 
     branches_list = await get_branches_by_ids(db, payload.branch_ids)
 
+    if payload.birth_number is not None:
+        await assert_birth_numbers_available(db, [payload.birth_number])
+
     parents: list[Parent] = []
     for p in payload.parents:
         parents.append(await get_or_create_parent(db, p))
@@ -95,6 +101,8 @@ async def create_student(
         last_name=payload.last_name,
         age_group=payload.age_group,
         birth_date=payload.birth_date,
+        birth_number=payload.birth_number,
+        health_insurance=payload.health_insurance,
     )
     student.branches.extend(branches_list)
     student.parents.extend(parents)
@@ -179,6 +187,17 @@ async def patch_student(
         student.age_group = data["age_group"]
     if "birth_date" in data:
         student.birth_date = data["birth_date"]
+    if "birth_number" in data:
+        birth_number = data["birth_number"]
+        if birth_number is not None:
+            await assert_birth_numbers_available(
+                db,
+                [birth_number],
+                exclude_student_id=student.id,
+            )
+        student.birth_number = birth_number
+    if "health_insurance" in data:
+        student.health_insurance = data["health_insurance"]
 
     await db.commit()
 

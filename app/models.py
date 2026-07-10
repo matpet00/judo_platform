@@ -270,6 +270,8 @@ class Student(Base):
         Enum(AgeGroup, values_callable=lambda obj: [e.value for e in obj], native_enum=False, length=8),
     )
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    birth_number: Mapped[str | None] = mapped_column(String(11), nullable=True, unique=True)
+    health_insurance: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
