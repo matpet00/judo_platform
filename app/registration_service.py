@@ -394,6 +394,7 @@ async def submit_registration_request(
 
 
 async def registration_status_for_email(db: AsyncSession, email: str) -> RegistrationStatusRead:
+    """Return registration workflow status without revealing parent membership."""
     normalized = normalize_email(email)
     result = await db.execute(
         select(RegistrationRequest)
@@ -402,10 +403,14 @@ async def registration_status_for_email(db: AsyncSession, email: str) -> Registr
         .limit(1),
     )
     request = result.scalar_one_or_none()
-    if request is None:
+    if request is None or request.status == RegistrationRequestStatus.approved:
         return RegistrationStatusRead(
-            status="none",
-            message="Pro tento e-mail nemáme žádnou registraci. Můžete podat novou žádost.",
+            status="unavailable",
+            message=(
+                "Aktivní registraci pro tento e-mail nelze zobrazit. "
+                "Pokud jste již členem, přihlaste se. Jinak podávejte novou registraci "
+                "nebo kontaktujte klub."
+            ),
         )
 
     if request.status == RegistrationRequestStatus.pending:
@@ -425,10 +430,12 @@ async def registration_status_for_email(db: AsyncSession, email: str) -> Registr
         )
 
     return RegistrationStatusRead(
-        status="approved",
-        message="Registrace byla schválena. Přihlašovací údaje jsme poslali e-mailem.",
-        request_id=request.id,
-        reviewed_at=request.reviewed_at,
+        status="unavailable",
+        message=(
+            "Aktivní registraci pro tento e-mail nelze zobrazit. "
+            "Pokud jste již členem, přihlaste se. Jinak podávejte novou registraci "
+            "nebo kontaktujte klub."
+        ),
     )
 
 

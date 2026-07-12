@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
@@ -67,9 +67,7 @@ function GuardianFields({
   onEmail,
   onPhone,
   disableIdentity,
-  onEmailBlur,
   emailHint,
-  checkingEmail,
 }: {
   title: string;
   firstName: string;
@@ -81,9 +79,7 @@ function GuardianFields({
   onEmail: (v: string) => void;
   onPhone: (v: string) => void;
   disableIdentity?: boolean;
-  onEmailBlur?: () => void;
   emailHint?: string | null;
-  checkingEmail?: boolean;
 }) {
   const phoneErr = phone.trim() && phone !== "+" ? phoneError(phone) : null;
 
@@ -108,12 +104,10 @@ function GuardianFields({
           type="email"
           value={email}
           onChange={(e) => onEmail(e.target.value)}
-          onBlur={onEmailBlur}
           disabled={disableIdentity}
           required
         />
       </label>
-      {checkingEmail && <p className="register-hint">Kontroluji e-mail…</p>}
       {emailHint && <p className="register-hint register-hint--info">{emailHint}</p>}
 
       <label className="notification-field">
@@ -296,8 +290,6 @@ export function RegisterPage() {
   const [showSecondGuardian, setShowSecondGuardian] = useState(false);
   const [secondGuardian, setSecondGuardian] = useState<GuardianForm>(emptyGuardian());
   const [children, setChildren] = useState<ChildForm[]>([emptyChild()]);
-  const [emailStatus, setEmailStatus] = useState<{ exists: boolean; has_login: boolean } | null>(null);
-  const [checkingEmail, setCheckingEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -307,7 +299,6 @@ export function RegisterPage() {
   const [pending, setPending] = useState(false);
 
   const referenceYear = new Date().getFullYear();
-  const isExistingParent = emailStatus?.exists === true;
 
   useEffect(() => {
     if (loggedInParent) {
@@ -315,26 +306,8 @@ export function RegisterPage() {
       setParentLast(loggedInParent.last_name);
       setEmail(loggedInParent.email);
       setPhone(loggedInParent.phone || "+");
-      setEmailStatus({ exists: true, has_login: !!loggedInParent.username });
     }
   }, [loggedInParent]);
-
-  const checkEmail = useCallback(async (value: string) => {
-    const trimmed = value.trim().toLowerCase();
-    if (!trimmed.includes("@")) {
-      setEmailStatus(null);
-      return;
-    }
-    setCheckingEmail(true);
-    try {
-      const status = await api.parentEmailStatus(trimmed);
-      setEmailStatus(status);
-    } catch {
-      setEmailStatus(null);
-    } finally {
-      setCheckingEmail(false);
-    }
-  }, []);
 
   const primaryPhoneValid = !phoneError(phone);
   const secondPhoneValid = !showSecondGuardian || !phoneError(secondGuardian.phone);
@@ -393,9 +366,9 @@ export function RegisterPage() {
     validChildren &&
     secondGuardianValid;
 
-  const primaryEmailHint = isExistingParent
-    ? "Účet s tímto e-mailem už existuje — po schválení klubem přidá další dítě k tvému účtu."
-    : "Po schválení registrace klubem vám e-mailem pošleme přihlašovací údaje.";
+  const primaryEmailHint = loggedInParent
+    ? "Po schválení klubem přidáme další dítě k vašemu účtu."
+    : "Po schválení registrace klubem vám e-mailem pošleme přihlašovací údaje. Pokud u nás už máte účet se stejným e-mailem, nové dítě připojíme k němu.";
 
   const checkRegistrationStatus = async (value?: string) => {
     const trimmed = (value ?? statusEmail).trim().toLowerCase();
@@ -537,9 +510,7 @@ export function RegisterPage() {
               onEmail={setEmail}
               onPhone={setPhone}
               disableIdentity={!!loggedInParent}
-              onEmailBlur={() => void checkEmail(email)}
               emailHint={primaryEmailHint}
-              checkingEmail={checkingEmail}
             />
 
             {!showSecondGuardian ? (

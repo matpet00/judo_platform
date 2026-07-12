@@ -559,7 +559,7 @@ export interface RegistrationSubmittedRead {
 }
 
 export interface RegistrationStatusRead {
-  status: "none" | "pending" | "approved" | "rejected";
+  status: "pending" | "rejected" | "unavailable";
   message: string;
   rejection_reason: string | null;
   request_id: number | null;

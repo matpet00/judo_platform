@@ -485,6 +485,10 @@ class BirthNumberStatus(BaseModel):
     available: bool
 
 
+class RegistrationStatusQuery(BaseModel):
+    email: EmailStr
+
+
 class RegistrationSubmittedRead(BaseModel):
     request_id: int
     message: str
@@ -493,7 +497,7 @@ class RegistrationSubmittedRead(BaseModel):
 
 
 class RegistrationStatusRead(BaseModel):
-    status: str = Field(description="none | pending | approved | rejected")
+    status: str = Field(description="pending | rejected | unavailable")
     message: str
     rejection_reason: str | None = None
     request_id: int | None = None

@@ -52,5 +52,5 @@ async def assert_birth_numbers_available(
     if existing is not None:
         raise HTTPException(
             status_code=409,
-            detail="Záznam s daným rodným číslem už existuje.",
+            detail="Registraci s uvedenými údaji nelze uložit. Ověřte údaje nebo kontaktujte klub.",
         )

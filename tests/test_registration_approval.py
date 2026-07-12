@@ -86,13 +86,13 @@ async def test_registration_status_endpoints(client):
     )
     request_id = created.json()["request_id"]
 
-    pending = await client.get("/register/status", params={"email": email})
+    pending = await client.post("/register/status", json={"email": email})
     assert pending.status_code == 200
     assert pending.json()["status"] == "pending"
     assert pending.json()["request_id"] == request_id
 
-    none = await client.get("/register/status", params={"email": "unknown@example.com"})
-    assert none.json()["status"] == "none"
+    none = await client.post("/register/status", json={"email": "unknown@example.com"})
+    assert none.json()["status"] == "unavailable"
 
 
 @pytest.mark.asyncio
@@ -137,8 +137,8 @@ async def test_admin_approve_creates_parent_and_login(client, monkeypatch):
         assert request.status == RegistrationRequestStatus.approved
         assert request.approved_parent_id == parent.id
 
-    status = await client.get("/register/status", params={"email": email})
-    assert status.json()["status"] == "approved"
+    status = await client.post("/register/status", json={"email": email})
+    assert status.json()["status"] == "unavailable"
 
     login = await client.post("/parents/login", json={"username": "novjan", "password": generated_password})
     assert login.status_code == 200
@@ -164,7 +164,7 @@ async def test_admin_reject_sets_reason_and_allows_new_request(client):
     assert rejected.json()["status"] == "rejected"
     assert rejected.json()["rejection_reason"] == "Špatná pobočka"
 
-    status = await client.get("/register/status", params={"email": email})
+    status = await client.post("/register/status", json={"email": email})
     assert status.json()["status"] == "rejected"
     assert status.json()["rejection_reason"] == "Špatná pobočka"
 
@@ -174,7 +174,7 @@ async def test_admin_reject_sets_reason_and_allows_new_request(client):
     )
     assert again.status_code == 200
 
-    status_after_resubmit = await client.get("/register/status", params={"email": email})
+    status_after_resubmit = await client.post("/register/status", json={"email": email})
     assert status_after_resubmit.json()["status"] == "pending"
     assert status_after_resubmit.json()["rejection_reason"] is None
 

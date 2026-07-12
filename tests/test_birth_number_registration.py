@@ -119,7 +119,7 @@ async def test_register_rejects_duplicate_birth_number_in_db(client):
         ),
     )
     assert duplicate.status_code == 409
-    assert "rodným číslem" in duplicate.json()["detail"].lower()
+    assert duplicate.json()["detail"] == "Registraci s uvedenými údaji nelze uložit. Ověřte údaje nebo kontaktujte klub."
 
 
 @pytest.mark.asyncio
@@ -139,11 +139,7 @@ async def test_register_rejects_duplicate_birth_numbers_in_one_request(client):
 
 
 @pytest.mark.asyncio
-async def test_birth_number_status_endpoint(client):
-    available = await client.get("/register/birth-number-status", params={"birth_number": "180303/4444"})
-    assert available.status_code == 200
-    assert available.json()["available"] is True
-
+async def test_register_rejects_duplicate_birth_number_without_leak(client):
     branch_id = await _branch_id(client)
     await client.post(
         "/students",
@@ -163,8 +159,16 @@ async def test_birth_number_status_endpoint(client):
             }],
         },
     )
-    taken = await client.get("/register/birth-number-status", params={"birth_number": "180303/4444"})
-    assert taken.json()["available"] is False
+
+    duplicate = await client.post(
+        "/register",
+        json=_parent(
+            email="dup.rc@example.com",
+            children=[_child(branch_id, birth_number="180303/4444")],
+        ),
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "Registraci s uvedenými údaji nelze uložit. Ověřte údaje nebo kontaktujte klub."
 
 
 @pytest.mark.asyncio

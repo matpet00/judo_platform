@@ -112,10 +112,55 @@ async def test_age_group_preview_defaults_to_current_year(client):
     assert data["age_group"] == "U10"
 
 
+
 @pytest.mark.asyncio
-async def test_parent_email_status_without_account(client):
-    unknown = await client.get("/register/parent-status", params={"email": "neexistuje@example.com"})
-    assert unknown.json() == {"exists": False, "has_login": False}
+async def test_registration_lookup_endpoints_removed(client):
+    parent_status = await client.get("/register/parent-status", params={"email": "x@example.com"})
+    assert parent_status.status_code == 404
+
+    birth_status = await client.get(
+        "/register/birth-number-status",
+        params={"birth_number": "170510/1234"},
+    )
+    assert birth_status.status_code == 404
+
+    legacy_status = await client.get("/register/status", params={"email": "x@example.com"})
+    assert legacy_status.status_code == 405
+
+
+@pytest.mark.asyncio
+async def test_register_status_hides_unknown_and_approved_emails(client, monkeypatch):
+    generated_password = "testpass9"
+    monkeypatch.setattr(
+        "app.registration_service.generate_password",
+        lambda length=8: generated_password,
+    )
+
+    branch_id = (await client.get("/branches")).json()[0]["id"]
+    email = "hidden.status@example.com"
+
+    unknown = await client.post("/register/status", json={"email": "nobody@example.com"})
+    assert unknown.status_code == 200
+    assert unknown.json()["status"] == "unavailable"
+
+    reg = await client.post(
+        "/register",
+        json=_parent(
+            email=email,
+            children=[_child(branch_id, birth_number="170510/2010")],
+        ),
+    )
+    request_id = reg.json()["request_id"]
+    admin = await login_admin(client)
+    await client.post(
+        f"/admin/registration-requests/{request_id}/approve",
+        headers=write_headers(admin),
+    )
+
+    approved_lookup = await client.post("/register/status", json={"email": email})
+    assert approved_lookup.status_code == 200
+    assert approved_lookup.json()["status"] == "unavailable"
+    assert approved_lookup.json() == unknown.json()
 
 
 @pytest.mark.asyncio
@@ -179,5 +224,5 @@ async def test_parent_email_status_after_approval(client):
         headers=write_headers(admin),
     )
 
-    known = await client.get("/register/parent-status", params={"email": email})
-    assert known.json() == {"exists": True, "has_login": True}
+    hidden = await client.post("/register/status", json={"email": email})
+    assert hidden.json()["status"] == "unavailable"

@@ -116,14 +116,6 @@ export const api = {
       true,
       "parent",
     ),
-  parentEmailStatus: (email: string) =>
-    request<import("./types").ParentEmailStatus>(
-      `/register/parent-status?email=${encodeURIComponent(email)}`,
-    ),
-  birthNumberStatus: (birthNumber: string) =>
-    request<import("./types").BirthNumberStatus>(
-      `/register/birth-number-status?birth_number=${encodeURIComponent(birthNumber)}`,
-    ),
   registerToClub: (payload: import("./types").ClubRegistrationCreate) =>
     request<import("./types").RegistrationSubmittedRead>("/register", {
       method: "POST",
@@ -131,7 +123,12 @@ export const api = {
     }, true),
   registrationStatus: (email: string) =>
     request<import("./types").RegistrationStatusRead>(
-      `/register/status?email=${encodeURIComponent(email)}`,
+      "/register/status",
+      {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      },
+      true,
     ),
   previewAgeGroup: (birthDate: string, referenceYear?: number) => {
     const params = new URLSearchParams({ birth_date: birthDate });
