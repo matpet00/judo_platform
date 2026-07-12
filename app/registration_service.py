@@ -156,7 +156,6 @@ def guardian_credentials_read(
         last_name=parent.last_name,
         email=parent.email,
         username=parent.username or (created[0] if created else ""),
-        password=created[1] if created else None,
         credentials_created=created is not None,
     )
 
@@ -165,13 +164,13 @@ async def link_second_guardian(
     db: AsyncSession,
     row: StudentParentInput,
     students: list[Student],
-) -> tuple[Parent, GuardianCredentialsRead]:
+) -> tuple[Parent, GuardianCredentialsRead, tuple[str, str] | None]:
     second_parent = await get_or_create_parent(db, row)
     created = await ensure_parent_credentials(db, second_parent, row.first_name, row.last_name)
     for student in students:
         if second_parent not in student.parents:
             student.parents.append(second_parent)
-    return second_parent, guardian_credentials_read(second_parent, created=created)
+    return second_parent, guardian_credentials_read(second_parent, created=created), created
 
 
 async def apply_registration(
@@ -243,8 +242,9 @@ async def apply_registration(
 
     second_guardian_read: GuardianCredentialsRead | None = None
     second_parent: Parent | None = None
+    second_created_credentials: tuple[str, str] | None = None
     if payload.second_guardian is not None:
-        second_parent, second_guardian_read = await link_second_guardian(
+        second_parent, second_guardian_read, second_created_credentials = await link_second_guardian(
             db,
             payload.second_guardian,
             created_students,
@@ -271,7 +271,7 @@ async def apply_registration(
 
     if created_credentials is not None:
         response.credentials_created = True
-        response.username, response.password = created_credentials
+        response.username = created_credentials[0]
         sent, error = await try_send_credentials_email(
             parent=parent,
             password=created_credentials[1],
@@ -289,7 +289,8 @@ async def apply_registration(
             email_sent_parts.append("1. zástupce")
         else:
             credential_parts.append(
-                f"1. zástupce — uživatel {created_credentials[0]}, heslo {created_credentials[1]}.",
+                f"1. zástupce — uživatel {created_credentials[0]}. "
+                "E-mail se nepodařilo odeslat; použijte v administraci „Poslat přihlašovací údaje“.",
             )
     elif existing_parent:
         message_parts = [
@@ -298,11 +299,11 @@ async def apply_registration(
         ]
 
     if second_guardian_read is not None:
-        if second_guardian_read.credentials_created and second_guardian_read.password:
+        if second_created_credentials is not None:
             if second_parent is not None:
                 sent, error = await try_send_credentials_email(
                     parent=second_parent,
-                    password=second_guardian_read.password,
+                    password=second_created_credentials[1],
                     children=created_students,
                 )
                 second_guardian_read.credentials_email_sent = sent
@@ -311,8 +312,8 @@ async def apply_registration(
                 email_sent_parts.append("2. zástupce")
             else:
                 credential_parts.append(
-                    f"2. zástupce — uživatel {second_guardian_read.username}, "
-                    f"heslo {second_guardian_read.password}.",
+                    f"2. zástupce — uživatel {second_created_credentials[0]}. "
+                    "E-mail se nepodařilo odeslat; použijte v administraci „Poslat přihlašovací údaje“.",
                 )
         elif second_guardian_read.username:
             message_parts.append(
@@ -327,8 +328,6 @@ async def apply_registration(
 
     if credential_parts:
         message_parts.extend(credential_parts)
-        if issue_token:
-            message_parts.append("Uložte si přihlašovací údaje — zobrazí se jen teď.")
 
     response.message = " ".join(message_parts)
     return response

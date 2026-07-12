@@ -106,7 +106,6 @@ class AdminStats(BaseModel):
 class ResendCredentialsRead(BaseModel):
     parent_id: int
     username: str
-    password: str | None
     email: str
     email_sent: bool
     email_error: str | None
@@ -480,7 +479,6 @@ async def resend_parent_credentials(
     return ResendCredentialsRead(
         parent_id=parent.id,
         username=parent.username or "",
-        password=password,
         email=parent.email,
         email_sent=sent,
         email_error=error,

@@ -21,6 +21,8 @@ export function BootPage() {
   const {
     trainer,
     isAuthenticated,
+    pinChangeRequired,
+    clearPinChangeRequired,
     isLoading: trainersLoading,
     isError: trainersError,
     error: trainersLoadError,
@@ -83,6 +85,21 @@ export function BootPage() {
     return (
       <div className="boot-screen app-shell">
         <AuthLanding />
+      </div>
+    );
+  }
+
+  if (pinChangeRequired) {
+    return (
+      <div className="boot-screen app-shell">
+        <TrainerChangePinForm
+          required
+          onClose={clearTrainer}
+          onSuccess={() => {
+            clearPinChangeRequired();
+            clearTrainer();
+          }}
+        />
       </div>
     );
   }
@@ -168,9 +185,12 @@ export function AttendanceBootPage() {
   const {
     trainer,
     isAuthenticated,
+    pinChangeRequired,
+    clearPinChangeRequired,
     isLoading: trainersLoading,
     isError: trainersError,
     error: trainersLoadError,
+    clearTrainer,
   } = useTrainer();
   const { groups, sessions, isLoading, isError, error } = useTodayAttendance();
   const [confirmGroup, setConfirmGroup] = useState<TrainingGroup | null>(null);
@@ -245,6 +265,21 @@ export function AttendanceBootPage() {
     return (
       <div className="boot-screen app-shell">
         <TrainerLoginFlow />
+      </div>
+    );
+  }
+
+  if (pinChangeRequired) {
+    return (
+      <div className="boot-screen app-shell">
+        <TrainerChangePinForm
+          required
+          onClose={clearTrainer}
+          onSuccess={() => {
+            clearPinChangeRequired();
+            clearTrainer();
+          }}
+        />
       </div>
     );
   }

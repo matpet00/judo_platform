@@ -138,7 +138,7 @@ class TrainerPinVerify(BaseModel):
 
 class TrainerPinChange(BaseModel):
     current_pin: str = Field(min_length=4, max_length=8)
-    new_pin: str = Field(min_length=4, max_length=8)
+    new_pin: str = Field(min_length=6, max_length=8)
 
 
 class TrainerAuthToken(BaseModel):
@@ -146,6 +146,7 @@ class TrainerAuthToken(BaseModel):
     token_type: str = "bearer"
     expires_at: datetime
     trainer_id: int
+    pin_change_required: bool = False
 
 
 class ParentCreate(BaseModel):
@@ -454,7 +455,6 @@ class GuardianCredentialsRead(BaseModel):
     last_name: str
     email: str
     username: str
-    password: str | None = None
     credentials_created: bool = False
     credentials_email_sent: bool = False
     credentials_email_error: str | None = None
@@ -465,10 +465,6 @@ class ClubRegistrationRead(BaseModel):
     students: list[StudentRead]
     existing_parent: bool
     username: str | None = None
-    password: str | None = Field(
-        default=None,
-        description="Vygenerované heslo 1. zástupce (uložené i v DB).",
-    )
     credentials_created: bool = False
     credentials_email_sent: bool = False
     credentials_email_error: str | None = None

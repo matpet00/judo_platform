@@ -19,10 +19,10 @@ services:
         value: ./uploads
       - key: JWT_SECRET
         generateValue: true
-      - key: API_WRITE_KEY
-        generateValue: true
       - key: PIN_PEPPER
         generateValue: true
+      - key: ENABLE_API_DOCS
+        value: "false"
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
@@ -50,8 +50,3 @@ services:
           name: judo-api
           type: web
           envVarKey: RENDER_EXTERNAL_URL
-      - key: VITE_API_WRITE_KEY
-        fromService:
-          name: judo-api
-          type: web
-          envVarKey: API_WRITE_KEY

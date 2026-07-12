@@ -2,13 +2,16 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { api } from "../api/client";
 
 const LOGOUT_COUNTDOWN_SECONDS = 5;
+const MIN_NEW_PIN_LENGTH = 6;
+const MAX_PIN_LENGTH = 8;
 
 type TrainerChangePinFormProps = {
   onClose: () => void;
   onSuccess: () => void;
+  required?: boolean;
 };
 
-export function TrainerChangePinForm({ onClose, onSuccess }: TrainerChangePinFormProps) {
+export function TrainerChangePinForm({ onClose, onSuccess, required = false }: TrainerChangePinFormProps) {
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -23,11 +26,12 @@ export function TrainerChangePinForm({ onClose, onSuccess }: TrainerChangePinFor
     onSuccess();
   }, [onSuccess]);
 
-  const pinOk = (value: string) => value.length >= 4 && value.length <= 8;
+  const currentPinOk = (value: string) => value.length >= 4 && value.length <= MAX_PIN_LENGTH;
+  const newPinOk = (value: string) => value.length >= MIN_NEW_PIN_LENGTH && value.length <= MAX_PIN_LENGTH;
   const canSubmit =
-    pinOk(currentPin) &&
-    pinOk(newPin) &&
-    pinOk(confirmPin) &&
+    currentPinOk(currentPin) &&
+    newPinOk(newPin) &&
+    newPinOk(confirmPin) &&
     newPin === confirmPin &&
     newPin !== currentPin;
 
@@ -81,8 +85,12 @@ export function TrainerChangePinForm({ onClose, onSuccess }: TrainerChangePinFor
     <form className="trainer-pin-gate" onSubmit={handleSubmit}>
       <header className="trainer-picker__header">
         <p className="page-header__eyebrow">PIN</p>
-        <h1 className="trainer-picker__title">Změnit PIN</h1>
-        <p className="trainer-picker__sub">Zadej starý a nový PIN (4–8 číslic).</p>
+        <h1 className="trainer-picker__title">{required ? "Nastav nový PIN" : "Změnit PIN"}</h1>
+        <p className="trainer-picker__sub">
+          {required
+            ? "Výchozí nebo slabý PIN už nejde používat. Zadej starý a nový PIN (6–8 číslic)."
+            : "Zadej starý a nový PIN (nový musí mít 6–8 číslic)."}
+        </p>
       </header>
 
       <label className="trainer-pin-gate__label">
@@ -147,9 +155,16 @@ export function TrainerChangePinForm({ onClose, onSuccess }: TrainerChangePinFor
       {error && <p className="error-box trainer-pin-gate__error">{error}</p>}
 
       <div className="confirm-card__actions">
-        <button type="button" className="btn btn--ghost" disabled={pending} onClick={onClose}>
-          Zrušit
-        </button>
+        {!required && (
+          <button type="button" className="btn btn--ghost" disabled={pending} onClick={onClose}>
+            Zrušit
+          </button>
+        )}
+        {required && (
+          <button type="button" className="btn btn--ghost" disabled={pending} onClick={onClose}>
+            Odhlásit
+          </button>
+        )}
         <button type="submit" className="btn btn--primary" disabled={pending || !canSubmit}>
           {pending ? "Ukládám…" : "Změnit PIN"}
         </button>

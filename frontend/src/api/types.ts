@@ -45,6 +45,7 @@ export interface TrainerAuthToken {
   token_type: string;
   expires_at: string;
   trainer_id: number;
+  pin_change_required?: boolean;
 }
 
 export interface ParentAuthToken {
@@ -529,7 +530,6 @@ export interface GuardianCredentialsRead {
   last_name: string;
   email: string;
   username: string;
-  password: string | null;
   credentials_created: boolean;
   credentials_email_sent: boolean;
   credentials_email_error: string | null;
@@ -540,7 +540,6 @@ export interface ClubRegistrationRead {
   students: StudentWithBranches[];
   existing_parent: boolean;
   username: string | null;
-  password: string | null;
   credentials_created: boolean;
   credentials_email_sent: boolean;
   credentials_email_error: string | null;
@@ -637,7 +636,6 @@ export interface AdminStats {
 export interface ResendCredentialsRead {
   parent_id: number;
   username: string;
-  password: string | null;
   email: string;
   email_sent: boolean;
   email_error: string | null;

@@ -12,7 +12,7 @@ os.environ.setdefault("PIN_PEPPER", "test-pin-pepper")
 from app.database import async_session_maker, engine, migrate_schema, seed_branches
 from app.main import app
 from app.models import AgeGroup, Base, Branch, Parent, Student, Trainer, TrainingGroup
-from app.security import hash_pin
+from app.security import clear_all_rate_limits, hash_pin
 
 API_KEY = "test-api-key"
 DEFAULT_PIN = "1234"
@@ -67,6 +67,7 @@ async def seed_test_data() -> None:
 
 @pytest.fixture
 async def client():
+    clear_all_rate_limits()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)

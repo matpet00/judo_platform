@@ -96,7 +96,13 @@ async def test_registration_status_endpoints(client):
 
 
 @pytest.mark.asyncio
-async def test_admin_approve_creates_parent_and_login(client):
+async def test_admin_approve_creates_parent_and_login(client, monkeypatch):
+    generated_password = "testpass9"
+    monkeypatch.setattr(
+        "app.registration_service.generate_password",
+        lambda length=8: generated_password,
+    )
+
     branch_id = await _branch_id(client)
     email = "approve.me@example.com"
     reg = await client.post(
@@ -119,13 +125,13 @@ async def test_admin_approve_creates_parent_and_login(client):
     data = approved.json()
     assert data["credentials_created"] is True
     assert data["username"] == "novjan"
-    assert data["password"]
+    assert "password" not in data
     assert data["access_token"] is None
 
     async with async_session_maker() as session:
         parent = (await session.execute(select(Parent).where(Parent.email == email))).scalar_one()
         assert parent.username == "novjan"
-        assert verify_pin(data["password"], parent.password_hash)
+        assert verify_pin(generated_password, parent.password_hash)
 
         request = await session.get(RegistrationRequest, request_id)
         assert request.status == RegistrationRequestStatus.approved
@@ -134,7 +140,7 @@ async def test_admin_approve_creates_parent_and_login(client):
     status = await client.get("/register/status", params={"email": email})
     assert status.json()["status"] == "approved"
 
-    login = await client.post("/parents/login", json={"username": "novjan", "password": data["password"]})
+    login = await client.post("/parents/login", json={"username": "novjan", "password": generated_password})
     assert login.status_code == 200
 
 

@@ -1000,13 +1000,10 @@ function ParentsTab() {
             <p>
               Uživatel: <code>{credentials.username}</code>
             </p>
-            <p>
-              Heslo: <code>{credentials.password}</code>
-            </p>
             <p style={{ marginTop: 10, color: "var(--muted)" }}>
               {credentials.email_sent
-                ? `E-mail odeslán na ${credentials.email}.`
-                : `E-mail nebyl odeslán: ${credentials.email_error ?? "neznámá chyba"}. Předej údaje ručně.`}
+                ? `Nové heslo bylo odesláno e-mailem na ${credentials.email}.`
+                : `E-mail nebyl odeslán: ${credentials.email_error ?? "neznámá chyba"}. Zkuste to znovu nebo kontaktujte rodiče jinak.`}
             </p>
           </div>
           <div className="admin-form__actions">

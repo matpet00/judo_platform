@@ -3,7 +3,6 @@ import { parseApiError } from "../lib/apiError";
 import { getAdminToken, getParentToken, getTrainerToken } from "../lib/auth";
 
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
-const WRITE_KEY = import.meta.env.VITE_API_WRITE_KEY ?? "";
 
 type Role = "trainer" | "parent" | "admin";
 
@@ -17,9 +16,6 @@ function buildHeaders(mutating: boolean, authenticated = false, role: Role = "tr
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (mutating && WRITE_KEY) {
-    headers["X-API-Key"] = WRITE_KEY;
-  }
   if (mutating || authenticated) {
     const token = tokenForRole(role);
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -60,7 +56,6 @@ async function request<T>(
 
 async function uploadRequest<T>(path: string, formData: FormData, role: Role = "trainer"): Promise<T> {
   const headers: Record<string, string> = {};
-  if (WRITE_KEY) headers["X-API-Key"] = WRITE_KEY;
   const token = role === "parent" ? getParentToken() : getTrainerToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}${path}`, { method: "POST", body: formData, headers });

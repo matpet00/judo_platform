@@ -15,11 +15,6 @@ set -a
 source .env
 set +a
 
-if [[ -z "${API_WRITE_KEY:-}" ]]; then
-  echo "API_WRITE_KEY není v .env" >&2
-  exit 1
-fi
-
 if [[ ! -d .venv ]]; then
   python3.11 -m venv .venv
 fi
@@ -32,6 +27,6 @@ if [[ -f package-lock.json ]]; then
 else
   npm install
 fi
-VITE_API_URL=/api VITE_API_WRITE_KEY="$API_WRITE_KEY" npm run build
+VITE_API_URL=/api npm run build
 
 echo "Build hotový: frontend/dist"

@@ -4,8 +4,8 @@ import pytest
 
 from tests.conftest import DEFAULT_PIN, login_admin, login_trainer, write_headers
 
-NEW_PIN = "5678"
-ADMIN_PIN = "9999"
+NEW_PIN = "847291"
+ADMIN_PIN = "739184"
 
 
 def _bearer(token: str) -> dict[str, str]:

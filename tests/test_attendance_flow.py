@@ -77,14 +77,12 @@ async def test_attendance_roster_flow(client):
 
 
 @pytest.mark.asyncio
-async def test_write_requires_api_key(client):
-    token = await login_trainer(client)
+async def test_write_requires_trainer_token(client):
     group_id = await first_group_id(client)
 
     response = await client.post(
         f"/training-groups/{group_id}/sessions",
         json={"session_date": str(date.today())},
-        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 401
 

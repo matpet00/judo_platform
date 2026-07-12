@@ -16,8 +16,21 @@ WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 PUBLIC_WRITE_SUFFIXES = ("/verify-pin", "/parents/login", "/register", "/admin/login")
 
-_RATE_WINDOW_SECONDS = 300
-_RATE_MAX_ATTEMPTS = 10
+@dataclass(frozen=True)
+class RateLimitPolicy:
+    max_attempts: int
+    window_seconds: int = 300
+    count_every_request: bool = False
+
+
+RATE_POLICIES: dict[str, RateLimitPolicy] = {
+    "trainer_pin": RateLimitPolicy(max_attempts=10),
+    "parent_login": RateLimitPolicy(max_attempts=10),
+    "admin_login": RateLimitPolicy(max_attempts=10),
+    "register_submit": RateLimitPolicy(max_attempts=5, window_seconds=3600, count_every_request=True),
+    "register_lookup": RateLimitPolicy(max_attempts=40, window_seconds=300, count_every_request=True),
+}
+
 _failed_attempts: dict[str, list[float]] = defaultdict(list)
 
 _password_hasher = PasswordHasher()
@@ -57,16 +70,28 @@ def _rate_limit_key(scope: str, identifier: str) -> str:
     return f"{scope}:{identifier}"
 
 
-def check_rate_limit(scope: str, identifier: str) -> None:
-    key = _rate_limit_key(scope, identifier)
+def _policy_for(scope: str) -> RateLimitPolicy:
+    return RATE_POLICIES.get(scope, RateLimitPolicy(max_attempts=10))
+
+
+def _prune_attempts(key: str, window_seconds: int) -> list[float]:
     now = monotonic()
-    attempts = [t for t in _failed_attempts[key] if now - t < _RATE_WINDOW_SECONDS]
+    attempts = [t for t in _failed_attempts[key] if now - t < window_seconds]
     _failed_attempts[key] = attempts
-    if len(attempts) >= _RATE_MAX_ATTEMPTS:
+    return attempts
+
+
+def check_rate_limit(scope: str, identifier: str) -> None:
+    policy = _policy_for(scope)
+    key = _rate_limit_key(scope, identifier)
+    attempts = _prune_attempts(key, policy.window_seconds)
+    if len(attempts) >= policy.max_attempts:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Příliš mnoho pokusů. Zkus to znovu za chvíli.",
         )
+    if policy.count_every_request:
+        _failed_attempts[key].append(monotonic())
 
 
 def record_failed_attempt(scope: str, identifier: str) -> None:
@@ -75,6 +100,10 @@ def record_failed_attempt(scope: str, identifier: str) -> None:
 
 def clear_rate_limit(scope: str, identifier: str) -> None:
     _failed_attempts.pop(_rate_limit_key(scope, identifier), None)
+
+
+def clear_all_rate_limits() -> None:
+    _failed_attempts.clear()
 
 
 def client_ip(request: Request) -> str:

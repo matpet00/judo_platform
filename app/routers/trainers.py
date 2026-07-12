@@ -15,6 +15,7 @@ from app.schemas import (
     TrainerRead,
     TrainerStudentRead,
 )
+from app.pin_policy import trainer_pin_change_required, validate_new_trainer_pin
 from app.security import (
     check_rate_limit,
     clear_rate_limit,
@@ -109,6 +110,7 @@ async def verify_trainer_pin(
         access_token=token,
         expires_at=expires_at,
         trainer_id=trainer.id,
+        pin_change_required=trainer_pin_change_required(payload.pin),
     )
 
 
@@ -123,6 +125,10 @@ async def change_trainer_pin(
         raise HTTPException(status_code=404, detail="Trainer not found.")
     if not verify_pin(payload.current_pin, trainer.pin_hash):
         raise HTTPException(status_code=401, detail="Invalid current PIN.")
+    try:
+        validate_new_trainer_pin(payload.new_pin)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     trainer.pin_hash = hash_pin(payload.new_pin)
     await db.commit()
 
@@ -167,6 +173,11 @@ async def patch_trainer(
 
     if "pin" in data:
         pin = data.pop("pin")
+        if pin:
+            try:
+                validate_new_trainer_pin(pin)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         trainer.pin_hash = hash_pin(pin) if pin else None
 
     if "first_name" in data:

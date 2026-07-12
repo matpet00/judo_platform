@@ -1,5 +1,6 @@
 const TOKEN_KEY = "judo-trainer-token";
 const TRAINER_ID_KEY = "judo-trainer-id";
+const PIN_CHANGE_REQUIRED_KEY = "judo-trainer-pin-change-required";
 
 export function getTrainerToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
@@ -12,14 +13,28 @@ export function getStoredTrainerId(): number | null {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-export function setTrainerAuth(trainerId: number, token: string): void {
+export function getTrainerPinChangeRequired(): boolean {
+  return sessionStorage.getItem(PIN_CHANGE_REQUIRED_KEY) === "1";
+}
+
+export function setTrainerAuth(trainerId: number, token: string, pinChangeRequired = false): void {
   sessionStorage.setItem(TRAINER_ID_KEY, String(trainerId));
   sessionStorage.setItem(TOKEN_KEY, token);
+  if (pinChangeRequired) {
+    sessionStorage.setItem(PIN_CHANGE_REQUIRED_KEY, "1");
+  } else {
+    sessionStorage.removeItem(PIN_CHANGE_REQUIRED_KEY);
+  }
+}
+
+export function clearTrainerPinChangeRequired(): void {
+  sessionStorage.removeItem(PIN_CHANGE_REQUIRED_KEY);
 }
 
 export function clearTrainerAuth(): void {
   sessionStorage.removeItem(TRAINER_ID_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(PIN_CHANGE_REQUIRED_KEY);
 }
 
 const PARENT_TOKEN_KEY = "judo-parent-token";

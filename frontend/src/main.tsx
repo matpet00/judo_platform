@@ -16,6 +16,7 @@ import { ParentBoardPage } from "./pages/ParentBoardPage";
 import { ChatPage } from "./pages/ChatPage";
 import { EventsPage } from "./pages/EventsPage";
 import { TrainerStudentsPage } from "./pages/TrainerStudentsPage";
+import { TrainerPinSecurityGate } from "./components/TrainerPinSecurityGate";
 import { NotificationBell } from "./components/NotificationBell";
 import { AppFooter } from "./components/AppFooter";
 import "./index.css";
@@ -35,8 +36,16 @@ function SessionRoute() {
 }
 
 function TrainerChatRoute() {
-  const { trainer, isAuthenticated } = useTrainer();
-  if (!isAuthenticated || !trainer) return <Navigate to="/" replace />;
+  return (
+    <TrainerPinSecurityGate>
+      <TrainerChatPage />
+    </TrainerPinSecurityGate>
+  );
+}
+
+function TrainerChatPage() {
+  const { trainer } = useTrainer();
+  if (!trainer) return null;
   return <ChatPage role="trainer" selfId={trainer.id} homePath="/" />;
 }
 
@@ -47,15 +56,25 @@ function ParentChatRoute() {
 }
 
 function TrainerEventsRoute() {
-  const { trainer, isAuthenticated } = useTrainer();
-  if (!isAuthenticated || !trainer) return <Navigate to="/" replace />;
+  return (
+    <TrainerPinSecurityGate>
+      <TrainerEventsPage />
+    </TrainerPinSecurityGate>
+  );
+}
+
+function TrainerEventsPage() {
+  const { trainer } = useTrainer();
+  if (!trainer) return null;
   return <EventsPage role="trainer" selfId={trainer.id} homePath="/" />;
 }
 
 function TrainerStudentsRoute() {
-  const { trainer, isAuthenticated } = useTrainer();
-  if (!isAuthenticated || !trainer) return <Navigate to="/" replace />;
-  return <TrainerStudentsPage />;
+  return (
+    <TrainerPinSecurityGate>
+      <TrainerStudentsPage />
+    </TrainerPinSecurityGate>
+  );
 }
 
 function ParentEventsRoute() {
@@ -74,10 +93,10 @@ createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/" element={<BootPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/board" element={<TrainerPinSecurityGate><BoardPage /></TrainerPinSecurityGate>} />
+              <Route path="/today" element={<TrainerPinSecurityGate><TodayPage /></TrainerPinSecurityGate>} />
+              <Route path="/session/:id" element={<TrainerPinSecurityGate><SessionRoute /></TrainerPinSecurityGate>} />
               <Route path="/attendance" element={<AttendanceBootPage />} />
-              <Route path="/board" element={<BoardPage />} />
-              <Route path="/today" element={<TodayPage />} />
-              <Route path="/session/:id" element={<SessionRoute />} />
               <Route path="/chat" element={<TrainerChatRoute />} />
               <Route path="/events" element={<TrainerEventsRoute />} />
               <Route path="/students" element={<TrainerStudentsRoute />} />

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
 
     api_write_key: str | None = None
+    enable_api_docs: bool = True
     admin_username: str = "admin"
     admin_password: str = "admin"
     jwt_secret: str = "dev-jwt-change-me"

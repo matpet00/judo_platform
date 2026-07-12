@@ -2,9 +2,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import init_db
@@ -23,7 +22,6 @@ from app.routers import (
     training_groups,
     training_sessions,
 )
-from app.security import WRITE_METHODS, check_api_write_key, is_public_write_path
 
 
 @asynccontextmanager
@@ -41,7 +39,17 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="Judo klub Orlová", lifespan=lifespan)
+_docs_url = "/docs" if settings.enable_api_docs else None
+_redoc_url = "/redoc" if settings.enable_api_docs else None
+_openapi_url = "/openapi.json" if settings.enable_api_docs else None
+
+app = FastAPI(
+    title="Judo klub Orlová",
+    lifespan=lifespan,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,16 +58,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.middleware("http")
-async def api_write_key_middleware(request: Request, call_next):
-    if request.method in WRITE_METHODS and not is_public_write_path(request.url.path):
-        try:
-            check_api_write_key(request.headers.get("X-API-Key"))
-        except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    return await call_next(request)
 
 
 app.include_router(admin.router)

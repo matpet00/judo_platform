@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Trainer } from "../api/types";
-import { clearTrainerAuth, getStoredTrainerId, getTrainerToken, setTrainerAuth } from "../lib/auth";
+import { clearTrainerAuth, clearTrainerPinChangeRequired, getStoredTrainerId, getTrainerPinChangeRequired, getTrainerToken, setTrainerAuth } from "../lib/auth";
 
 type TrainerContextValue = {
   trainer: Trainer | null;
@@ -11,8 +11,10 @@ type TrainerContextValue = {
   isError: boolean;
   error: unknown;
   isAuthenticated: boolean;
+  pinChangeRequired: boolean;
   loginTrainer: (trainerId: number, pin: string) => Promise<void>;
   clearTrainer: () => void;
+  clearPinChangeRequired: () => void;
 };
 
 const TrainerContext = createContext<TrainerContextValue | null>(null);
@@ -20,6 +22,7 @@ const TrainerContext = createContext<TrainerContextValue | null>(null);
 export function TrainerProvider({ children }: { children: ReactNode }) {
   const [trainerId, setTrainerId] = useState<number | null>(getStoredTrainerId);
   const [token, setToken] = useState<string | null>(getTrainerToken);
+  const [pinChangeRequired, setPinChangeRequired] = useState(getTrainerPinChangeRequired);
 
   const trainersQuery = useQuery({
     queryKey: ["trainers"],
@@ -43,14 +46,22 @@ export function TrainerProvider({ children }: { children: ReactNode }) {
 
   const loginTrainer = useCallback(async (id: number, pin: string) => {
     const auth = await api.verifyPin(id, pin);
-    setTrainerAuth(auth.trainer_id, auth.access_token);
+    const mustChange = auth.pin_change_required ?? false;
+    setTrainerAuth(auth.trainer_id, auth.access_token, mustChange);
     setTrainerId(auth.trainer_id);
     setToken(auth.access_token);
+    setPinChangeRequired(mustChange);
+  }, []);
+
+  const clearPinChangeRequired = useCallback(() => {
+    setPinChangeRequired(false);
+    clearTrainerPinChangeRequired();
   }, []);
 
   const clearTrainer = useCallback(() => {
     setTrainerId(null);
     setToken(null);
+    setPinChangeRequired(false);
     clearTrainerAuth();
   }, []);
 
@@ -62,8 +73,10 @@ export function TrainerProvider({ children }: { children: ReactNode }) {
       isError: trainersQuery.isError,
       error: trainersQuery.error,
       isAuthenticated,
+      pinChangeRequired,
       loginTrainer,
       clearTrainer,
+      clearPinChangeRequired,
     }),
     [
       trainer,
@@ -72,8 +85,10 @@ export function TrainerProvider({ children }: { children: ReactNode }) {
       trainersQuery.isError,
       trainersQuery.error,
       isAuthenticated,
+      pinChangeRequired,
       loginTrainer,
       clearTrainer,
+      clearPinChangeRequired,
     ],
   );
 
