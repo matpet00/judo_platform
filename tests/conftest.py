@@ -8,6 +8,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 os.environ.setdefault("API_WRITE_KEY", "test-api-key")
 os.environ.setdefault("PIN_PEPPER", "test-pin-pepper")
+# Override .env SMTP so registration/mail tests never send real email.
+os.environ["SMTP_HOST"] = ""
+os.environ["SMTP_FROM"] = ""
 
 from app.database import async_session_maker, engine, migrate_schema, seed_branches
 from app.main import app
