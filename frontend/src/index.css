@@ -910,6 +910,25 @@ textarea {
   text-transform: uppercase;
   color: var(--muted);
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-footer__sep {
+  opacity: 0.5;
+}
+
+.app-footer__link {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.app-footer__link:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 
 .role-badge {
@@ -1074,6 +1093,88 @@ textarea {
   font-size: inherit;
   color: var(--gold);
   text-decoration: underline;
+}
+
+.register-consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 4px 0 2px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.register-consent input {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold);
+}
+
+.register-consent .register-inline-link {
+  margin-left: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.privacy-card {
+  max-width: 640px;
+  width: min(640px, 100%);
+}
+
+.privacy-body {
+  display: grid;
+  gap: 18px;
+  text-align: left;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.privacy-body section {
+  display: grid;
+  gap: 8px;
+}
+
+.privacy-body h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.privacy-body h3 {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.privacy-body p,
+.privacy-body ul {
+  margin: 0;
+  color: var(--muted);
+}
+
+.privacy-body strong,
+.privacy-body em {
+  color: var(--text);
+}
+
+.privacy-body ul {
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 4px;
+}
+
+.privacy-body a {
+  color: var(--gold);
+}
+
+.privacy-body code {
+  font-size: 0.85em;
 }
 
 .register-guardian {

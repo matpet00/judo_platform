@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { RegistrationStatusRead } from "../api/types";
@@ -297,6 +297,7 @@ export function RegisterPage() {
   const [statusResult, setStatusResult] = useState<RegistrationStatusRead | null>(null);
   const [statusPending, setStatusPending] = useState(false);
   const [pending, setPending] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   const referenceYear = new Date().getFullYear();
 
@@ -364,7 +365,8 @@ export function RegisterPage() {
     email.trim().includes("@") &&
     primaryPhoneValid &&
     validChildren &&
-    secondGuardianValid;
+    secondGuardianValid &&
+    privacyAccepted;
 
   const primaryEmailHint = loggedInParent
     ? "Po schválení klubem přidáme další dítě k vašemu účtu."
@@ -490,6 +492,7 @@ export function RegisterPage() {
                     setSubmitted(false);
                     setSuccess(null);
                     setStatusResult(null);
+                    setPrivacyAccepted(false);
                   }}
                 >
                   Nová registrace
@@ -580,6 +583,23 @@ export function RegisterPage() {
           </section>
 
           {error && <p className="error-box trainer-pin-gate__error">{error}</p>}
+
+          <label className="register-consent">
+            <input
+              type="checkbox"
+              checked={privacyAccepted}
+              onChange={(e) => setPrivacyAccepted(e.target.checked)}
+              required
+            />
+            <span>
+              Potvrzuji, že jsem zákonný zástupce uvedeného dítěte / dětí, že údaje jsou pravdivé, a že
+              jsem se seznámil(a) se{" "}
+              <Link to="/privacy" className="register-inline-link" target="_blank" rel="noreferrer">
+                Zásadami ochrany osobních údajů
+              </Link>{" "}
+              a souhlasím se zpracováním osobních údajů v rozsahu tam uvedeném.
+            </span>
+          </label>
 
           <div className="confirm-card__actions">
             <button type="button" className="btn btn--ghost" disabled={pending} onClick={() => navigate("/")}>
