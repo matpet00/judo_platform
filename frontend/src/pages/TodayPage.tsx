@@ -162,7 +162,7 @@ export function TodayPage() {
           Dnešní a blízké
         </button>
         <button type="button" className={tab === "monthly" ? "is-active" : ""} onClick={() => setTab("monthly")}>
-          Měsíční docházka
+          Přehled docházky
         </button>
       </div>
 

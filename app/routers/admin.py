@@ -12,8 +12,10 @@ from sqlalchemy.orm import selectinload
 
 from app.attendance_report import (
     build_branch_attendance_report,
-    group_active_in_month,
+    date_range_datetime_bounds,
+    group_active_in_range,
     load_branch_sessions,
+    resolve_attendance_range,
 )
 from app.config import settings
 from app.database import get_db
@@ -276,26 +278,26 @@ async def admin_stats(
 
 
 def _month_range(month: str) -> tuple[datetime, datetime]:
+    """Legacy helper — prefer resolve_attendance_range + date_range_datetime_bounds."""
     try:
-        year_s, month_s = month.split("-")
-        year, month_n = int(year_s), int(month_s)
-        start = date(year, month_n, 1)
-    except (ValueError, IndexError) as exc:
+        range_from, range_to = resolve_attendance_range(month=month)
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(status_code=400, detail="Neplatný měsíc (očekávám YYYY-MM).") from exc
-    end = date(year + 1, 1, 1) if month_n == 12 else date(year, month_n + 1, 1)
-    return (
-        datetime(start.year, start.month, start.day, tzinfo=UTC),
-        datetime(end.year, end.month, end.day, tzinfo=UTC),
-    )
+    return date_range_datetime_bounds(range_from, range_to)
 
 
 @router.get("/attendance-report", response_model=AttendanceMonthlyReport)
 async def admin_branch_attendance_report(
     branch_id: int = Query(..., ge=1),
-    month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    date_from: date | None = Query(default=None, description="Inclusive start (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="Inclusive end (YYYY-MM-DD)"),
     db: AsyncSession = Depends(get_db),
     _admin: bool = Depends(require_admin),
 ) -> AttendanceMonthlyReport:
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
     branch = await db.get(Branch, branch_id)
     if branch is None:
         raise HTTPException(status_code=404, detail="Branch not found.")
@@ -308,20 +310,23 @@ async def admin_branch_attendance_report(
             selectinload(TrainingGroup.branch),
         ),
     )
-    groups = [g for g in result.scalars().unique().all() if group_active_in_month(g, month)]
+    groups = [g for g in result.scalars().unique().all() if group_active_in_range(g, range_from, range_to)]
     group_ids = [g.id for g in groups]
-    sessions = await load_branch_sessions(db, group_ids, month)
-    return build_branch_attendance_report(groups, sessions, branch_id, month)
+    sessions = await load_branch_sessions(db, group_ids, range_from, range_to)
+    return build_branch_attendance_report(groups, sessions, branch_id, range_from, range_to)
 
 
 @router.get("/attendance.csv")
 async def export_attendance_csv(
-    month: str = Query(..., description="Měsíc ve formátu YYYY-MM."),
+    month: str | None = Query(default=None, description="Měsíc ve formátu YYYY-MM."),
+    date_from: date | None = Query(default=None, description="Inclusive start (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="Inclusive end (YYYY-MM-DD)"),
     branch_id: int | None = Query(default=None, ge=1),
     db: AsyncSession = Depends(get_db),
     _admin: bool = Depends(require_admin),
 ) -> StreamingResponse:
-    start, end = _month_range(month)
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    start, end = date_range_datetime_bounds(range_from, range_to)
 
     stmt = (
         select(AttendanceRecord)
@@ -364,7 +369,7 @@ async def export_attendance_csv(
         )
 
     buffer.seek(0)
-    filename = f"dochazka-{month}.csv"
+    filename = f"dochazka-{range_from.isoformat()}_{range_to.isoformat()}.csv"
     # Prepend BOM so Excel opens UTF-8 with diacritics correctly.
     content = "\ufeff" + buffer.getvalue()
     return StreamingResponse(
@@ -376,11 +381,14 @@ async def export_attendance_csv(
 
 @router.get("/event-participation", response_model=list[AdminEventParticipationRead])
 async def admin_event_participation(
-    month: str = Query(..., description="Měsíc ve formátu YYYY-MM."),
+    month: str | None = Query(default=None, description="Měsíc ve formátu YYYY-MM."),
+    date_from: date | None = Query(default=None, description="Inclusive start (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="Inclusive end (YYYY-MM-DD)"),
     db: AsyncSession = Depends(get_db),
     _admin: bool = Depends(require_admin),
 ) -> list[AdminEventParticipationRead]:
-    start, end = _month_range(month)
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    start, end = date_range_datetime_bounds(range_from, range_to)
     result = await db.execute(
         select(Event)
         .where(Event.starts_at >= start, Event.starts_at < end)
@@ -393,11 +401,14 @@ async def admin_event_participation(
 
 @router.get("/event-participation.csv")
 async def export_event_participation_csv(
-    month: str = Query(..., description="Měsíc ve formátu YYYY-MM."),
+    month: str | None = Query(default=None, description="Měsíc ve formátu YYYY-MM."),
+    date_from: date | None = Query(default=None, description="Inclusive start (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="Inclusive end (YYYY-MM-DD)"),
     db: AsyncSession = Depends(get_db),
     _admin: bool = Depends(require_admin),
 ) -> StreamingResponse:
-    start, end = _month_range(month)
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    start, end = date_range_datetime_bounds(range_from, range_to)
     result = await db.execute(
         select(Event)
         .where(Event.starts_at >= start, Event.starts_at < end)
@@ -435,7 +446,7 @@ async def export_event_participation_csv(
             )
 
     buffer.seek(0)
-    filename = f"ucast-akce-{month}.csv"
+    filename = f"ucast-akce-{range_from.isoformat()}_{range_to.isoformat()}.csv"
     content = "\ufeff" + buffer.getvalue()
     return StreamingResponse(
         iter([content]),

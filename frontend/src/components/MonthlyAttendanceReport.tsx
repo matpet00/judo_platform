@@ -2,40 +2,33 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { AttendanceMonthlyReport, TrainingGroup } from "../api/types";
+import { defaultPeriodState, resolvePeriodRange } from "../lib/attendancePeriod";
+import type { PeriodState } from "../lib/attendancePeriod";
+import { AttendancePeriodPicker } from "./AttendancePeriodPicker";
 import { AttendanceReportCharts } from "./AttendanceReportCharts";
 
 type ReportRole = "trainer" | "admin";
 
 const ALL_BRANCH_GROUPS = 0;
 
-function monthBounds(month: string): { start: string; end: string } | null {
-  const match = /^(\d{4})-(\d{2})$/.exec(month);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const mon = Number(match[2]);
-  const start = `${month}-01`;
-  const lastDay = new Date(year, mon, 0).getDate();
-  const end = `${month}-${String(lastDay).padStart(2, "0")}`;
-  return { start, end };
-}
-
-/** Skupiny viditelné v kalendáři: mají dny v týdnu a platí ve vybraném měsíci. */
-function calendarGroupsForMonth(groups: TrainingGroup[], month: string): TrainingGroup[] {
-  const bounds = monthBounds(month);
-  if (!bounds) return [];
-
+/** Skupiny viditelné v kalendáři: mají dny v týdnu a platí ve vybraném intervalu. */
+function calendarGroupsForRange(
+  groups: TrainingGroup[],
+  dateFrom: string,
+  dateTo: string,
+): TrainingGroup[] {
   return groups.filter((g) => {
     if (!g.weekdays?.length) return false;
-    if (g.active_from && g.active_from > bounds.end) return false;
-    if (g.active_until && g.active_until < bounds.start) return false;
+    if (g.active_from && g.active_from > dateTo) return false;
+    if (g.active_until && g.active_until < dateFrom) return false;
     return true;
   });
 }
 
 function AttendanceReportBody({ report, branchMode }: { report: AttendanceMonthlyReport; branchMode?: boolean }) {
   const meta = branchMode
-    ? `Tréninků v měsíci: ${report.sessions} · Skupin: ${report.group_count ?? 0}`
-    : `Tréninků v měsíci: ${report.sessions}`;
+    ? `Tréninků v období: ${report.sessions} · Skupin: ${report.group_count ?? 0}`
+    : `Tréninků v období: ${report.sessions}`;
 
   return (
     <div className="attendance-report">
@@ -72,10 +65,8 @@ export function MonthlyAttendanceReport({ role = "trainer" }: { role?: ReportRol
   const isAdmin = role === "admin";
   const [branchId, setBranchId] = useState<number | null>(null);
   const [groupId, setGroupId] = useState<number | null>(null);
-  const [month, setMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [period, setPeriod] = useState<PeriodState>(() => defaultPeriodState());
+  const range = useMemo(() => resolvePeriodRange(period), [period]);
 
   const branchesQuery = useQuery({
     queryKey: ["branches"],
@@ -88,10 +79,10 @@ export function MonthlyAttendanceReport({ role = "trainer" }: { role?: ReportRol
     queryFn: () => api.trainingGroups(undefined, role),
   });
 
-  const allGroups = useMemo(
-    () => calendarGroupsForMonth(groupsQuery.data ?? [], month),
-    [groupsQuery.data, month],
-  );
+  const allGroups = useMemo(() => {
+    if (!range) return [];
+    return calendarGroupsForRange(groupsQuery.data ?? [], range.dateFrom, range.dateTo);
+  }, [groupsQuery.data, range]);
 
   const groups = useMemo(() => {
     if (!isAdmin || branchId == null) return allGroups;
@@ -110,15 +101,17 @@ export function MonthlyAttendanceReport({ role = "trainer" }: { role?: ReportRol
       : null;
 
   const groupReportQuery = useQuery({
-    queryKey: ["attendance-report", "group", effectiveGroupId, month, role],
-    queryFn: () => api.attendanceReport(effectiveGroupId as number, month, role),
-    enabled: effectiveGroupId != null && /^\d{4}-\d{2}$/.test(month),
+    queryKey: ["attendance-report", "group", effectiveGroupId, range?.dateFrom, range?.dateTo, role],
+    queryFn: () =>
+      api.attendanceReport(effectiveGroupId as number, range!.dateFrom, range!.dateTo, role),
+    enabled: effectiveGroupId != null && range != null,
   });
 
   const branchReportQuery = useQuery({
-    queryKey: ["attendance-report", "branch", effectiveBranchId, month],
-    queryFn: () => api.adminBranchAttendanceReport(effectiveBranchId as number, month),
-    enabled: branchWide && /^\d{4}-\d{2}$/.test(month),
+    queryKey: ["attendance-report", "branch", effectiveBranchId, range?.dateFrom, range?.dateTo],
+    queryFn: () =>
+      api.adminBranchAttendanceReport(effectiveBranchId as number, range!.dateFrom, range!.dateTo),
+    enabled: branchWide && range != null,
   });
 
   const reportQuery = branchWide ? branchReportQuery : groupReportQuery;
@@ -137,7 +130,7 @@ export function MonthlyAttendanceReport({ role = "trainer" }: { role?: ReportRol
 
   return (
     <section className="notification-compose">
-      <h2>Měsíční docházka</h2>
+      <h2>Docházka</h2>
       <div className="events-compose__row">
         {isAdmin && (
           <label className="notification-field">
@@ -172,15 +165,12 @@ export function MonthlyAttendanceReport({ role = "trainer" }: { role?: ReportRol
             ))}
           </select>
         </label>
-        <label className="notification-field">
-          Měsíc
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        </label>
       </div>
+      <AttendancePeriodPicker value={period} onChange={setPeriod} />
       {groupsQuery.isLoading && <p className="notification-compose__missing">Načítám tréninky…</p>}
       {!groupsQuery.isLoading && allGroups.length === 0 && (
         <p className="notification-compose__missing">
-          V kalendáři není žádný opakovaný trénink pro tento měsíc. Založ ho v plánovači (+ Trénink).
+          V kalendáři není žádný opakovaný trénink pro toto období. Založ ho v plánovači (+ Trénink).
         </p>
       )}
       {isAdmin && needsSelection && allGroups.length > 0 && (
@@ -192,7 +182,7 @@ export function MonthlyAttendanceReport({ role = "trainer" }: { role?: ReportRol
         <p className="notification-compose__missing">Vyber trénink pro zobrazení docházky.</p>
       )}
       {isAdmin && effectiveBranchId != null && groups.length === 0 && !groupsQuery.isLoading && (
-        <p className="notification-compose__missing">Na této pobočce není v měsíci žádný kalendářní trénink.</p>
+        <p className="notification-compose__missing">Na této pobočce není v období žádný kalendářní trénink.</p>
       )}
       {reportQuery.isLoading && !needsSelection && <div className="loading">Načítám…</div>}
       {reportQuery.isError && <div className="error-box">{String(reportQuery.error)}</div>}

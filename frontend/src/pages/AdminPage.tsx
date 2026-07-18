@@ -11,8 +11,15 @@ import {
   RSVP_CHART_SEGMENTS,
 } from "../components/AdminCharts";
 import { MonthlyAttendanceReport } from "../components/MonthlyAttendanceReport";
+import { AttendancePeriodPicker } from "../components/AttendancePeriodPicker";
 import { useAdmin } from "../context/AdminContext";
 import { computeAgeGroup } from "../lib/ageGroup";
+import {
+  defaultPeriodState,
+  formatPeriodLabel,
+  resolvePeriodRange,
+} from "../lib/attendancePeriod";
+import type { PeriodState } from "../lib/attendancePeriod";
 import {
   BIRTH_NUMBER_HINT,
   BIRTH_NUMBER_PLACEHOLDER,
@@ -1398,19 +1405,18 @@ function BranchForm({
 // --- Events ---
 
 function EventsTab() {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [month, setMonth] = useState(defaultMonth);
+  const [period, setPeriod] = useState<PeriodState>(() => defaultPeriodState());
+  const range = useMemo(() => resolvePeriodRange(period), [period]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const events = useQuery({
-    queryKey: ["admin", "event-participation", month],
-    queryFn: () => api.adminEventParticipation(month),
-    enabled: /^\d{4}-\d{2}$/.test(month),
+    queryKey: ["admin", "event-participation", range?.dateFrom, range?.dateTo],
+    queryFn: () => api.adminEventParticipation(range!.dateFrom, range!.dateTo),
+    enabled: range != null,
   });
 
   const download = useMutation({
-    mutationFn: () => api.downloadEventParticipationCsv(month),
+    mutationFn: () => api.downloadEventParticipationCsv(range!.dateFrom, range!.dateTo),
   });
 
   const list = events.data ?? [];
@@ -1433,17 +1439,12 @@ function EventsTab() {
         <p className="page-header__sub" style={{ margin: "0 0 12px" }}>
           Přehled potvrzení účasti (RSVP) trenérů a dětí na akcích v kalendáři.
         </p>
-        <div className="admin-guardian__grid">
-          <div className="admin-field">
-            <label>Měsíc</label>
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-          </div>
-        </div>
+        <AttendancePeriodPicker value={period} onChange={setPeriod} />
         <div className="admin-form__actions">
           <button
             type="button"
             className="btn btn--primary"
-            disabled={!month || download.isPending}
+            disabled={!range || download.isPending}
             onClick={() => download.mutate()}
           >
             {download.isPending ? "Stahuji…" : "Export CSV"}
@@ -1455,14 +1456,16 @@ function EventsTab() {
       {events.isLoading && <p className="admin-empty">Načítám akce…</p>}
       {events.isError && <p className="error-box">{String(events.error)}</p>}
       {!events.isLoading && list.length === 0 && (
-        <p className="admin-empty">V tomto měsíci nejsou žádné akce.</p>
+        <p className="admin-empty">V tomto období nejsou žádné akce.</p>
       )}
 
       {list.length > 0 && (
         <div className="admin-event-chart-block">
           <div className="admin-charts-grid">
             <div className="admin-chart">
-              <div className="admin-chart__title">Účast za měsíc (všechny akce)</div>
+              <div className="admin-chart__title">
+                Účast za období ({formatPeriodLabel(period)})
+              </div>
               <AdminStackedBar
                 segments={RSVP_CHART_SEGMENTS(monthTotals.yes, monthTotals.maybe, monthTotals.no)}
                 showLegend
@@ -1566,26 +1569,23 @@ function EventParticipantsTable({ event }: { event: AdminEventParticipation }) {
 // --- Export ---
 
 function ExportTab() {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [month, setMonth] = useState(defaultMonth);
+  const [period, setPeriod] = useState<PeriodState>(() => defaultPeriodState());
+  const range = useMemo(() => resolvePeriodRange(period), [period]);
   const [branchId, setBranchId] = useState<number | "">("");
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const downloadTraining = useMutation({
-    mutationFn: () => api.downloadAttendanceCsv(month, branchId === "" ? undefined : branchId),
+    mutationFn: () =>
+      api.downloadAttendanceCsv(range!.dateFrom, range!.dateTo, branchId === "" ? undefined : branchId),
   });
   const downloadEvents = useMutation({
-    mutationFn: () => api.downloadEventParticipationCsv(month),
+    mutationFn: () => api.downloadEventParticipationCsv(range!.dateFrom, range!.dateTo),
   });
 
   return (
     <div className="admin-form" style={{ maxWidth: 480 }}>
       <div className="admin-section-title">Export docházky na trénincích</div>
-      <div className="admin-field">
-        <label>Měsíc</label>
-        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-      </div>
+      <AttendancePeriodPicker value={period} onChange={setPeriod} />
       <div className="admin-field">
         <label>Pobočka</label>
         <select
@@ -1605,7 +1605,7 @@ function ExportTab() {
         <button
           type="button"
           className="btn btn--primary"
-          disabled={!month || downloadTraining.isPending}
+          disabled={!range || downloadTraining.isPending}
           onClick={() => downloadTraining.mutate()}
         >
           {downloadTraining.isPending ? "Stahuji…" : "Stáhnout CSV tréninků"}
@@ -1614,14 +1614,14 @@ function ExportTab() {
 
       <div className="admin-section-title" style={{ marginTop: 28 }}>Export účasti na akcích</div>
       <p className="page-header__sub" style={{ margin: "0 0 12px" }}>
-        Potvrzení účasti trenérů a dětí (RSVP) za vybraný měsíc.
+        Potvrzení účasti trenérů a dětí (RSVP) za vybrané období ({formatPeriodLabel(period)}).
       </p>
       {downloadEvents.isError && <p className="error-box">{String(downloadEvents.error)}</p>}
       <div className="admin-form__actions">
         <button
           type="button"
           className="btn btn--primary"
-          disabled={!month || downloadEvents.isPending}
+          disabled={!range || downloadEvents.isPending}
           onClick={() => downloadEvents.mutate()}
         >
           {downloadEvents.isPending ? "Stahuji…" : "Stáhnout CSV akcí"}

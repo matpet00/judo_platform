@@ -960,10 +960,35 @@ class AttendanceMonthlyReportRow(BaseModel):
 class AttendanceMonthlyReport(BaseModel):
     group_id: int | None = None
     branch_id: int | None = None
-    month: str = Field(examples=["2026-07"])
+    month: str = Field(default="", examples=["2026-07"], description="YYYY-MM when range is exactly one month.")
+    date_from: date | None = Field(default=None, examples=["2026-07-01"])
+    date_to: date | None = Field(default=None, examples=["2026-07-31"])
     sessions: int = 0
     group_count: int = 0
     rows: list[AttendanceMonthlyReportRow] = Field(default_factory=list)
+
+
+class ParentChildAttendanceEntry(BaseModel):
+    session_id: int
+    starts_at: datetime
+    group_name: str
+    status: AttendanceStatus | None = None
+    is_guest: bool = False
+
+
+class ParentChildAttendanceReport(BaseModel):
+    student_id: int
+    student_name: str
+    month: str = Field(default="", description="YYYY-MM when range is exactly one month.")
+    date_from: date | None = None
+    date_to: date | None = None
+    sessions: int = 0
+    present: int = 0
+    absent: int = 0
+    excused: int = 0
+    unmarked: int = 0
+    attendance_rate: float = 0.0
+    entries: list[ParentChildAttendanceEntry] = Field(default_factory=list)
 
 
 class NotificationTargetCreate(BaseModel):

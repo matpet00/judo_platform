@@ -401,6 +401,9 @@ export function ParentHomePage() {
           Nástěnka
           {unreadBoard > 0 && <span className="trainer-card__badge">{unreadBoard}</span>}
         </button>
+        <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/attendance")}>
+          Přehled docházky
+        </button>
         <button type="button" className="btn btn--primary auth-back" onClick={() => navigate("/parent/chat")}>
           Chat
         </button>

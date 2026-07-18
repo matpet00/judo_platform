@@ -2913,3 +2913,339 @@ textarea {
 .occurrence-delete-choice__btn--danger:hover {
   border-color: #f0a0a0;
 }
+
+/* ---- Parent child attendance overview ---- */
+.parent-attendance-card {
+  max-width: 520px;
+  width: min(520px, 100%);
+  text-align: left;
+}
+
+.parent-attendance__controls {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+
+.parent-attendance__month {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.parent-attendance__month .btn {
+  min-width: 44px;
+  flex: 0;
+}
+
+.parent-attendance__month-field {
+  margin: 0;
+}
+
+.parent-attendance__month-label {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.attendance-period {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 4px;
+  width: 100%;
+}
+
+.attendance-period__nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.attendance-period__nav .btn {
+  min-width: 44px;
+}
+
+.attendance-period__label {
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+}
+
+.attendance-period__custom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.attendance-period__month-input {
+  margin: 0;
+}
+
+.czech-datepicker {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+
+.czech-datepicker__label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.czech-datepicker__trigger {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.czech-datepicker__popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: min(280px, 92vw);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+}
+
+.czech-datepicker__nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.czech-datepicker__nav .btn {
+  min-width: 40px;
+}
+
+.czech-datepicker__month {
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.czech-datepicker__weekdays,
+.czech-datepicker__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.czech-datepicker__weekdays {
+  margin-bottom: 4px;
+}
+
+.czech-datepicker__weekdays span {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.czech-datepicker__cell {
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.czech-datepicker__cell:hover {
+  background: var(--bg-elevated);
+}
+
+.czech-datepicker__cell--selected {
+  background: var(--accent, #c9a227);
+  color: #111;
+  font-weight: 700;
+}
+
+.czech-datepicker__cell--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.czech-datepicker__cell--empty {
+  pointer-events: none;
+}
+
+.parent-attendance__child-head {
+  margin: 4px 0 0;
+}
+
+.parent-attendance__child-name {
+  margin: 0;
+}
+
+.parent-attendance__child-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 6px 0 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.parent-attendance__kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.parent-attendance__kpi {
+  display: grid;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.parent-attendance__kpi-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--cream);
+}
+
+.parent-attendance__kpi-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.parent-attendance__kpi--present .parent-attendance__kpi-value {
+  color: #9be0b6;
+}
+
+.parent-attendance__kpi--absent .parent-attendance__kpi-value {
+  color: #f0a0a0;
+}
+
+.parent-attendance__kpi--excused .parent-attendance__kpi-value {
+  color: #9dc0ff;
+}
+
+.parent-attendance__kpi--rate {
+  border-color: var(--border-strong);
+  background: rgba(212, 175, 55, 0.12);
+}
+
+.parent-attendance__kpi--rate .parent-attendance__kpi-value {
+  color: var(--gold);
+}
+
+.parent-attendance__charts {
+  margin-bottom: 16px;
+}
+
+.parent-attendance__list-title {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: var(--gold);
+}
+
+.parent-attendance__sessions {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.parent-attendance__session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(18, 18, 22, 0.86);
+}
+
+.parent-attendance__session-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.parent-attendance__session-when {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.parent-attendance__session-group {
+  color: var(--muted);
+  font-size: 0.82rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.parent-attendance__chip {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  border: 1px solid var(--border);
+}
+
+.parent-attendance__chip--present {
+  background: rgba(45, 157, 107, 0.18);
+  color: #9be0b6;
+  border-color: rgba(45, 157, 107, 0.4);
+}
+
+.parent-attendance__chip--absent {
+  background: rgba(161, 40, 40, 0.18);
+  color: #f0a0a0;
+  border-color: rgba(161, 40, 40, 0.4);
+}
+
+.parent-attendance__chip--excused {
+  background: rgba(61, 106, 138, 0.2);
+  color: #9dc0ff;
+  border-color: rgba(61, 106, 138, 0.45);
+}
+
+.parent-attendance__chip--missing {
+  background: rgba(139, 135, 152, 0.16);
+  color: var(--muted);
+}
+
+.parent-attendance__empty,
+.parent-attendance__empty-month {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .parent-attendance__kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

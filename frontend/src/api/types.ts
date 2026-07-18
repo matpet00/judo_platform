@@ -173,9 +173,34 @@ export interface AttendanceMonthlyReport {
   group_id?: number | null;
   branch_id?: number | null;
   month: string;
+  date_from?: string | null;
+  date_to?: string | null;
   sessions: number;
   group_count?: number;
   rows: AttendanceMonthlyReportRow[];
+}
+
+export interface ParentChildAttendanceEntry {
+  session_id: number;
+  starts_at: string;
+  group_name: string;
+  status: AttendanceStatus | null;
+  is_guest: boolean;
+}
+
+export interface ParentChildAttendanceReport {
+  student_id: number;
+  student_name: string;
+  month: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  sessions: number;
+  present: number;
+  absent: number;
+  excused: number;
+  unmarked: number;
+  attendance_rate: number;
+  entries: ParentChildAttendanceEntry[];
 }
 
 export interface StudentGuardian {

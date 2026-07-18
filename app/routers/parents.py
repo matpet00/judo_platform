@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.attendance_report import (
+    build_student_attendance_report,
+    load_student_range_sessions,
+    resolve_attendance_range,
+)
 from app.database import get_db
 from app.models import (
     ChatConversation,
@@ -23,6 +30,7 @@ from app.models import (
 from app.schemas import (
     BranchRead,
     ParentAuthToken,
+    ParentChildAttendanceReport,
     ParentChildPatch,
     ParentChildRead,
     ParentCreate,
@@ -68,11 +76,16 @@ async def _get_parent_child_or_403(
     db: AsyncSession,
     parent_id: int,
     student_id: int,
+    *,
+    with_training_groups: bool = False,
 ) -> Student:
+    options = [selectinload(Parent.children).selectinload(Student.branches)]
+    if with_training_groups:
+        options.append(selectinload(Parent.children).selectinload(Student.training_groups))
     result = await db.execute(
         select(Parent)
         .where(Parent.id == parent_id)
-        .options(selectinload(Parent.children).selectinload(Student.branches)),
+        .options(*options),
     )
     parent = result.scalar_one_or_none()
     if parent is None:
@@ -237,13 +250,33 @@ async def patch_parent_child(
         student.health_insurance = data["health_insurance"]
 
     await db.commit()
+    return _student_to_parent_child_read(student)
 
-    result = await db.execute(
-        select(Student)
-        .where(Student.id == student_id)
-        .options(selectinload(Student.branches)),
+
+@router.get("/me/children/{student_id}/attendance", response_model=ParentChildAttendanceReport)
+async def parent_child_attendance(
+    student_id: int,
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    date_from: date | None = Query(default=None, description="Inclusive start (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="Inclusive end (YYYY-MM-DD)"),
+    parent_id: int = Depends(require_parent_token),
+    db: AsyncSession = Depends(get_db),
+) -> ParentChildAttendanceReport:
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    student = await _get_parent_child_or_403(
+        db,
+        parent_id,
+        student_id,
+        with_training_groups=True,
     )
-    return _student_to_parent_child_read(result.scalar_one())
+    sessions, roster_group_ids = await load_student_range_sessions(db, student, range_from, range_to)
+    return build_student_attendance_report(
+        student,
+        sessions,
+        range_from,
+        range_to,
+        roster_group_ids=roster_group_ids,
+    )
 
 
 @router.get("", response_model=list[ParentRead])

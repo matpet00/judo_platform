@@ -116,6 +116,14 @@ export const api = {
       true,
       "parent",
     ),
+  parentChildAttendance: (studentId: number, dateFrom: string, dateTo: string) =>
+    request<import("./types").ParentChildAttendanceReport>(
+      `/parents/me/children/${studentId}/attendance?date_from=${dateFrom}&date_to=${dateTo}`,
+      undefined,
+      false,
+      true,
+      "parent",
+    ),
   registerToClub: (payload: import("./types").ClubRegistrationCreate) =>
     request<import("./types").RegistrationSubmittedRead>("/register", {
       method: "POST",
@@ -255,9 +263,9 @@ export const api = {
       { method: "POST" },
       true,
     ),
-  attendanceReport: (groupId: number, month: string, role: Role = "trainer") =>
+  attendanceReport: (groupId: number, dateFrom: string, dateTo: string, role: Role = "trainer") =>
     request<import("./types").AttendanceMonthlyReport>(
-      `/training-groups/${groupId}/attendance-report?month=${month}`,
+      `/training-groups/${groupId}/attendance-report?date_from=${dateFrom}&date_to=${dateTo}`,
       undefined,
       false,
       true,
@@ -510,9 +518,9 @@ export const api = {
     request<void>(`/events/${eventId}/attachments/${attachmentId}`, { method: "DELETE" }, true, false, role),
 
   // --- Admin ---
-  adminBranchAttendanceReport: (branchId: number, month: string) =>
+  adminBranchAttendanceReport: (branchId: number, dateFrom: string, dateTo: string) =>
     request<import("./types").AttendanceMonthlyReport>(
-      `/admin/attendance-report?branch_id=${branchId}&month=${month}`,
+      `/admin/attendance-report?branch_id=${branchId}&date_from=${dateFrom}&date_to=${dateTo}`,
       undefined,
       false,
       true,
@@ -605,13 +613,17 @@ export const api = {
     request<import("./types").ResendCredentialsRead>(`/admin/parents/${id}/resend-credentials`, {
       method: "POST",
     }, true, false, "admin"),
-  downloadAttendanceCsv: (month: string, branchId?: number) => {
-    const params = new URLSearchParams({ month });
+  downloadAttendanceCsv: (dateFrom: string, dateTo: string, branchId?: number) => {
+    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
     if (branchId) params.set("branch_id", String(branchId));
-    return downloadRequest(`/admin/attendance.csv?${params}`, `dochazka-${month}.csv`, "admin");
+    return downloadRequest(
+      `/admin/attendance.csv?${params}`,
+      `dochazka-${dateFrom}_${dateTo}.csv`,
+      "admin",
+    );
   },
-  adminEventParticipation: (month: string) => {
-    const params = new URLSearchParams({ month });
+  adminEventParticipation: (dateFrom: string, dateTo: string) => {
+    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
     return request<import("./types").AdminEventParticipation[]>(
       `/admin/event-participation?${params}`,
       undefined,
@@ -620,9 +632,13 @@ export const api = {
       "admin",
     );
   },
-  downloadEventParticipationCsv: (month: string) => {
-    const params = new URLSearchParams({ month });
-    return downloadRequest(`/admin/event-participation.csv?${params}`, `ucast-akce-${month}.csv`, "admin");
+  downloadEventParticipationCsv: (dateFrom: string, dateTo: string) => {
+    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+    return downloadRequest(
+      `/admin/event-participation.csv?${params}`,
+      `ucast-akce-${dateFrom}_${dateTo}.csv`,
+      "admin",
+    );
   },
 };
 

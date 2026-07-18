@@ -5,7 +5,11 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.attendance_report import build_group_attendance_report, load_group_sessions
+from app.attendance_report import (
+    build_group_attendance_report,
+    load_group_sessions,
+    resolve_attendance_range,
+)
 from app.database import get_db
 from app.deps import Viewer, get_viewer
 from app.models import (
@@ -718,12 +722,15 @@ async def delete_training_group(
 async def training_group_attendance_report(
     group_id: int,
     db: AsyncSession = Depends(get_db),
-    month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    date_from: date | None = Query(default=None, description="Inclusive start (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="Inclusive end (YYYY-MM-DD)"),
     _trainer_id: int | None = Depends(require_trainer_or_admin),
 ) -> AttendanceMonthlyReport:
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
     group = await _get_group_or_404(db, group_id)
-    sessions = await load_group_sessions(db, group_id, month)
-    return build_group_attendance_report(group, sessions, month)
+    sessions = await load_group_sessions(db, group_id, range_from, range_to)
+    return build_group_attendance_report(group, sessions, range_from, range_to)
 
 
 @router.put("/{group_id}/students", response_model=TrainingGroupDetailRead)

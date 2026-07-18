@@ -11,6 +11,7 @@ import { BoardPage } from "./pages/BoardPage";
 import { TodayPage } from "./pages/TodayPage";
 import { SessionSwipePage } from "./pages/SessionSwipePage";
 import { ParentHomePage } from "./pages/ParentHomePage";
+import { ParentAttendancePage } from "./pages/ParentAttendancePage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
 import { ParentBoardPage } from "./pages/ParentBoardPage";
@@ -104,6 +105,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
               <Route path="/parent" element={<ParentHomePage />} />
+              <Route path="/parent/attendance" element={<ParentAttendancePage />} />
               <Route path="/parent/board" element={<ParentBoardPage />} />
               <Route path="/parent/chat" element={<ParentChatRoute />} />
               <Route path="/parent/events" element={<ParentEventsRoute />} />
