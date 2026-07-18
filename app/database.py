@@ -45,6 +45,7 @@ if settings.database_url.startswith("sqlite"):
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA busy_timeout=5000")
         cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -525,6 +526,26 @@ async def migrate_schema() -> None:
         from app.student_delete import cleanup_students_without_branches
 
         await cleanup_students_without_branches(conn)
+
+        # Orphan reads can block new notification IDs when SQLite FKs were off.
+        await conn.execute(
+            text(
+                "DELETE FROM notification_reads WHERE notification_id NOT IN "
+                "(SELECT id FROM notifications)",
+            ),
+        )
+        await conn.execute(
+            text(
+                "DELETE FROM notification_targets WHERE notification_id NOT IN "
+                "(SELECT id FROM notifications)",
+            ),
+        )
+        await conn.execute(
+            text(
+                "DELETE FROM notification_comments WHERE notification_id NOT IN "
+                "(SELECT id FROM notifications)",
+            ),
+        )
 
 
 async def init_db() -> None:

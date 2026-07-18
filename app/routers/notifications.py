@@ -130,9 +130,15 @@ def _touch_read_receipt(notification: Notification, viewer: Viewer, now: datetim
     receipt = next((row for row in notification.reads if _receipt_matches_viewer(row, viewer)), None)
     if receipt is not None:
         receipt.last_read_at = now
-    elif viewer.kind == "trainer":
+        return
+    # Avoid duplicate pending rows in the same unit of work (unique on viewer).
+    if viewer.kind == "trainer":
+        if any(row.trainer_id == viewer.trainer_id for row in notification.reads):
+            return
         notification.reads.append(NotificationReadReceipt(trainer_id=viewer.trainer_id, last_read_at=now))
     else:
+        if any(row.parent_id == viewer.parent_id for row in notification.reads):
+            return
         notification.reads.append(NotificationReadReceipt(parent_id=viewer.parent_id, last_read_at=now))
 
 

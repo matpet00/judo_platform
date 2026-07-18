@@ -22,7 +22,7 @@ function formatWhen(value: string): string {
 export function NotificationBell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { trainer, isAuthenticated: trainerAuth } = useTrainer();
+  const { trainer, isAuthenticated: trainerAuth, pinChangeRequired } = useTrainer();
   const { parent, isAuthenticated: parentAuth } = useParent();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -34,7 +34,7 @@ export function NotificationBell() {
   const notificationsQuery = useQuery({
     queryKey,
     queryFn: () => api.notifications(role ?? "trainer"),
-    enabled: role != null && (role === "parent" ? parent != null : trainer != null),
+    enabled: role != null && !pinChangeRequired && (role === "parent" ? parent != null : trainer != null),
     refetchInterval: 5_000,
     refetchOnWindowFocus: true,
   });
@@ -68,7 +68,7 @@ export function NotificationBell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  if (role == null) return null;
+  if (role == null || (role === "trainer" && pinChangeRequired)) return null;
 
   const items = [...(notificationsQuery.data ?? [])].sort(
     (a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime(),

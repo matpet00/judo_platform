@@ -28,12 +28,6 @@ export function TrainerChangePinForm({ onClose, onSuccess, required = false }: T
 
   const currentPinOk = (value: string) => value.length >= 4 && value.length <= MAX_PIN_LENGTH;
   const newPinOk = (value: string) => value.length >= MIN_NEW_PIN_LENGTH && value.length <= MAX_PIN_LENGTH;
-  const canSubmit =
-    currentPinOk(currentPin) &&
-    newPinOk(newPin) &&
-    newPinOk(confirmPin) &&
-    newPin === confirmPin &&
-    newPin !== currentPin;
 
   useEffect(() => {
     if (countdown === null) return;
@@ -47,7 +41,23 @@ export function TrainerChangePinForm({ onClose, onSuccess, required = false }: T
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (pending) return;
+    if (!currentPinOk(currentPin)) {
+      setError("Zadej starý PIN (4–8 číslic).");
+      return;
+    }
+    if (!newPinOk(newPin)) {
+      setError(`Nový PIN musí mít ${MIN_NEW_PIN_LENGTH}–${MAX_PIN_LENGTH} číslic.`);
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setError("Potvrzení se neshoduje s novým PIN.");
+      return;
+    }
+    if (newPin === currentPin) {
+      setError("Nový PIN musí být jiný než starý.");
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -165,7 +175,7 @@ export function TrainerChangePinForm({ onClose, onSuccess, required = false }: T
             Odhlásit
           </button>
         )}
-        <button type="submit" className="btn btn--primary" disabled={pending || !canSubmit}>
+        <button type="submit" className="btn btn--primary" disabled={pending}>
           {pending ? "Ukládám…" : "Změnit PIN"}
         </button>
       </div>

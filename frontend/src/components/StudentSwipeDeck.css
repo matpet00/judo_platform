@@ -455,6 +455,12 @@
   color: var(--muted);
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .toast {
   position: fixed;
   bottom: calc(24px + var(--safe-bottom));
