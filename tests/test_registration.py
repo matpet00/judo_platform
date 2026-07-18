@@ -47,11 +47,64 @@ def test_name_part_strips_diacritics() -> None:
         (date(2013, 8, 20), 2026, AgeGroup.U14),
         (date(2011, 2, 10), 2026, AgeGroup.U16),
         (date(2009, 7, 4), 2026, AgeGroup.U18),
+        (date(2008, 1, 1), 2026, AgeGroup.U21),
+        (date(2006, 6, 15), 2026, AgeGroup.U21),
+        (date(2005, 12, 31), 2026, AgeGroup.Over21),
+        (date(1990, 3, 1), 2026, AgeGroup.Over21),
     ],
 )
 def test_compute_age_group_czech_calendar_year(birth: date, year: int, expected: AgeGroup) -> None:
     assert age_at_year_end(birth, year) == year - birth.year
     assert compute_age_group(birth, year) == expected
+
+
+@pytest.mark.asyncio
+async def test_register_accepts_adult_u21_and_over21(client):
+    branch_id = (await client.get("/branches")).json()[0]["id"]
+    year = date.today().year
+
+    u21 = await client.post(
+        "/register",
+        json=_parent(
+            email="adult.u21@example.com",
+            parent_first_name="Adam",
+            parent_last_name="Dospělý",
+            children=[
+                _child(
+                    branch_id,
+                    first_name="Adam",
+                    last_name="Dospělý",
+                    birth_date=f"{year - 19}-05-10",
+                    birth_number="000510/9011",
+                )
+            ],
+        ),
+    )
+    assert u21.status_code == 200, u21.text
+
+    over21 = await client.post(
+        "/register",
+        json=_parent(
+            email="adult.over21@example.com",
+            parent_first_name="Eva",
+            parent_last_name="Senior",
+            children=[
+                _child(
+                    branch_id,
+                    first_name="Eva",
+                    last_name="Senior",
+                    birth_date=f"{year - 25}-03-20",
+                    birth_number="010320/9022",
+                )
+            ],
+        ),
+    )
+    assert over21.status_code == 200, over21.text
+
+    preview_u21 = await client.get("/age-group", params={"birth_date": f"{year - 19}-05-10"})
+    assert preview_u21.json()["age_group"] == "U21"
+    preview_over = await client.get("/age-group", params={"birth_date": f"{year - 25}-03-20"})
+    assert preview_over.json()["age_group"] == "Over21"
 
 
 def test_compute_age_group_uses_current_year_by_default() -> None:

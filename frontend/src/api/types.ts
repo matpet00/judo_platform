@@ -1,4 +1,4 @@
-export type AgeGroup = "U8" | "U10" | "U12" | "U14" | "U16" | "U18";
+export type AgeGroup = "U8" | "U10" | "U12" | "U14" | "U16" | "U18" | "U21" | "Over21";
 export type AttendanceStatus = "present" | "absent" | "excused";
 export type NotificationAudience = "trainer" | "parent";
 export type NotificationDurationUnit = "seconds" | "minutes" | "hours" | "days" | "weeks" | "months";

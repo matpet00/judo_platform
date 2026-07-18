@@ -1,10 +1,9 @@
 import { useState } from "react";
 import type { AgeGroup, BranchBrief, NotificationTargetCreate } from "../api/types";
+import { AGE_GROUPS, ageGroupLabel } from "../lib/ageGroup";
 
 type ScopeValue = number | "all";
 type RecipientValue = "everyone" | "trainer" | "parent";
-
-const AGE_GROUPS: AgeGroup[] = ["U8", "U10", "U12", "U14", "U16", "U18"];
 
 export function targetKey(target: NotificationTargetCreate) {
   return `${target.audience}:${target.branch_id ?? "all"}:${target.age_group ?? "all"}`;
@@ -12,7 +11,7 @@ export function targetKey(target: NotificationTargetCreate) {
 
 export function recipientLabel(target: NotificationTargetCreate) {
   if (target.audience === "trainer") return "Trenéři";
-  return target.age_group ? `Rodiče (${target.age_group})` : "Rodiče";
+  return target.age_group ? `Rodiče (${ageGroupLabel(target.age_group)})` : "Rodiče";
 }
 
 type Props = {
@@ -101,7 +100,7 @@ export function RecipientTargets({ branches, targets, onChange }: Props) {
                 className={categories.includes(age) ? "is-active" : ""}
                 onClick={() => toggleCategory(age)}
               >
-                {age}
+                {ageGroupLabel(age)}
               </button>
             ))}
           </div>

@@ -14,7 +14,7 @@ import { MonthlyAttendanceReport } from "../components/MonthlyAttendanceReport";
 import { AttendancePeriodPicker } from "../components/AttendancePeriodPicker";
 import { PaySourceFilterCheckboxes } from "../components/PaySourceFilterCheckboxes";
 import { useAdmin } from "../context/AdminContext";
-import { computeAgeGroup } from "../lib/ageGroup";
+import { AGE_GROUPS, ageGroupLabel, computeAgeGroup } from "../lib/ageGroup";
 import {
   defaultPeriodState,
   formatPeriodLabel,
@@ -72,8 +72,6 @@ const RSVP_LABELS: Record<RsvpStatus, string> = {
   no: "Ne",
   maybe: "Možná",
 };
-
-const AGE_GROUPS: AgeGroup[] = ["U8", "U10", "U12", "U14", "U16", "U18"];
 
 export function AdminPage() {
   const navigate = useNavigate();
@@ -812,7 +810,7 @@ function StudentForm({
           >
             {AGE_GROUPS.map((g) => (
               <option key={g} value={g}>
-                {g}
+                {ageGroupLabel(g)}
               </option>
             ))}
           </select>

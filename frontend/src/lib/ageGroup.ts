@@ -1,5 +1,7 @@
 import type { AgeGroup } from "../api/types";
 
+export const AGE_GROUPS: AgeGroup[] = ["U8", "U10", "U12", "U14", "U16", "U18", "U21", "Over21"];
+
 const AGE_LIMITS: { limit: number; group: AgeGroup }[] = [
   { limit: 8, group: "U8" },
   { limit: 10, group: "U10" },
@@ -7,7 +9,16 @@ const AGE_LIMITS: { limit: number; group: AgeGroup }[] = [
   { limit: 14, group: "U14" },
   { limit: 16, group: "U16" },
   { limit: 18, group: "U18" },
+  { limit: 21, group: "U21" },
 ];
+
+export function ageGroupLabel(group: AgeGroup): string {
+  return group === "Over21" ? "Over 21" : group;
+}
+
+export function isAdultAgeGroup(group: AgeGroup): boolean {
+  return group === "U21" || group === "Over21";
+}
 
 export function ageAtYearEnd(birthDateIso: string, referenceYear?: number): number {
   const birth = new Date(`${birthDateIso}T12:00:00`);
@@ -27,7 +38,7 @@ export function computeAgeGroup(birthDateIso: string, referenceYear?: number): A
   for (const { limit, group } of AGE_LIMITS) {
     if (age < limit) return group;
   }
-  throw new Error(`Dítě je starší než U18 (věk k 31. 12. ${year}: ${age} let).`);
+  return "Over21";
 }
 
 export function currentReferenceYear(): number {

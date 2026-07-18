@@ -91,7 +91,7 @@ def student_last_name(i: int) -> str:
     if FIRST_NAMES[i] in FEMALE_FIRST_NAMES:
         return FEMININE_LAST_NAMES[base]
     return base
-AGE_GROUPS = ("U8", "U10", "U12", "U14", "U16", "U18")
+AGE_GROUPS = ("U8", "U10", "U12", "U14", "U16", "U18", "U21", "Over21")
 PARENT_FIRST = (
     "Marie", "Petr", "Jana", "Tomáš", "Eva", "Martin", "Lenka", "Pavel", "Hana", "Ondřej",
     "Kateřina", "Michal", "Veronika", "David", "Lucie", "Filip", "Markéta", "Jakub", "Barbora", "Lukáš",

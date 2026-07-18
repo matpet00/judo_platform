@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { RegistrationStatusRead } from "../api/types";
-import { computeAgeGroup, ageGroupHint } from "../lib/ageGroup";
+import { computeAgeGroup, ageGroupHint, ageGroupLabel, isAdultAgeGroup } from "../lib/ageGroup";
+import type { AgeGroup } from "../api/types";
 import {
   BIRTH_DATE_HINT,
   BIRTH_DATE_PLACEHOLDER,
@@ -137,6 +138,7 @@ function ChildFields({
   onChange,
   onRemove,
   referenceYear,
+  isAdult,
 }: {
   child: ChildForm;
   index: number;
@@ -145,6 +147,7 @@ function ChildFields({
   onChange: (next: ChildForm) => void;
   onRemove: () => void;
   referenceYear: number;
+  isAdult: boolean;
 }) {
   const dateErr = child.birth_date ? birthDateError(child.birth_date) : null;
   const birthNumberErr = child.birth_number ? birthNumberError(child.birth_number) : null;
@@ -173,13 +176,19 @@ function ChildFields({
   return (
     <fieldset className="register-child">
       <legend className="register-child__legend">
-        Dítě {index + 1}
+        {isAdult ? `Sportovec ${index + 1}` : `Dítě ${index + 1}`}
         {canRemove && (
           <button type="button" className="btn btn--ghost register-child__remove" onClick={onRemove}>
             Odebrat
           </button>
         )}
       </legend>
+
+      {isAdult && (
+        <p className="register-hint register-hint--info">
+          Plnoletý sportovec: zákonný zástupce jsi ty sám/sama — jméno můžeš mít stejné jako u účtu výše.
+        </p>
+      )}
 
       <div className="register-child__grid">
         <label className="notification-field">
@@ -248,7 +257,7 @@ function ChildFields({
 
       {agePreview && (
         <p className="register-age-preview">
-          Věková kategorie: <strong>{agePreview}</strong>
+          Věková kategorie: <strong>{ageGroupLabel(agePreview)}</strong>
         </p>
       )}
       {ageError && <p className="error-box register-age-error">{ageError}</p>}
@@ -270,6 +279,15 @@ function ChildFields({
       </label>
     </fieldset>
   );
+}
+
+function childAgeGroup(child: ChildForm, referenceYear: number): AgeGroup | null {
+  if (!child.birth_date || birthDateError(child.birth_date)) return null;
+  try {
+    return computeAgeGroup(birthDateToIso(child.birth_date), referenceYear);
+  } catch {
+    return null;
+  }
 }
 
 export function RegisterPage() {
@@ -321,8 +339,57 @@ export function RegisterPage() {
       secondGuardian.email.trim().toLowerCase() !== email.trim().toLowerCase());
 
   const updateChild = (key: string, next: ChildForm) => {
-    setChildren((list) => list.map((c) => (c.key === key ? next : c)));
+    setChildren((list) =>
+      list.map((c) => {
+        if (c.key !== key) return c;
+        const group = childAgeGroup(next, referenceYear);
+        if (group && isAdultAgeGroup(group) && !next.first_name.trim() && !next.last_name.trim()) {
+          return {
+            ...next,
+            first_name: parentFirst.trim(),
+            last_name: parentLast.trim(),
+          };
+        }
+        return next;
+      }),
+    );
   };
+
+  const childGroups = useMemo(
+    () => children.map((c) => childAgeGroup(c, referenceYear)),
+    [children, referenceYear],
+  );
+  const hasAdultAthlete = childGroups.some((g) => g != null && isAdultAgeGroup(g));
+  const allAdultAthletes =
+    childGroups.length > 0 && childGroups.every((g) => g != null && isAdultAgeGroup(g));
+
+  useEffect(() => {
+    if (!allAdultAthletes) return;
+    setShowSecondGuardian(false);
+    setSecondGuardian(emptyGuardian());
+  }, [allAdultAthletes]);
+
+  const athletesSectionTitle = hasAdultAthlete ? "Sportovci" : "Děti";
+  const pageTitle = allAdultAthletes
+    ? children.length > 1
+      ? "Registrace sportovců"
+      : "Registrace sportovce"
+    : children.length > 1
+      ? "Registrace dětí"
+      : "Registrace dítěte";
+  const guardianTitle = allAdultAthletes ? "Účet (zákonný zástupce = ty)" : "1. zákonný zástupce";
+  const consentText = allAdultAthletes
+    ? "Potvrzuji, že jsem plnoletý/á a registruji sebe (zákonný zástupce = já), že údaje jsou pravdivé, a že jsem se seznámil(a) se"
+    : hasAdultAthlete
+      ? "Potvrzuji, že jsem zákonný zástupce uvedených sportovců (u plnoletých i sebe), že údaje jsou pravdivé, a že jsem se seznámil(a) se"
+      : "Potvrzuji, že jsem zákonný zástupce uvedeného dítěte / dětí, že údaje jsou pravdivé, a že jsem se seznámil(a) se";
+  const submitLabel = allAdultAthletes
+    ? children.length > 1
+      ? "Registrovat sportovce"
+      : "Registrovat sebe"
+    : children.length > 1
+      ? "Registrovat děti"
+      : "Registrovat dítě";
 
   const addChild = () => {
     if (children.length >= 5) return;
@@ -437,7 +504,7 @@ export function RegisterPage() {
       <div className="auth-card register-card">
         <header className="trainer-picker__header">
           <ClubLogo variant="header" />
-          <h1 className="trainer-picker__title">Registrace dítěte</h1>
+          <h1 className="trainer-picker__title">{pageTitle}</h1>
           <p className="trainer-picker__sub">{ageGroupHint()}</p>
         </header>
 
@@ -503,7 +570,7 @@ export function RegisterPage() {
             <>
           <section className="register-section">
             <GuardianFields
-              title="1. zákonný zástupce"
+              title={guardianTitle}
               firstName={parentFirst}
               lastName={parentLast}
               email={email}
@@ -516,7 +583,7 @@ export function RegisterPage() {
               emailHint={primaryEmailHint}
             />
 
-            {!showSecondGuardian ? (
+            {!allAdultAthletes && !showSecondGuardian ? (
               <button
                 type="button"
                 className="btn register-add-action register-add-action--block"
@@ -524,7 +591,7 @@ export function RegisterPage() {
               >
                 + Druhý zákonný zástupce
               </button>
-            ) : (
+            ) : !allAdultAthletes && showSecondGuardian ? (
               <>
                 <GuardianFields
                   title="2. zákonný zástupce"
@@ -552,34 +619,38 @@ export function RegisterPage() {
                   Odebrat druhého zástupce
                 </button>
               </>
-            )}
+            ) : null}
           </section>
 
           <section className="register-section">
             <div className="register-section__head">
-              <h2 className="register-section__title">Děti</h2>
+              <h2 className="register-section__title">{athletesSectionTitle}</h2>
               <button
                 type="button"
                 className="btn register-add-action"
                 onClick={addChild}
                 disabled={children.length >= 5}
               >
-                + Další dítě
+                {hasAdultAthlete ? "+ Další sportovec" : "+ Další dítě"}
               </button>
             </div>
 
-            {children.map((child, index) => (
-              <ChildFields
-                key={child.key}
-                child={child}
-                index={index}
-                branches={branches}
-                canRemove={children.length > 1}
-                referenceYear={referenceYear}
-                onChange={(next) => updateChild(child.key, next)}
-                onRemove={() => removeChild(child.key)}
-              />
-            ))}
+            {children.map((child, index) => {
+              const group = childGroups[index];
+              return (
+                <ChildFields
+                  key={child.key}
+                  child={child}
+                  index={index}
+                  branches={branches}
+                  canRemove={children.length > 1}
+                  referenceYear={referenceYear}
+                  isAdult={group != null && isAdultAgeGroup(group)}
+                  onChange={(next) => updateChild(child.key, next)}
+                  onRemove={() => removeChild(child.key)}
+                />
+              );
+            })}
           </section>
 
           {error && <p className="error-box trainer-pin-gate__error">{error}</p>}
@@ -592,8 +663,7 @@ export function RegisterPage() {
               required
             />
             <span>
-              Potvrzuji, že jsem zákonný zástupce uvedeného dítěte / dětí, že údaje jsou pravdivé, a že
-              jsem se seznámil(a) se{" "}
+              {consentText}{" "}
               <Link to="/privacy" className="register-inline-link" target="_blank" rel="noreferrer">
                 Zásadami ochrany osobních údajů
               </Link>{" "}
@@ -606,7 +676,7 @@ export function RegisterPage() {
               Zpět
             </button>
             <button type="submit" className="btn btn--primary" disabled={pending || !canSubmit}>
-              {pending ? "Odesílám…" : children.length > 1 ? "Registrovat děti" : "Registrovat dítě"}
+              {pending ? "Odesílám…" : submitLabel}
             </button>
           </div>
             </>

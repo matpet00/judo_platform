@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { AgeGroup, Notification, NotificationDurationUnit, NotificationTargetCreate } from "../api/types";
 import { TrainerSwitcher } from "../components/TrainerSwitcher";
 import { trainerNotificationsKey } from "../api/queryKeys";
+import { AGE_GROUPS, ageGroupLabel } from "../lib/ageGroup";
 import { isBoardNotification } from "../lib/notificationNavigation";
 import { useTrainer } from "../context/TrainerContext";
 
@@ -29,8 +30,6 @@ const stateBadge: Record<NotificationState, { label: string; className: string }
 type ScopeValue = number | "all";
 type RecipientValue = "everyone" | "trainer" | "parent";
 
-const AGE_GROUPS: AgeGroup[] = ["U8", "U10", "U12", "U14", "U16", "U18"];
-
 function formatDate(value: string) {
   return new Date(value).toLocaleString("cs-CZ", {
     day: "numeric",
@@ -46,7 +45,7 @@ function targetKey(target: NotificationTargetCreate) {
 
 function recipientLabel(target: NotificationTargetCreate) {
   if (target.audience === "trainer") return "Trenéři";
-  return target.age_group ? `Rodiče (${target.age_group})` : "Rodiče";
+  return target.age_group ? `Rodiče (${ageGroupLabel(target.age_group)})` : "Rodiče";
 }
 
 function toDatetimeLocalValue(date: Date) {
@@ -286,7 +285,7 @@ export function BoardPage() {
                         className={categories.includes(age) ? "is-active" : ""}
                         onClick={() => toggleCategory(age)}
                       >
-                        {age}
+                        {ageGroupLabel(age)}
                       </button>
                     ))}
                   </div>

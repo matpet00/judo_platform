@@ -26,6 +26,8 @@ class AgeGroup(str, enum.Enum):
     U14 = "U14"
     U16 = "U16"
     U18 = "U18"
+    U21 = "U21"
+    Over21 = "Over21"
 
 
 class AttendanceStatus(str, enum.Enum):

@@ -99,7 +99,7 @@ LAST_NAMES = (
     "Sedláček",
 )
 
-AGE_GROUPS = ("U8", "U10", "U12", "U14", "U16", "U18")
+AGE_GROUPS = ("U8", "U10", "U12", "U14", "U16", "U18", "U21", "Over21")
 
 # Jména rodičů (střídání matka/otec)
 PARENT_FIRST = (
