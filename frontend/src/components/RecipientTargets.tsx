@@ -107,7 +107,7 @@ export function RecipientTargets({ branches, targets, onChange }: Props) {
           </div>
         </div>
       )}
-      <button type="button" className="btn btn--ghost notification-compose__add" onClick={addTarget}>
+      <button type="button" className="btn btn--soft notification-compose__add" onClick={addTarget}>
         Přidat příjemce
       </button>
       {targets.length > 0 && (

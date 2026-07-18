@@ -568,6 +568,19 @@ textarea {
   margin-top: 12px;
 }
 
+.btn--soft {
+  background: rgba(212, 175, 55, 0.16);
+  border: 1px solid var(--border-strong);
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.btn--soft:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.28);
+  border-color: var(--gold);
+  color: var(--cream);
+}
+
 .notification-targeting__row label {
   display: grid;
   gap: 6px;

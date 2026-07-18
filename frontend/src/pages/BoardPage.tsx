@@ -292,7 +292,7 @@ export function BoardPage() {
                   </div>
                 </div>
               )}
-              <button type="button" className="btn btn--ghost notification-compose__add" onClick={addTarget}>
+              <button type="button" className="btn btn--soft notification-compose__add" onClick={addTarget}>
                 Přidat příjemce k odeslání
               </button>
               {targets.length > 0 && (
