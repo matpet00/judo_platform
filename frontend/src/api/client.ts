@@ -640,6 +640,75 @@ export const api = {
       "admin",
     );
   },
+  trainerPayAttendance: (
+    dateFrom: string,
+    dateTo: string,
+    opts?: { includeTrainings?: boolean; eventTypes?: string[] },
+  ) => {
+    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+    params.set("include_trainings", opts?.includeTrainings === false ? "false" : "true");
+    for (const t of opts?.eventTypes ?? []) params.append("event_types", t);
+    return request<import("./types").TrainerPayAttendanceReport>(
+      `/trainers/me/pay-attendance?${params}`,
+      undefined,
+      false,
+      true,
+      "trainer",
+    );
+  },
+  downloadTrainerPayAttendanceCsv: (
+    dateFrom: string,
+    dateTo: string,
+    opts?: { includeTrainings?: boolean; eventTypes?: string[]; includeAllStatuses?: boolean },
+  ) => {
+    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+    params.set("include_trainings", opts?.includeTrainings === false ? "false" : "true");
+    for (const t of opts?.eventTypes ?? []) params.append("event_types", t);
+    if (opts?.includeAllStatuses) params.set("include_all_statuses", "true");
+    return downloadRequest(
+      `/trainers/me/pay-attendance.csv?${params}`,
+      `dochazka-trener-${dateFrom}_${dateTo}.csv`,
+      "trainer",
+    );
+  },
+  adminTrainerPayAttendance: (
+    dateFrom: string,
+    dateTo: string,
+    opts?: { trainerId?: number; includeTrainings?: boolean; eventTypes?: string[] },
+  ) => {
+    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+    if (opts?.trainerId) params.set("trainer_id", String(opts.trainerId));
+    params.set("include_trainings", opts?.includeTrainings === false ? "false" : "true");
+    for (const t of opts?.eventTypes ?? []) params.append("event_types", t);
+    return request<import("./types").AdminTrainerPayAttendanceReport>(
+      `/admin/trainer-pay-attendance?${params}`,
+      undefined,
+      false,
+      true,
+      "admin",
+    );
+  },
+  downloadAdminTrainerPayAttendanceCsv: (
+    dateFrom: string,
+    dateTo: string,
+    opts?: {
+      trainerId?: number;
+      includeTrainings?: boolean;
+      eventTypes?: string[];
+      includeAllStatuses?: boolean;
+    },
+  ) => {
+    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+    if (opts?.trainerId) params.set("trainer_id", String(opts.trainerId));
+    params.set("include_trainings", opts?.includeTrainings === false ? "false" : "true");
+    for (const t of opts?.eventTypes ?? []) params.append("event_types", t);
+    if (opts?.includeAllStatuses) params.set("include_all_statuses", "true");
+    return downloadRequest(
+      `/admin/trainer-pay-attendance.csv?${params}`,
+      `dochazka-treneru-${dateFrom}_${dateTo}.csv`,
+      "admin",
+    );
+  },
 };
 
 function toSummary(record: {

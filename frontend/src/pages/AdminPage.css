@@ -424,9 +424,19 @@
   cursor: pointer;
 }
 
-.admin-check input {
-  width: auto;
-  min-height: auto;
+.admin-check input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  min-width: 1.05rem;
+  min-height: 1.05rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  accent-color: var(--gold, #c9a227);
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 .admin-check--on {

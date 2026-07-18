@@ -18,6 +18,7 @@ import { ParentBoardPage } from "./pages/ParentBoardPage";
 import { ChatPage } from "./pages/ChatPage";
 import { EventsPage } from "./pages/EventsPage";
 import { TrainerStudentsPage } from "./pages/TrainerStudentsPage";
+import { TrainerPayAttendancePage } from "./pages/TrainerPayAttendancePage";
 import { TrainerPinSecurityGate } from "./components/TrainerPinSecurityGate";
 import { NotificationBell } from "./components/NotificationBell";
 import { AppFooter } from "./components/AppFooter";
@@ -102,6 +103,14 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/chat" element={<TrainerChatRoute />} />
               <Route path="/events" element={<TrainerEventsRoute />} />
               <Route path="/students" element={<TrainerStudentsRoute />} />
+              <Route
+                path="/trainer/pay-attendance"
+                element={
+                  <TrainerPinSecurityGate>
+                    <TrainerPayAttendancePage />
+                  </TrainerPinSecurityGate>
+                }
+              />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
               <Route path="/parent" element={<ParentHomePage />} />

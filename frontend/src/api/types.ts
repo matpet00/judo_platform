@@ -203,6 +203,51 @@ export interface ParentChildAttendanceReport {
   entries: ParentChildAttendanceEntry[];
 }
 
+export interface TrainerPayAttendanceEntry {
+  source: "training" | "event";
+  session_id: number | null;
+  event_id: number | null;
+  event_type: string | null;
+  trainer_id: number;
+  trainer_name: string;
+  starts_at: string | null;
+  session_date: string | null;
+  start_time: string | null;
+  branch_name: string;
+  group_name: string;
+  status: AttendanceStatus;
+}
+
+export interface TrainerPayAttendanceReport {
+  trainer_id: number;
+  trainer_name: string;
+  month: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  present: number;
+  absent: number;
+  excused: number;
+  payable_sessions: number;
+  entries: TrainerPayAttendanceEntry[];
+}
+
+export interface TrainerPayAttendanceSummaryRow {
+  trainer_id: number;
+  trainer_name: string;
+  present: number;
+  absent: number;
+  excused: number;
+  payable_sessions: number;
+}
+
+export interface AdminTrainerPayAttendanceReport {
+  month: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  trainers: TrainerPayAttendanceSummaryRow[];
+  entries: TrainerPayAttendanceEntry[];
+}
+
 export interface StudentGuardian {
   id: number;
   first_name: string;

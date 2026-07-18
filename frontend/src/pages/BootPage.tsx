@@ -132,6 +132,10 @@ export function BootPage() {
             <span className="trainer-card__name">Docházka</span>
             <span className="trainer-card__branch">Tréninky a měsíční přehled</span>
           </button>
+          <button type="button" className="trainer-card" onClick={() => navigate("/trainer/pay-attendance")}>
+            <span className="trainer-card__name">Moje docházka</span>
+            <span className="trainer-card__branch">K proplacení · export CSV</span>
+          </button>
           <button type="button" className="trainer-card" onClick={() => navigate("/students")}>
             <span className="trainer-card__name">Děti</span>
             <span className="trainer-card__branch">Informace o dětech v mé pobočce</span>

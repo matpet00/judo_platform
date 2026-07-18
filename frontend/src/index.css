@@ -3082,6 +3082,86 @@ textarea {
   cursor: not-allowed;
 }
 
+.pay-source-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface, transparent);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.pay-source-filter__title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pay-source-filter .admin-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.pay-source-filter__types {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.pay-source-filter .admin-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pay-source-filter .admin-check input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  min-width: 1.05rem;
+  min-height: 1.05rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  accent-color: var(--gold, #c9a227);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.attendance-report--scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.attendance-report__table th:not(:first-child),
+.attendance-report__table td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .czech-datepicker__cell--empty {
   pointer-events: none;
 }

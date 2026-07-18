@@ -991,6 +991,51 @@ class ParentChildAttendanceReport(BaseModel):
     entries: list[ParentChildAttendanceEntry] = Field(default_factory=list)
 
 
+class TrainerPayAttendanceEntry(BaseModel):
+    source: Literal["training", "event"] = "training"
+    session_id: int | None = None
+    event_id: int | None = None
+    event_type: str | None = None
+    trainer_id: int
+    trainer_name: str
+    starts_at: datetime | None = None
+    session_date: date | None = None
+    start_time: time | None = None
+    branch_name: str = ""
+    group_name: str = ""
+    status: AttendanceStatus
+
+
+class TrainerPayAttendanceReport(BaseModel):
+    trainer_id: int
+    trainer_name: str
+    month: str = ""
+    date_from: date | None = None
+    date_to: date | None = None
+    present: int = 0
+    absent: int = 0
+    excused: int = 0
+    payable_sessions: int = 0
+    entries: list[TrainerPayAttendanceEntry] = Field(default_factory=list)
+
+
+class TrainerPayAttendanceSummaryRow(BaseModel):
+    trainer_id: int
+    trainer_name: str
+    present: int = 0
+    absent: int = 0
+    excused: int = 0
+    payable_sessions: int = 0
+
+
+class AdminTrainerPayAttendanceReport(BaseModel):
+    month: str = ""
+    date_from: date | None = None
+    date_to: date | None = None
+    trainers: list[TrainerPayAttendanceSummaryRow] = Field(default_factory=list)
+    entries: list[TrainerPayAttendanceEntry] = Field(default_factory=list)
+
+
 class NotificationTargetCreate(BaseModel):
     audience: NotificationAudience
     branch_id: int | None = Field(default=None, ge=1, description="Konkrétní pobočka; None = všechny pobočky.")

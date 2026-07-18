@@ -1,8 +1,12 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.attendance_report import resolve_attendance_range
 from app.database import get_db
 from app.models import Branch, Trainer
 from app.schemas import (
@@ -10,6 +14,7 @@ from app.schemas import (
     TrainerAuthToken,
     TrainerCreate,
     TrainerPatch,
+    TrainerPayAttendanceReport,
     TrainerPinChange,
     TrainerPinVerify,
     TrainerRead,
@@ -27,6 +32,15 @@ from app.security import (
     require_admin,
     require_trainer_token,
     verify_pin,
+)
+from app.trainer_pay_report import (
+    build_trainer_pay_report,
+    collect_pay_entries,
+    filter_entries_for_export,
+    load_trainer_event_rsvps,
+    load_trainer_pay_records,
+    parse_event_types,
+    write_trainer_pay_csv,
 )
 from app.trainer_students import list_trainer_students
 
@@ -140,6 +154,69 @@ async def trainer_students(
     db: AsyncSession = Depends(get_db),
 ) -> list[TrainerStudentRead]:
     return await list_trainer_students(db, trainer_id, branch_id)
+
+
+@router.get("/me/pay-attendance", response_model=TrainerPayAttendanceReport)
+async def trainer_pay_attendance(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    include_trainings: bool = Query(default=True),
+    event_types: list[str] | None = Query(default=None),
+    trainer_id: int = Depends(require_trainer_token),
+    db: AsyncSession = Depends(get_db),
+) -> TrainerPayAttendanceReport:
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    trainer = await db.get(Trainer, trainer_id)
+    if trainer is None:
+        raise HTTPException(status_code=404, detail="Trainer not found.")
+    types = parse_event_types(event_types)
+    training_records = (
+        await load_trainer_pay_records(db, range_from, range_to, trainer_id=trainer_id)
+        if include_trainings
+        else []
+    )
+    event_rsvps = await load_trainer_event_rsvps(
+        db, range_from, range_to, trainer_id=trainer_id, event_types=types,
+    )
+    entries = collect_pay_entries(training_records, event_rsvps, include_trainings=include_trainings)
+    return build_trainer_pay_report(trainer, entries, range_from, range_to)
+
+
+@router.get("/me/pay-attendance.csv")
+async def trainer_pay_attendance_csv(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    include_trainings: bool = Query(default=True),
+    event_types: list[str] | None = Query(default=None),
+    include_all_statuses: bool = Query(default=False),
+    trainer_id: int = Depends(require_trainer_token),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    trainer = await db.get(Trainer, trainer_id)
+    if trainer is None:
+        raise HTTPException(status_code=404, detail="Trainer not found.")
+    types = parse_event_types(event_types)
+    training_records = (
+        await load_trainer_pay_records(db, range_from, range_to, trainer_id=trainer_id)
+        if include_trainings
+        else []
+    )
+    event_rsvps = await load_trainer_event_rsvps(
+        db, range_from, range_to, trainer_id=trainer_id, event_types=types,
+    )
+    entries = collect_pay_entries(training_records, event_rsvps, include_trainings=include_trainings)
+    report = build_trainer_pay_report(trainer, entries, range_from, range_to)
+    export_entries = filter_entries_for_export(report.entries, include_all_statuses=include_all_statuses)
+    content = write_trainer_pay_csv(export_entries, include_trainer_name=False)
+    filename = f"dochazka-trener-{trainer_id}-{range_from.isoformat()}_{range_to.isoformat()}.csv"
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.patch("/{trainer_id}", response_model=TrainerRead)

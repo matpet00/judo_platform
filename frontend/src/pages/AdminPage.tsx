@@ -12,6 +12,7 @@ import {
 } from "../components/AdminCharts";
 import { MonthlyAttendanceReport } from "../components/MonthlyAttendanceReport";
 import { AttendancePeriodPicker } from "../components/AttendancePeriodPicker";
+import { PaySourceFilterCheckboxes } from "../components/PaySourceFilterCheckboxes";
 import { useAdmin } from "../context/AdminContext";
 import { computeAgeGroup } from "../lib/ageGroup";
 import {
@@ -20,6 +21,7 @@ import {
   resolvePeriodRange,
 } from "../lib/attendancePeriod";
 import type { PeriodState } from "../lib/attendancePeriod";
+import { defaultPaySourceFilter } from "../lib/paySourceFilter";
 import {
   BIRTH_NUMBER_HINT,
   BIRTH_NUMBER_PLACEHOLDER,
@@ -125,7 +127,7 @@ export function AdminPage() {
       {tab === "parents" && <ParentsTab />}
       {tab === "registrations" && <RegistrationsTab />}
       {tab === "branches" && <BranchesTab />}
-      {tab === "attendance" && <MonthlyAttendanceReport role="admin" />}
+      {tab === "attendance" && <AttendanceTab />}
       {tab === "events" && <EventsTab />}
       {tab === "export" && <ExportTab />}
     </div>
@@ -1566,6 +1568,135 @@ function EventParticipantsTable({ event }: { event: AdminEventParticipation }) {
   );
 }
 
+// --- Attendance ---
+
+function AttendanceTab() {
+  const [scope, setScope] = useState<"children" | "trainers">("children");
+
+  return (
+    <div className="admin-attendance">
+      <div className="admin-form" style={{ maxWidth: 420, marginBottom: 16 }}>
+        <div className="admin-field">
+          <label>Přehled</label>
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value as "children" | "trainers")}
+          >
+            <option value="children">Docházka dětí</option>
+            <option value="trainers">Docházka trenérů (k proplacení)</option>
+          </select>
+        </div>
+      </div>
+      {scope === "children" ? <MonthlyAttendanceReport role="admin" /> : <TrainerPayAttendanceAdmin />}
+    </div>
+  );
+}
+
+function TrainerPayAttendanceAdmin() {
+  const [period, setPeriod] = useState<PeriodState>(() => defaultPeriodState());
+  const range = useMemo(() => resolvePeriodRange(period), [period]);
+  const [payTrainerId, setPayTrainerId] = useState<number | "">("");
+  const [paySources, setPaySources] = useState(() => defaultPaySourceFilter());
+
+  const trainers = useQuery({ queryKey: ["trainers"], queryFn: () => api.trainers() });
+  const payReport = useQuery({
+    queryKey: [
+      "admin",
+      "trainer-pay-attendance",
+      range?.dateFrom,
+      range?.dateTo,
+      payTrainerId,
+      paySources.includeTrainings,
+      paySources.eventTypes.join(","),
+    ],
+    queryFn: () =>
+      api.adminTrainerPayAttendance(range!.dateFrom, range!.dateTo, {
+        trainerId: payTrainerId === "" ? undefined : payTrainerId,
+        includeTrainings: paySources.includeTrainings,
+        eventTypes: paySources.eventTypes,
+      }),
+    enabled: range != null,
+  });
+  const downloadTrainerPay = useMutation({
+    mutationFn: () =>
+      api.downloadAdminTrainerPayAttendanceCsv(range!.dateFrom, range!.dateTo, {
+        trainerId: payTrainerId === "" ? undefined : payTrainerId,
+        includeTrainings: paySources.includeTrainings,
+        eventTypes: paySources.eventTypes,
+      }),
+  });
+
+  return (
+    <section className="notification-compose">
+      <h2>Docházka trenérů k proplacení</h2>
+      <p className="page-header__sub" style={{ margin: "0 0 12px" }}>
+        Tréninky (přítomen) a akce (RSVP ano) · {formatPeriodLabel(period)}
+      </p>
+      <AttendancePeriodPicker value={period} onChange={setPeriod} />
+      <PaySourceFilterCheckboxes value={paySources} onChange={setPaySources} />
+      <div className="events-compose__row" style={{ marginTop: 12 }}>
+        <label className="notification-field">
+          Trenér
+          <select
+            value={payTrainerId}
+            onChange={(e) => setPayTrainerId(e.target.value === "" ? "" : Number(e.target.value))}
+          >
+            <option value="">Všichni trenéři</option>
+            {(trainers.data ?? []).map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.first_name} {t.last_name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {payReport.isLoading && <p className="admin-empty">Načítám přehled…</p>}
+      {payReport.isError && <p className="error-box">{String(payReport.error)}</p>}
+      {payReport.data && (
+        <div className="attendance-report attendance-report--scroll" style={{ marginTop: 16 }}>
+          <table className="attendance-report__table">
+            <thead>
+              <tr>
+                <th>Trenér</th>
+                <th>K proplacení</th>
+                <th>Nepřítomen</th>
+                <th>Omluven / možná</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payReport.data.trainers.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>V období nejsou žádné záznamy.</td>
+                </tr>
+              ) : (
+                payReport.data.trainers.map((row) => (
+                  <tr key={row.trainer_id}>
+                    <td>{row.trainer_name}</td>
+                    <td>{row.payable_sessions}</td>
+                    <td>{row.absent}</td>
+                    <td>{row.excused}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {downloadTrainerPay.isError && <p className="error-box">{String(downloadTrainerPay.error)}</p>}
+      <div className="admin-form__actions" style={{ marginTop: 12 }}>
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={!range || downloadTrainerPay.isPending}
+          onClick={() => downloadTrainerPay.mutate()}
+        >
+          {downloadTrainerPay.isPending ? "Stahuji…" : "Stáhnout Excel (CSV)"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 // --- Export ---
 
 function ExportTab() {
@@ -1584,7 +1715,7 @@ function ExportTab() {
 
   return (
     <div className="admin-form" style={{ maxWidth: 480 }}>
-      <div className="admin-section-title">Export docházky na trénincích</div>
+      <div className="admin-section-title">Export docházky dětí na trénincích</div>
       <AttendancePeriodPicker value={period} onChange={setPeriod} />
       <div className="admin-field">
         <label>Pobočka</label>
@@ -1627,6 +1758,9 @@ function ExportTab() {
           {downloadEvents.isPending ? "Stahuji…" : "Stáhnout CSV akcí"}
         </button>
       </div>
+      <p className="page-header__sub" style={{ marginTop: 20 }}>
+        Export docházky trenérů k proplacení je v záložce Docházka → Docházka trenérů.
+      </p>
     </div>
   );
 }

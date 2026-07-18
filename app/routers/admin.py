@@ -42,6 +42,7 @@ from app.registration_service import (
     try_send_credentials_email,
 )
 from app.schemas import (
+    AdminTrainerPayAttendanceReport,
     AttendanceMonthlyReport,
     ClubRegistrationRead,
     RegistrationRejectBody,
@@ -57,7 +58,15 @@ from app.security import (
     record_failed_attempt,
     require_admin,
 )
-
+from app.trainer_pay_report import (
+    build_admin_trainer_pay_report,
+    collect_pay_entries,
+    filter_entries_for_export,
+    load_trainer_event_rsvps,
+    load_trainer_pay_records,
+    parse_event_types,
+    write_trainer_pay_csv,
+)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 LOCAL_TZ = ZoneInfo("Europe/Prague")
@@ -448,6 +457,73 @@ async def export_event_participation_csv(
     buffer.seek(0)
     filename = f"ucast-akce-{range_from.isoformat()}_{range_to.isoformat()}.csv"
     content = "\ufeff" + buffer.getvalue()
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/trainer-pay-attendance", response_model=AdminTrainerPayAttendanceReport)
+async def admin_trainer_pay_attendance(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    trainer_id: int | None = Query(default=None, ge=1),
+    include_trainings: bool = Query(default=True),
+    event_types: list[str] | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> AdminTrainerPayAttendanceReport:
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    if trainer_id is not None:
+        trainer = await db.get(Trainer, trainer_id)
+        if trainer is None:
+            raise HTTPException(status_code=404, detail="Trainer not found.")
+    types = parse_event_types(event_types)
+    training_records = (
+        await load_trainer_pay_records(db, range_from, range_to, trainer_id=trainer_id)
+        if include_trainings
+        else []
+    )
+    event_rsvps = await load_trainer_event_rsvps(
+        db, range_from, range_to, trainer_id=trainer_id, event_types=types,
+    )
+    entries = collect_pay_entries(training_records, event_rsvps, include_trainings=include_trainings)
+    return build_admin_trainer_pay_report(entries, range_from, range_to)
+
+
+@router.get("/trainer-pay-attendance.csv")
+async def admin_trainer_pay_attendance_csv(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    trainer_id: int | None = Query(default=None, ge=1),
+    include_trainings: bool = Query(default=True),
+    event_types: list[str] | None = Query(default=None),
+    include_all_statuses: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+) -> StreamingResponse:
+    range_from, range_to = resolve_attendance_range(month=month, date_from=date_from, date_to=date_to)
+    if trainer_id is not None:
+        trainer = await db.get(Trainer, trainer_id)
+        if trainer is None:
+            raise HTTPException(status_code=404, detail="Trainer not found.")
+    types = parse_event_types(event_types)
+    training_records = (
+        await load_trainer_pay_records(db, range_from, range_to, trainer_id=trainer_id)
+        if include_trainings
+        else []
+    )
+    event_rsvps = await load_trainer_event_rsvps(
+        db, range_from, range_to, trainer_id=trainer_id, event_types=types,
+    )
+    entries = collect_pay_entries(training_records, event_rsvps, include_trainings=include_trainings)
+    report = build_admin_trainer_pay_report(entries, range_from, range_to)
+    export_entries = filter_entries_for_export(report.entries, include_all_statuses=include_all_statuses)
+    content = write_trainer_pay_csv(export_entries, include_trainer_name=True)
+    filename = f"dochazka-treneru-{range_from.isoformat()}_{range_to.isoformat()}.csv"
     return StreamingResponse(
         iter([content]),
         media_type="text/csv; charset=utf-8",
