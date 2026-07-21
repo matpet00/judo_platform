@@ -25,6 +25,7 @@ from app.models import (
     TrainingOccurrenceComment,
     TrainingSession,
 )
+from app.share_tokens import new_share_token
 from app.schemas import (
     AttendanceMonthlyReport,
     BranchRead,
@@ -109,6 +110,7 @@ def _group_to_read(group: TrainingGroup) -> TrainingGroupRead:
         weekdays=group.weekdays,
         active_from=group.active_from,
         active_until=group.active_until,
+        share_token=group.share_token,
         created_at=group.created_at,
         updated_at=group.updated_at,
         branch=BranchRead.model_validate(group.branch, from_attributes=True),
@@ -568,6 +570,7 @@ async def create_training_group(
         weekdays=payload.weekdays,
         active_from=payload.active_from,
         active_until=payload.active_until,
+        share_token=new_share_token(),
     )
     db.add(group)
     try:

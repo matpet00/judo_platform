@@ -310,6 +310,8 @@ class TrainingGroup(Base):
     # Optional window bounding recurring occurrences ("repeat from/until").
     active_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     active_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Public share link (/t/{token}) for WhatsApp / QR.
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -616,6 +618,8 @@ class Event(Base):
     author_trainer_id: Mapped[int | None] = mapped_column(ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True)
     # Guards the pre-event reminder sweep so each event only fires reminders once.
     reminder_sent: Mapped[bool] = mapped_column(Boolean, server_default="0")
+    # Public share link (/e/{token}) for WhatsApp / QR — no auth required to view summary.
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

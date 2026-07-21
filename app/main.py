@@ -16,6 +16,7 @@ from app.routers import (
     mail,
     notifications,
     parents,
+    public_share,
     registration,
     students,
     trainers,
@@ -72,6 +73,7 @@ app.include_router(training_sessions.router)
 app.include_router(notifications.router)
 app.include_router(chat.router)
 app.include_router(events.router)
+app.include_router(public_share.router)
 
 
 @app.get("/health")

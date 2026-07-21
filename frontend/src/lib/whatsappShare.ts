@@ -1,0 +1,134 @@
+import QRCode from "qrcode";
+
+/** Origin for QR / WhatsApp links. On localhost always use http (https://localhost breaks Safari). */
+export function absoluteShareUrl(path: string): string {
+  const url = new URL(window.location.origin);
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+    url.protocol = "http:";
+  }
+  const base = url.origin;
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export function eventSharePath(token: string): string {
+  return `/e/${token}`;
+}
+
+export function trainingSharePath(token: string): string {
+  return `/t/${token}`;
+}
+
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function qrDataUrl(text: string, size = 220): Promise<string> {
+  return QRCode.toDataURL(text, {
+    width: size,
+    margin: 2,
+    errorCorrectionLevel: "M",
+  });
+}
+
+function clip(text: string, max = 280): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1).trimEnd()}…`;
+}
+
+/** WhatsApp ignores HTML; it uses *bold* _italic_ ~strike~ ```mono```. */
+function waSafe(text: string): string {
+  return text.replace(/[*_~`]/g, "").trim();
+}
+
+function waBold(text: string): string {
+  const t = waSafe(text);
+  return t ? `*${t}*` : "";
+}
+
+const WA_RULE = "────────────";
+
+export function buildEventWhatsAppMessage(opts: {
+  title: string;
+  whenLabel: string;
+  location?: string;
+  description?: string;
+  shareUrl: string;
+}): string {
+  const lines = [
+    waBold("Nová akce"),
+    WA_RULE,
+    waBold(opts.title),
+    "",
+    `*Kdy:* ${waSafe(opts.whenLabel)}`,
+  ];
+  if (opts.location?.trim()) {
+    lines.push(`*Kde:* ${waSafe(opts.location)}`);
+  }
+  if (opts.description?.trim()) {
+    lines.push("");
+    lines.push(waSafe(clip(opts.description)));
+  }
+  lines.push(WA_RULE);
+  lines.push(opts.shareUrl);
+  return lines.filter((line, i, arr) => !(line === "" && arr[i - 1] === "")).join("\n");
+}
+
+export function buildTrainingWhatsAppMessage(opts: {
+  name: string;
+  branchName: string;
+  scheduleLabel: string;
+  shareUrl: string;
+}): string {
+  const lines = [
+    waBold("Nový trénink"),
+    WA_RULE,
+    waBold(opts.name),
+    "",
+  ];
+  if (opts.branchName.trim()) {
+    lines.push(`*Pobočka:* ${waSafe(opts.branchName)}`);
+  }
+  lines.push(`*Rozvrh:* ${waSafe(opts.scheduleLabel)}`);
+  lines.push(WA_RULE);
+  lines.push(opts.shareUrl);
+  return lines.filter((line, i, arr) => !(line === "" && arr[i - 1] === "")).join("\n");
+}
+
+function isMobileUa(): boolean {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+/**
+ * Share full message to WhatsApp.
+ * 1) Web Share API (best on iPhone — keeps title/when/link)
+ * 2) Mobile: whatsapp:// with full text
+ * 3) Desktop: copy text + open WhatsApp Web with text
+ */
+export async function shareToWhatsApp(message: string): Promise<"shared" | "opened" | "copied"> {
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    try {
+      await navigator.share({ text: message });
+      return "shared";
+    } catch (err) {
+      const name = err instanceof Error ? err.name : "";
+      if (name === "AbortError") return "shared";
+    }
+  }
+
+  const encoded = encodeURIComponent(message);
+
+  if (isMobileUa()) {
+    window.location.href = `whatsapp://send?text=${encoded}`;
+    return "opened";
+  }
+
+  await copyText(message);
+  window.open(`https://web.whatsapp.com/send?text=${encoded}`, "_blank", "noopener,noreferrer");
+  return "copied";
+}

@@ -17,6 +17,7 @@ import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
 import { ParentBoardPage } from "./pages/ParentBoardPage";
 import { ChatPage } from "./pages/ChatPage";
 import { EventsPage } from "./pages/EventsPage";
+import { PublicEventSharePage, PublicTrainingSharePage } from "./pages/PublicSharePage";
 import { TrainerStudentsPage } from "./pages/TrainerStudentsPage";
 import { TrainerPayAttendancePage } from "./pages/TrainerPayAttendancePage";
 import { TrainerPinSecurityGate } from "./components/TrainerPinSecurityGate";
@@ -111,6 +112,8 @@ createRoot(document.getElementById("root")!).render(
                   </TrainerPinSecurityGate>
                 }
               />
+              <Route path="/e/:token" element={<PublicEventSharePage />} />
+              <Route path="/t/:token" element={<PublicTrainingSharePage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
               <Route path="/parent" element={<ParentHomePage />} />

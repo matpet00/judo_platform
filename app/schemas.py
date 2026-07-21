@@ -696,6 +696,7 @@ class TrainingGroupRead(BaseModel):
     weekdays: list[int] | None = Field(examples=[[1, 3]])
     active_from: date | None = None
     active_until: date | None = None
+    share_token: str | None = None
     created_at: datetime
     updated_at: datetime
     branch: BranchRead
@@ -1425,6 +1426,7 @@ class EventRead(BaseModel):
     starts_at: datetime
     ends_at: datetime | None = None
     author_trainer_id: int | None = None
+    share_token: str | None = None
     created_at: datetime
     updated_at: datetime
     author_trainer: TrainerBrief | None = None
@@ -1442,3 +1444,29 @@ class EventDetailRead(EventRead):
     comments: list[EventCommentRead] = Field(default_factory=list)
     attachments: list[EventAttachmentRead] = Field(default_factory=list)
     rsvp_summary: EventRsvpSummary | None = None
+
+
+class PublicEventShare(BaseModel):
+    kind: Literal["event"] = "event"
+    title: str
+    description: str
+    event_type: EventType
+    location: str
+    starts_at: datetime
+    ends_at: datetime | None = None
+    share_token: str
+    audience_labels: list[str] = Field(default_factory=list)
+    # None = not logged in as parent; True/False = whether this parent's children match targets.
+    intended_for_you: bool | None = None
+
+
+class PublicTrainingShare(BaseModel):
+    kind: Literal["training"] = "training"
+    name: str
+    branch_name: str
+    start_time: time
+    end_time: time
+    weekdays: list[int] | None = None
+    active_from: date | None = None
+    active_until: date | None = None
+    share_token: str

@@ -27,6 +27,7 @@ from app.models import (
     Parent,
     Trainer,
 )
+from app.share_tokens import new_share_token
 from app.schemas import (
     EventAttachmentRead,
     EventChildRsvp,
@@ -229,6 +230,7 @@ def _event_to_read(event: Event, viewer: Viewer) -> EventRead:
         starts_at=_as_aware_utc(event.starts_at),
         ends_at=_as_aware_utc(event.ends_at) if event.ends_at is not None else None,
         author_trainer_id=event.author_trainer_id,
+        share_token=event.share_token,
         created_at=_as_aware_utc(event.created_at),
         updated_at=_as_aware_utc(event.updated_at),
         author_trainer=(
@@ -435,6 +437,7 @@ async def create_event(
         starts_at=starts,
         ends_at=ends,
         author_trainer_id=trainer_id,
+        share_token=new_share_token(),
         targets=_event_target_rows(payload.targets),
     )
     db.add(event)

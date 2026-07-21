@@ -23,6 +23,7 @@ from app.models import (
     TrainingGroup,
 )
 from app.security import hash_pin
+from app.share_tokens import new_share_token
 
 engine = create_async_engine(
     settings.database_url,
@@ -272,6 +273,7 @@ async def seed_default_event() -> None:
                     location=location,
                     starts_at=starts_at,
                     author_trainer_id=author_trainer.id,
+                    share_token=new_share_token(),
                 )
                 event.targets.extend([
                     EventTarget(audience=NotificationAudience.parent),
@@ -338,6 +340,9 @@ async def migrate_schema() -> None:
         event_columns = {row[1] for row in result.fetchall()}
         if event_columns and "reminder_sent" not in event_columns:
             await conn.execute(text("ALTER TABLE events ADD COLUMN reminder_sent BOOLEAN DEFAULT 0"))
+        if event_columns and "share_token" not in event_columns:
+            await conn.execute(text("ALTER TABLE events ADD COLUMN share_token VARCHAR(64)"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_events_share_token ON events (share_token)"))
 
         result = await conn.execute(text("PRAGMA table_info(training_groups)"))
         group_columns = {row[1] for row in result.fetchall()}
@@ -345,6 +350,11 @@ async def migrate_schema() -> None:
             await conn.execute(text("ALTER TABLE training_groups ADD COLUMN active_from DATE"))
         if group_columns and "active_until" not in group_columns:
             await conn.execute(text("ALTER TABLE training_groups ADD COLUMN active_until DATE"))
+        if group_columns and "share_token" not in group_columns:
+            await conn.execute(text("ALTER TABLE training_groups ADD COLUMN share_token VARCHAR(64)"))
+            await conn.execute(
+                text("CREATE UNIQUE INDEX IF NOT EXISTS ix_training_groups_share_token ON training_groups (share_token)"),
+            )
 
         result = await conn.execute(text("PRAGMA table_info(training_sessions)"))
         session_columns = {row[1] for row in result.fetchall()}
@@ -548,10 +558,22 @@ async def migrate_schema() -> None:
         )
 
 
+async def backfill_share_tokens() -> None:
+    from app.share_tokens import new_share_token
+
+    async with async_session_maker() as session:
+        for model in (Event, TrainingGroup):
+            result = await session.execute(select(model).where(model.share_token.is_(None)))
+            for row in result.scalars().all():
+                row.share_token = new_share_token()
+        await session.commit()
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await migrate_schema()
+    await backfill_share_tokens()
     await seed_branches()
     await seed_trainers()
     await seed_trainer_pins()

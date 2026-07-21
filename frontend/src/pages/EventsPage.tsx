@@ -17,11 +17,20 @@ import type {
   TrainingOccurrenceComment,
 } from "../api/types";
 import { RecipientTargets, recipientLabel } from "../components/RecipientTargets";
+import { ShareLinkPanel } from "../components/ShareLinkPanel";
 import { AttendanceOverview } from "../components/AttendanceOverview";
 import { TrainingGuestPicker } from "../components/TrainingGuestPicker";
 import { TrainerAttendanceOverview } from "../components/TrainerAttendanceOverview";
 import { TrainingTrainerPicker } from "../components/TrainingTrainerPicker";
 import { occurrenceListKey as trainingOccurrenceKey } from "../lib/notificationNavigation";
+import {
+  buildEventWhatsAppMessage,
+  buildTrainingWhatsAppMessage,
+  absoluteShareUrl,
+  eventSharePath,
+  trainingSharePath,
+} from "../lib/whatsappShare";
+import type { TrainingGroup } from "../api/types";
 
 type Role = "trainer" | "parent";
 
@@ -933,6 +942,7 @@ function EventCompose({
   const [endsAt, setEndsAt] = useState("");
   const [targets, setTargets] = useState<NotificationTargetCreate[]>([]);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [createdShare, setCreatedShare] = useState<EventDetail | null>(null);
 
   const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const branches = branchesQuery.data ?? [];
@@ -954,7 +964,7 @@ function EventCompose({
       }
       return created;
     },
-    onSuccess: (created) => onDone(created.id),
+    onSuccess: (created) => setCreatedShare(created),
   });
 
   const endsBeforeStart = !!(startsAt && endsAt && new Date(endsAt) < new Date(startsAt));
@@ -963,6 +973,34 @@ function EventCompose({
   if (!startsAt) missing.push("začátek");
   if (targets.length === 0) missing.push("alespoň jednoho příjemce");
   const canSend = missing.length === 0 && !endsBeforeStart;
+
+  if (createdShare?.share_token) {
+    const whenLabel = new Date(createdShare.starts_at).toLocaleString("cs-CZ", {
+      weekday: "short",
+      day: "numeric",
+      month: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const shareUrl = absoluteShareUrl(eventSharePath(createdShare.share_token));
+    return (
+      <section className="notification-compose">
+        <ShareLinkPanel
+          path={eventSharePath(createdShare.share_token)}
+          successText="Akce vytvořena."
+          whatsappMessage={buildEventWhatsAppMessage({
+            title: createdShare.title,
+            whenLabel,
+            location: createdShare.location,
+            description: createdShare.description,
+            shareUrl,
+          })}
+          onDone={() => onDone(createdShare.id)}
+        />
+      </section>
+    );
+  }
 
   if (mode === "training") {
     return (
@@ -1109,6 +1147,7 @@ function TrainingSetupForm({
   });
   const [studentIds, setStudentIds] = useState<Set<number>>(new Set());
   const [trainerIds, setTrainerIds] = useState<Set<number>>(new Set());
+  const [createdShare, setCreatedShare] = useState<TrainingGroup | null>(null);
 
   const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: () => api.branches() });
   const branches = branchesQuery.data ?? [];
@@ -1139,7 +1178,7 @@ function TrainingSetupForm({
         student_ids: [...studentIds],
         trainer_ids: [...trainerIds],
       }),
-    onSuccess: onDone,
+    onSuccess: (group) => setCreatedShare(group),
   });
 
   const missing: string[] = [];
@@ -1173,6 +1212,27 @@ function TrainingSetupForm({
       else next.add(id);
       return next;
     });
+
+  if (createdShare?.share_token) {
+    const dayLabels = (createdShare.weekdays ?? [])
+      .map((d) => WEEKDAYS.find((w) => w.value === d)?.label ?? String(d))
+      .join(", ");
+    const scheduleLabel = `${dayLabels} · ${createdShare.start_time.slice(0, 5)}–${createdShare.end_time.slice(0, 5)}`;
+    const shareUrl = absoluteShareUrl(trainingSharePath(createdShare.share_token));
+    return (
+      <ShareLinkPanel
+        path={trainingSharePath(createdShare.share_token)}
+        successText="Trénink vytvořen."
+        whatsappMessage={buildTrainingWhatsAppMessage({
+          name: createdShare.name,
+          branchName: createdShare.branch?.name ?? "",
+          scheduleLabel,
+          shareUrl,
+        })}
+        onDone={onDone}
+      />
+    );
+  }
 
   return (
     <>
@@ -1530,6 +1590,26 @@ function EventDetailPanel({
       <EventAttachments event={event} role={role} onChange={invalidate} />
 
       <EventComments event={event} role={role} onChange={invalidate} />
+
+      {event.can_edit && event.share_token && (
+        <ShareLinkPanel
+          path={eventSharePath(event.share_token)}
+          whatsappMessage={buildEventWhatsAppMessage({
+            title: event.title,
+            whenLabel: new Date(event.starts_at).toLocaleString("cs-CZ", {
+              weekday: "short",
+              day: "numeric",
+              month: "numeric",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            location: event.location,
+            description: event.description,
+            shareUrl: absoluteShareUrl(eventSharePath(event.share_token)),
+          })}
+        />
+      )}
 
       {event.can_edit && (
         confirmDelete ? (
@@ -2237,6 +2317,12 @@ function TrainingOccurrencePanel({
     enabled: sessionId != null && role === "trainer",
   });
 
+  const seriesQuery = useQuery({
+    queryKey: ["training-group", occurrence.group_id],
+    queryFn: () => api.trainingGroup(occurrence.group_id),
+    enabled: role === "trainer",
+  });
+
   const cancelMutation = useMutation({
     mutationFn: (canceled: boolean) =>
       api.cancelOccurrence(sessionId as number, canceled),
@@ -2441,6 +2527,20 @@ function TrainingOccurrencePanel({
             Smazat
           </button>
         </div>
+      )}
+
+      {role === "trainer" && seriesQuery.data?.share_token && (
+        <ShareLinkPanel
+          path={trainingSharePath(seriesQuery.data.share_token)}
+          whatsappMessage={buildTrainingWhatsAppMessage({
+            name: seriesQuery.data.name,
+            branchName: seriesQuery.data.branch?.name ?? "",
+            scheduleLabel: `${(seriesQuery.data.weekdays ?? [])
+              .map((d) => WEEKDAYS.find((w) => w.value === d)?.label ?? String(d))
+              .join(", ")} · ${seriesQuery.data.start_time.slice(0, 5)}–${seriesQuery.data.end_time.slice(0, 5)}`,
+            shareUrl: absoluteShareUrl(trainingSharePath(seriesQuery.data.share_token)),
+          })}
+        />
       )}
 
       <dl className="event-detail__facts">

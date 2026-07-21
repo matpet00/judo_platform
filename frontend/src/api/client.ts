@@ -483,6 +483,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }, true),
+  publicEventShare: (token: string) =>
+    request<import("./types").PublicEventShare>(
+      `/public/events/${encodeURIComponent(token)}`,
+      undefined,
+      false,
+      true,
+      "parent",
+    ),
+  publicTrainingShare: (token: string) =>
+    request<import("./types").PublicTrainingShare>(`/public/trainings/${encodeURIComponent(token)}`),
   updateEvent: (id: number, payload: Partial<import("./types").EventCreate>) =>
     request<import("./types").EventDetail>(`/events/${id}`, {
       method: "PATCH",

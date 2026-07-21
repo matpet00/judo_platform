@@ -103,6 +103,7 @@ export interface TrainingGroup {
   weekdays: number[] | null;
   active_from?: string | null;
   active_until?: string | null;
+  share_token?: string | null;
   branch: { id: number; name: string; address: string };
   students: StudentBrief[];
   trainers: TrainerBrief[];
@@ -538,6 +539,7 @@ export interface EventItem {
   starts_at: string;
   ends_at: string | null;
   author_trainer_id: number | null;
+  share_token?: string | null;
   created_at: string;
   updated_at: string;
   author_trainer: TrainerBrief | null;
@@ -803,4 +805,29 @@ export interface AgeGroupPreview {
   reference_year: number;
   age_at_year_end: number;
   age_group: AgeGroup;
+}
+
+export interface PublicEventShare {
+  kind: "event";
+  title: string;
+  description: string;
+  event_type: EventType;
+  location: string;
+  starts_at: string;
+  ends_at: string | null;
+  share_token: string;
+  audience_labels: string[];
+  intended_for_you: boolean | null;
+}
+
+export interface PublicTrainingShare {
+  kind: "training";
+  name: string;
+  branch_name: string;
+  start_time: string;
+  end_time: string;
+  weekdays: number[] | null;
+  active_from: string | null;
+  active_until: string | null;
+  share_token: string;
 }
