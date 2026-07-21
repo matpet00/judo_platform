@@ -3,7 +3,7 @@ import {
   absoluteShareUrl,
   copyText,
   qrDataUrl,
-  shareToWhatsApp,
+  whatsAppShareHref,
 } from "../lib/whatsappShare";
 
 type Props = {
@@ -28,7 +28,6 @@ export function ShareLinkPanel({
   const [open, setOpen] = useState(defaultOpen);
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState<"link" | "text" | null>(null);
-  const [waHint, setWaHint] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -44,14 +43,6 @@ export function ShareLinkPanel({
   const flashCopied = (kind: "link" | "text") => {
     setCopied(kind);
     window.setTimeout(() => setCopied(null), 2000);
-  };
-
-  const onWhatsApp = async () => {
-    setWaHint(null);
-    const result = await shareToWhatsApp(whatsappMessage);
-    if (result === "copied") {
-      setWaHint("Celý text je ve schránce — ve WhatsAppu ho vlož (dlouhým stiskem).");
-    }
   };
 
   return (
@@ -103,9 +94,14 @@ export function ShareLinkPanel({
           <pre className="share-link-panel__preview">{whatsappMessage}</pre>
 
           <div className="share-link-panel__actions">
-            <button type="button" className="btn btn--primary" onClick={() => void onWhatsApp()}>
+            <a
+              className="btn btn--primary"
+              href={whatsAppShareHref(whatsappMessage)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               WhatsApp
-            </button>
+            </a>
             <button
               type="button"
               className="btn btn--ghost"
@@ -129,7 +125,6 @@ export function ShareLinkPanel({
               {copied === "link" ? "Odkaz zkopírován" : "Kopírovat odkaz"}
             </button>
           </div>
-          {waHint && <p className="share-link-panel__hint">{waHint}</p>}
         </div>
       )}
     </section>

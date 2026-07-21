@@ -100,35 +100,21 @@ export function buildTrainingWhatsAppMessage(opts: {
   return lines.filter((line, i, arr) => !(line === "" && arr[i - 1] === "")).join("\n");
 }
 
-function isMobileUa(): boolean {
-  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+/**
+ * Open WhatsApp with prefilled text and contact/group picker.
+ * Must stay synchronous (user click) — use a real <a href> or this helper.
+ */
+export function whatsAppShareHref(message: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
-/**
- * Share full message to WhatsApp.
- * 1) Web Share API (best on iPhone — keeps title/when/link)
- * 2) Mobile: whatsapp:// with full text
- * 3) Desktop: copy text + open WhatsApp Web with text
- */
-export async function shareToWhatsApp(message: string): Promise<"shared" | "opened" | "copied"> {
-  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-    try {
-      await navigator.share({ text: message });
-      return "shared";
-    } catch (err) {
-      const name = err instanceof Error ? err.name : "";
-      if (name === "AbortError") return "shared";
-    }
-  }
-
-  const encoded = encodeURIComponent(message);
-
-  if (isMobileUa()) {
-    window.location.href = `whatsapp://send?text=${encoded}`;
-    return "opened";
-  }
-
-  await copyText(message);
-  window.open(`https://web.whatsapp.com/send?text=${encoded}`, "_blank", "noopener,noreferrer");
-  return "copied";
+export function openWhatsAppShare(message: string): void {
+  const href = whatsAppShareHref(message);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.target = "_blank";
+  anchor.rel = "noopener noreferrer";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
