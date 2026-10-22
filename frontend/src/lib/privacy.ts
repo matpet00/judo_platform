@@ -3,7 +3,7 @@ export const PRIVACY_POLICY_VERSION = "1.0";
 export const PRIVACY_POLICY_EFFECTIVE = "15. 7. 2026";
 
 /** Fill in once the club has formal legal details. */
-export const PRIVACY_CONTROLLER_NAME = "JUDO KLUB ORLOVÁ";
+export const PRIVACY_CONTROLLER_NAME = "Judo Klub";
 export const PRIVACY_CONTROLLER_DETAILS = "IČO a sídlo doplní klub před ostrým provozem.";
 
 /**

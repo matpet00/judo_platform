@@ -182,7 +182,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
     state.admin_token = admin
 
     trainers = qa.client.get("/trainers").json()
-    trainer = next((t for t in trainers if t["id"] <= 5 and any(b["name"] == "Orlova" for b in t["branches"])), trainers[0])
+    trainer = next((t for t in trainers if t["id"] <= 5 and any(b["name"] == "Pobocka1" for b in t["branches"])), trainers[0])
     state.trainer_id = trainer["id"]
     tok = login_trainer(qa, state.trainer_id)
     if not tok:
@@ -192,9 +192,9 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
     th = write_headers(tok)
 
     branches = qa.client.get("/branches").json()
-    orlova = next((b for b in branches if b["name"] == "Orlova"), None)
+    orlova = next((b for b in branches if b["name"] == "Pobocka1"), None)
     if orlova is None:
-        qa.record("seed_orlova_branch", False, "Orlova branch missing")
+        qa.record("seed_orlova_branch", False, "Pobocka1 branch missing")
         return False
     state.orlova_branch_id = orlova["id"]
 
@@ -206,7 +206,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
         resp = qa.client.post(
             "/branches",
             headers=ah,
-            json={"name": f"{TAG} Petrvald", "address": "QA test branch"},
+            json={"name": f"{TAG} Pobocka3", "address": "QA test branch"},
         )
         data = qa.require("seed_create_branch", resp, (201,))
         if not isinstance(data, dict):
@@ -218,7 +218,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
     orlova_ids = [s["id"] for s in students if any(b["id"] == state.orlova_branch_id for b in s["branches"])]
     state.orlova_student_ids = orlova_ids[:6]
     if len(state.orlova_student_ids) < 3:
-        qa.record("seed_orlova_students", False, f"only {len(state.orlova_student_ids)} on Orlova")
+        qa.record("seed_orlova_students", False, f"only {len(state.orlova_student_ids)} on Pobocka1")
         return False
 
     second_ids = [s["id"] for s in qa_students if any(b["id"] == state.second_branch_id for b in s["branches"])]
@@ -247,7 +247,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
                 second_ids.append(data["id"])
     state.second_branch_student_ids = second_ids[:4]
     qa.record("seed_students_two_branches", len(state.second_branch_student_ids) >= 4,
-              f"Orlova={len(state.orlova_student_ids)}, branch2={len(state.second_branch_student_ids)}")
+              f"Pobocka1={len(state.orlova_student_ids)}, branch2={len(state.second_branch_student_ids)}")
 
     groups = qa.client.get("/training-groups", headers=th).json()
     qa_groups = find_by_name(groups, "name", f"{TAG} ")
@@ -256,7 +256,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
 
     specs = [
         {
-            "name": f"{TAG} Orlova Po+Ct",
+            "name": f"{TAG} Pobocka1 Po+Ct",
             "branch_id": state.orlova_branch_id,
             "start_time": "16:30:00",
             "end_time": "17:30:00",
@@ -264,7 +264,7 @@ def seed_data(qa: QAClient, state: SeedState) -> bool:
             "student_ids": state.orlova_student_ids[:4],
         },
         {
-            "name": f"{TAG} Petrvald Ut+Ct",
+            "name": f"{TAG} Pobocka3 Ut+Ct",
             "branch_id": state.second_branch_id,
             "start_time": "17:00:00",
             "end_time": "18:00:00",

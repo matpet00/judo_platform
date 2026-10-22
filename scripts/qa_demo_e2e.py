@@ -91,7 +91,7 @@ def run_all(state: dict) -> int:
         and not (s["last_name"].endswith("ová") or s["last_name"].endswith("á") or s["last_name"].endswith("ná"))
     ]
     qa.check("girls have -ová surnames", len(bad_girls) == 0, ", ".join(bad_girls[:5]))
-    for bname in ("Orlova", "Dolni Lutyne", "Petrvald"):
+    for bname in ("Pobocka1", "Pobocka2", "Pobocka3"):
         n = sum(1 for s in students if any(br["name"] == bname for br in s["branches"]))
         qa.check(f"10 students @ {bname}", n == 10, f"got {n}")
 
@@ -257,7 +257,7 @@ def run_area(state: dict, area: str) -> int:
     if area == "students":
         students = c.get("/students").json()
         qa.check("30 students", len(students) == 30, str(len(students)))
-        for b in ("Orlova", "Dolni Lutyne", "Petrvald"):
+        for b in ("Pobocka1", "Pobocka2", "Pobocka3"):
             n = sum(1 for s in students if any(br["name"] == b for br in s["branches"]))
             qa.check(f"10 @ {b}", n == 10, str(n))
     elif area == "trainings":

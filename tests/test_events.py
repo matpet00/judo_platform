@@ -35,7 +35,7 @@ async def _create_event(client, trainer, targets, **overrides):
 @pytest.mark.asyncio
 async def test_targeted_parent_sees_event_and_gets_notification(client):
     trainer = await login_trainer(client)
-    parent = _parent_token(1)  # Marie -> child A (U8) in Orlova
+    parent = _parent_token(1)  # Marie -> child A (U8) in Pobocka1
 
     resp = await _create_event(client, trainer, [{"audience": "parent"}])
     assert resp.status_code == 201, resp.text

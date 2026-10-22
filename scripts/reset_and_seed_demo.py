@@ -22,86 +22,20 @@ ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "admin")
 TRAINER_PIN = os.environ.get("TRAINER_PIN", "123456")
 STATE_PATH = os.environ.get("DEMO_STATE_PATH", "scripts/demo_state.json")
 
-KEEP_BRANCHES = ("Orlova", "Dolni Lutyne", "Petrvald")
+KEEP_BRANCHES = ("Pobocka1", "Pobocka2", "Pobocka3")
 PER_BRANCH = 10
 
-# Všichni trenéři z lokální demo DB (idempotentně doplní chybějící přes API)
+# Generičtí trenéři (žádná reálná jména)
 DEMO_TRAINERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("Petr", "Matejcek", ("Orlova",)),
-    ("Tomas", "Sikora", ("Orlova",)),
-    ("Tomas", "Heczko", ("Orlova",)),
-    ("Viki", "Fintová", ("Orlova",)),
-    ("Tobias", "Mec", ("Orlova",)),
-    ("Lukáš", "Morcin", ("Orlova",)),
-    ("Eduard", "Lanča", ("Dolni Lutyne", "Orlova")),
-    ("Roman", "Bielczyk", ("Orlova", "Dolni Lutyne")),
-    ("Petr", "Steiniger", ("Petrvald",)),
+    ("Trenér", "1", ("Pobocka1",)),
+    ("Trenér", "2", ("Pobocka1",)),
+    ("Trenér", "3", ("Pobocka1",)),
+    ("Trenér", "4", ("Pobocka2", "Pobocka1")),
+    ("Trenér", "5", ("Pobocka2",)),
+    ("Trenér", "6", ("Pobocka3",)),
 )
 
-FIRST_NAMES = (
-    "Tereza", "Jan", "Eliška", "Matěj", "Anna", "Jakub", "Kateřina", "Lukáš", "Barbora", "Martin",
-    "Eva", "Ondřej", "Veronika", "Petr", "Lucie", "Michal", "Markéta", "David", "Jana", "Filip",
-    "Hana", "Pavel", "Zuzana", "Daniel", "Alena", "Radek", "Lenka", "Václav", "Andrea", "Jiří",
-)
-LAST_NAMES = (
-    "Novák", "Svoboda", "Novotný", "Dvořák", "Černý", "Procházka", "Kučera", "Veselý", "Horák", "Mareš",
-    "Pospíšil", "Hájek", "Jelínek", "Urban", "Blažek", "Krejčí", "Holub", "Soukup", "Polák", "Staněk",
-    "Beneš", "Šimek", "Moravec", "Navrátil", "Tůma", "Kadlec", "Bartoš", "Pečka", "Čermák", "Sedláček",
-)
-FEMALE_FIRST_NAMES = frozenset({
-    "Tereza", "Eliška", "Anna", "Kateřina", "Barbora", "Eva", "Veronika", "Lucie",
-    "Markéta", "Jana", "Hana", "Zuzana", "Alena", "Lenka", "Andrea",
-})
-FEMININE_LAST_NAMES = {
-    "Novák": "Nováková",
-    "Svoboda": "Svobodová",
-    "Novotný": "Novotná",
-    "Dvořák": "Dvořáková",
-    "Černý": "Černá",
-    "Procházka": "Procházková",
-    "Kučera": "Kučerová",
-    "Veselý": "Veselá",
-    "Horák": "Horáková",
-    "Mareš": "Marešová",
-    "Pospíšil": "Pospíšilová",
-    "Hájek": "Hájková",
-    "Jelínek": "Jelínková",
-    "Urban": "Urbanová",
-    "Blažek": "Blažková",
-    "Krejčí": "Krejčová",
-    "Holub": "Holubová",
-    "Soukup": "Soukupová",
-    "Polák": "Poláková",
-    "Staněk": "Staňková",
-    "Beneš": "Benešová",
-    "Šimek": "Šimková",
-    "Moravec": "Moravcová",
-    "Navrátil": "Navrátilová",
-    "Tůma": "Tůmová",
-    "Kadlec": "Kadlecová",
-    "Bartoš": "Bartošová",
-    "Pečka": "Pečková",
-    "Čermák": "Čermáková",
-    "Sedláček": "Sedláčková",
-}
-
-
-def student_last_name(i: int) -> str:
-    base = LAST_NAMES[i]
-    if FIRST_NAMES[i] in FEMALE_FIRST_NAMES:
-        return FEMININE_LAST_NAMES[base]
-    return base
 AGE_GROUPS = ("U8", "U10", "U12", "U14", "U16", "U18", "U21", "Over21")
-PARENT_FIRST = (
-    "Marie", "Petr", "Jana", "Tomáš", "Eva", "Martin", "Lenka", "Pavel", "Hana", "Ondřej",
-    "Kateřina", "Michal", "Veronika", "David", "Lucie", "Filip", "Markéta", "Jakub", "Barbora", "Lukáš",
-    "Anna", "Radek", "Zuzana", "Daniel", "Alena", "Jiří", "Tereza", "Jan", "Eliška", "Matěj",
-)
-PARENT_LAST = (
-    "Svobodová", "Novák", "Dvořáková", "Černý", "Horáková", "Veselý", "Kučerová", "Procházka", "Benešová", "Mareš",
-    "Jelínková", "Urban", "Pospíšilová", "Hájek", "Novotná", "Holub", "Krejčíová", "Staněk", "Moravcová", "Navrátil",
-    "Šimková", "Tůma", "Kadlecová", "Bartoš", "Pečková", "Sedláček", "Čermáková", "Bláhová", "Polák", "Soukupová",
-)
 
 
 def headers(token: str | None = None) -> dict[str, str]:
@@ -215,15 +149,16 @@ def seed_students(client: httpx.Client, branches: dict[str, int], admin: str) ->
         branch_id = branches[branch_name]
         for local in range(PER_BRANCH):
             i = idx
+            n = i + 1
             payload = {
-                "first_name": FIRST_NAMES[i],
-                "last_name": student_last_name(i),
+                "first_name": "Dítě",
+                "last_name": str(n),
                 "age_group": AGE_GROUPS[i % len(AGE_GROUPS)],
                 "branch_ids": [branch_id],
                 "parents": [{
-                    "first_name": PARENT_FIRST[i],
-                    "last_name": PARENT_LAST[i],
-                    "email": f"demo.{branch_name.lower().replace(' ', '_')}.{local + 1}@example.com",
+                    "first_name": "Rodič",
+                    "last_name": str(n),
+                    "email": f"rodic{n}@example.com",
                     "phone": f"+420700{i:07d}",
                 }],
             }
@@ -299,10 +234,10 @@ def seed_trainings_and_event(
         "/events",
         headers=headers(event_trainer_tok or trainer_login(client, trainers[0]["id"])),
         json={
-            "title": "Jarní turnaj klubu",
+            "title": "Demo turnaj",
             "event_type": "tournament",
             "starts_at": starts,
-            "location": "Orlova",
+            "location": "Pobocka1",
             "targets": [{"audience": "parent"}, {"audience": "trainer"}],
         },
     )
@@ -324,16 +259,15 @@ def seed_notifications(
         print("  skip (need parent_logins)")
         return []
 
-    viki = trainer_by_name(trainers, "Viki", "Fintová")
-    tomas = trainer_by_name(trainers, "Tomas", "Sikora")
-    viki_tok = trainer_login(client, viki["id"])
-    tomas_tok = trainer_login(client, tomas["id"])
-    orlova = branches["Orlova"]
-    lutyne = branches["Dolni Lutyne"]
+    t1 = trainer_by_name(trainers, "Trenér", "1")
+    t2 = trainer_by_name(trainers, "Trenér", "2")
+    t1_tok = trainer_login(client, t1["id"])
+    t2_tok = trainer_login(client, t2["id"])
+    b1 = branches["Pobocka1"]
+    b2 = branches["Pobocka2"]
     p1 = parent_logins[0]
     p2 = parent_logins[1]
     pt1 = parent_login(client, p1["username"], p1["password"])
-    pt2 = parent_login(client, p2["username"], p2["password"])
     created: list[dict] = []
 
     def post_trainer(tok: str, title: str, body: str, targets: list[dict]) -> dict:
@@ -367,55 +301,55 @@ def seed_notifications(
         ).raise_for_status()
 
     n1 = post_trainer(
-        viki_tok,
-        "[demo] Schůzka trenérů pátek",
-        "Pátek 18:00 sraz na Orlové — prosím potvrďte účast.",
+        t1_tok,
+        "[demo] Schůzka trenérů",
+        "Pátek 18:00 sraz na Pobocka1 — potvrďte účast.",
         [{"audience": "trainer"}],
     )
-    comment(tomas_tok, n1["id"], "Já budu, díky za info.")
+    comment(t2_tok, n1["id"], "Budu, díky.")
     created.append({"id": n1["id"], "label": "trenér→trenéři", "comments": 1})
 
     n2 = post_trainer(
-        viki_tok,
+        t1_tok,
         "[demo] Oprava šaten",
         "Šatny budou ve čtvrtek uzavřené — převlékání v chodbě.",
         [{"audience": "parent"}],
     )
-    comment(pt1, n2["id"], "Díky, předám dětem.")
-    comment(viki_tok, n2["id"], "Super, díky za zpětnou vazbu!")
+    comment(pt1, n2["id"], "Díky, předám dítěti.")
+    comment(t1_tok, n2["id"], "Super, díky.")
     created.append({"id": n2["id"], "label": "trenér→rodiče (všichni)", "comments": 2})
 
     n3 = post_trainer(
-        viki_tok,
-        "[demo] Turnaj U10 Orlova",
-        "Sraz v sobotu v 8:00 u haly — jen kategorie U10 z Orlové.",
-        [{"audience": "parent", "branch_id": orlova, "age_group": "U10"}],
+        t1_tok,
+        "[demo] Turnaj U10 Pobocka1",
+        "Sraz v sobotu v 8:00 — jen kategorie U10 z Pobocka1.",
+        [{"audience": "parent", "branch_id": b1, "age_group": "U10"}],
     )
-    created.append({"id": n3["id"], "label": "trenér→rodiče U10 @ Orlova", "comments": 0})
+    created.append({"id": n3["id"], "label": "trenér→rodiče U10 @ Pobocka1", "comments": 0})
 
     n4 = post_trainer(
-        viki_tok,
-        "[demo] Změna času — Dolni Lutyne",
-        "Úterní trénink posunut na 18:00 (platí jen pro tuto pobočku).",
+        t1_tok,
+        "[demo] Změna času — Pobocka2",
+        "Úterní trénink posunut na 18:00 (jen tato pobočka).",
         [
-            {"audience": "trainer", "branch_id": lutyne},
-            {"audience": "parent", "branch_id": lutyne},
+            {"audience": "trainer", "branch_id": b2},
+            {"audience": "parent", "branch_id": b2},
         ],
     )
-    comment(viki_tok, n4["id"], "Potvrzuji změnu pro Lutyň.")
-    created.append({"id": n4["id"], "label": "trenér→Lutyne (trenéři+rodiče)", "comments": 1})
+    comment(t1_tok, n4["id"], "Potvrzuji změnu pro Pobocka2.")
+    created.append({"id": n4["id"], "label": "trenér→Pobocka2 (trenéři+rodiče)", "comments": 1})
 
-    n5 = post_parent(pt1, "[demo] Dotaz rodiče", "Může naše dítě chybět příští týden kvůli nemoci?")
-    comment(viki_tok, n5["id"], "Ano, stačí napsat docházku jako nemoc — ozvu se.")
+    n5 = post_parent(pt1, "[demo] Dotaz rodiče", "Může dítě chybět příští týden kvůli nemoci?")
+    comment(t1_tok, n5["id"], "Ano, stačí označit docházku jako omluven.")
     created.append({"id": n5["id"], "label": "rodič→trenéři", "comments": 1})
 
     n6 = post_parent(
         pt1,
-        "[demo] Dotaz k pobočce Orlova",
+        "[demo] Dotaz k pobočce Pobocka1",
         "Je možné vyzvednout dítě o 15 min dřív?",
-        branch_id=orlova,
+        branch_id=b1,
     )
-    created.append({"id": n6["id"], "label": "rodič→trenéři @ Orlova", "comments": 0})
+    created.append({"id": n6["id"], "label": "rodič→trenéři @ Pobocka1", "comments": 0})
 
     for row in created:
         print(f"  + #{row['id']} {row['label']}")
@@ -432,10 +366,10 @@ def seed_chat(
         print("  skip (need parent_logins)")
         return []
 
-    viki = trainer_by_name(trainers, "Viki", "Fintová")
-    tomas = trainer_by_name(trainers, "Tomas", "Sikora")
-    viki_tok = trainer_login(client, viki["id"])
-    tomas_tok = trainer_login(client, tomas["id"])
+    t1 = trainer_by_name(trainers, "Trenér", "1")
+    t2 = trainer_by_name(trainers, "Trenér", "2")
+    t1_tok = trainer_login(client, t1["id"])
+    t2_tok = trainer_login(client, t2["id"])
     p1 = parent_logins[0]
     p2 = parent_logins[1]
     pt1 = parent_login(client, p1["username"], p1["password"])
@@ -458,16 +392,16 @@ def seed_chat(
             json={"body": body},
         ).raise_for_status()
 
-    conv_tp = start(viki_tok, "parent", p1["parent_id"])
-    send(viki_tok, conv_tp["id"], "Ahoj, prosím doneste souhlas s výjezdem do pátku.")
-    send(pt1, conv_tp["id"], "Dobře, pošlu ho zítra emailem.")
-    send(viki_tok, conv_tp["id"], "Díky!")
-    created.append({"id": conv_tp["id"], "label": "Viki ↔ rodič Tereza", "messages": 3})
+    conv_tp = start(t1_tok, "parent", p1["parent_id"])
+    send(t1_tok, conv_tp["id"], "Ahoj, prosím doneste souhlas s výjezdem do pátku.")
+    send(pt1, conv_tp["id"], "Dobře, pošlu ho zítra.")
+    send(t1_tok, conv_tp["id"], "Díky!")
+    created.append({"id": conv_tp["id"], "label": "trenér1 ↔ rodič1", "messages": 3})
 
-    conv_tt = start(viki_tok, "trainer", tomas["id"])
-    send(viki_tok, conv_tt["id"], "Ahoj, zítra přebíráš Orlovou?")
-    send(tomas_tok, conv_tt["id"], "Jo, budu tam od 17h.")
-    created.append({"id": conv_tt["id"], "label": "Viki ↔ Tomas", "messages": 2})
+    conv_tt = start(t1_tok, "trainer", t2["id"])
+    send(t1_tok, conv_tt["id"], "Ahoj, zítra přebíráš Pobocka1?")
+    send(t2_tok, conv_tt["id"], "Jo, budu tam od 17h.")
+    created.append({"id": conv_tt["id"], "label": "trenér1 ↔ trenér2", "messages": 2})
 
     conv_pp = start(pt1, "parent", p2["parent_id"])
     send(pt1, conv_pp["id"], "Ahoj, víš už program turnaje na sobotu?")
@@ -552,7 +486,7 @@ def assign_demo_parent_logins(students: list[dict]) -> list[dict]:
                 parent = (
                     await session.execute(select(Parent).where(Parent.id == s["parent_id"]))
                 ).scalar_one()
-                username = f"demo{i + 1}"
+                username = f"rodic{i + 1}"
                 parent.username = username
                 parent.password_hash = hash_pin(password)
                 logins.append({
@@ -606,7 +540,7 @@ def main() -> int:
         state = {
             "base_url": BASE_URL,
             "admin_token_hint": "admin/admin",
-            "trainer_id": trainer_by_name(trainers, "Viki", "Fintová")["id"],
+            "trainer_id": trainer_by_name(trainers, "Trenér", "1")["id"],
             "trainer_pin": TRAINER_PIN,
             "trainers": [{"id": t["id"], "name": f"{t['first_name']} {t['last_name']}"} for t in trainers],
             "branches": branches,

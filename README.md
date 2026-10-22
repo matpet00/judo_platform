@@ -60,7 +60,7 @@ Docházka na tatami, nástěnka, chat, akce/turnaje, registrace dětí a správa
 - **Akce** — turnaje, schůzky, tréninky; RSVP a veřejné share odkazy (QR / WhatsApp)
 - **Chat** — 1:1 zprávy
 - **Registrace** — žádost o přijetí dítěte + souhlas s ochranou osobních údajů
-- **Více poboček** — např. Orlova, Dolní Lutyně, Petřvald
+- **Více poboček** — např. Pobocka1, Pobocka2, Pobocka3
 - **Kategorie** — U8–U18, U21, Over 21
 
 ## Rychlý start
@@ -90,8 +90,8 @@ Výchozí demo přihlášení po seedu (viz `scripts/demo_state.json`):
 
 | Role | Přihlášení |
 |------|------------|
-| Trenér | výběr jména + PIN `123456` |
-| Rodič | `demo1` / `demo1234` |
+| Trenér | Trenér 1 … 6 + PIN `123456` |
+| Rodič | `rodic1` / `demo1234` |
 | Admin | `admin` / `admin` |
 
 Screenshoty pro README:
@@ -116,4 +116,4 @@ TRAINER_PIN=123456 python scripts/capture_readme_screenshots.py
 
 ---
 
-*Judo Klub Orlová — interní / demo platforma.*
+*Demo judo platforma — pouze anonymní testovací data.*

@@ -45,7 +45,7 @@ _redoc_url = "/redoc" if settings.enable_api_docs else None
 _openapi_url = "/openapi.json" if settings.enable_api_docs else None
 
 app = FastAPI(
-    title="Judo klub Orlová",
+    title="Judo Klub",
     lifespan=lifespan,
     docs_url=_docs_url,
     redoc_url=_redoc_url,

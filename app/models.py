@@ -61,45 +61,42 @@ class RegistrationRequestStatus(str, enum.Enum):
     rejected = "rejected"
 
 
-# (název v API/DB, fiktivní adresa pro vývoj — seed při startu)
+# (název v API/DB, fiktivní adresa pro vývoj — seed při startu; žádná reálná data)
 DEFAULT_BRANCHES: tuple[tuple[str, str], ...] = (
-    ("Orlova", "Hlavní třída 1285/45, 735 14 Orlová"),
-    ("Dolni Lutyne", "Komenského 312, 735 71 Dolní Lutyně"),
-    ("Petrvald", "Nádražní 201, 735 81 Petřvald"),
+    ("Pobocka1", "Ulice 1, 000 01 Mesto1"),
+    ("Pobocka2", "Ulice 2, 000 02 Mesto2"),
+    ("Pobocka3", "Ulice 3, 000 03 Mesto3"),
 )
 
 # (jméno, příjmení, pobočky) — idempotentní seed při startu API
 DEFAULT_TRAINERS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("Petr", "Matejcek", ("Orlova",)),
-    ("Tomas", "Sikora", ("Orlova",)),
-    ("Tomas", "Heczko", ("Orlova",)),
-    ("Viki", "Fintová", ("Orlova",)),
-    ("Tobias", "Mec", ("Orlova",)),
-    ("Lukáš", "Morcin", ("Orlova",)),
-    ("Eduard", "Lanča", ("Dolni Lutyne", "Orlova")),
-    ("Roman", "Bielczyk", ("Orlova", "Dolni Lutyne")),
-    ("Petr", "Steiniger", ("Petrvald",)),
+    ("Trenér", "1", ("Pobocka1",)),
+    ("Trenér", "2", ("Pobocka1",)),
+    ("Trenér", "3", ("Pobocka1",)),
+    ("Trenér", "4", ("Pobocka2", "Pobocka1")),
+    ("Trenér", "5", ("Pobocka2",)),
+    ("Trenér", "6", ("Pobocka3",)),
 )
 
-# (jméno, příjmení, věkovka, pobočka) — idempotentní seed při startu API (min. 5 dětí na pobočku)
+# (jméno, příjmení, věkovka, pobočka) — idempotentní seed při startu API
 DEFAULT_DEMO_STUDENTS: tuple[tuple[str, str, str, str], ...] = (
-    ("Tereza", "Nováková", "U8", "Orlova"),
-    ("Jan", "Svoboda", "U10", "Orlova"),
-    ("Eliška", "Novotná", "U12", "Orlova"),
-    ("Matěj", "Dvořák", "U14", "Orlova"),
-    ("Anna", "Černá", "U16", "Orlova"),
-    ("Jakub", "Procházka", "U18", "Orlova"),
-    ("Eva", "Pospíšilová", "U8", "Dolni Lutyne"),
-    ("Ondřej", "Hájek", "U10", "Dolni Lutyne"),
-    ("Veronika", "Jelínková", "U12", "Dolni Lutyne"),
-    ("Petr", "Urban", "U14", "Dolni Lutyne"),
-    ("Lucie", "Blažková", "U16", "Dolni Lutyne"),
-    ("Michal", "Krejčí", "U18", "Dolni Lutyne"),
-    ("Hana", "Benešová", "U8", "Petrvald"),
-    ("Pavel", "Šimek", "U10", "Petrvald"),
-    ("Zuzana", "Moravcová", "U12", "Petrvald"),
-    ("Daniel", "Navrátil", "U14", "Petrvald"),
-    ("Alena", "Tůmová", "U16", "Petrvald"),
+    ("Dítě", "1", "U8", "Pobocka1"),
+    ("Dítě", "2", "U10", "Pobocka1"),
+    ("Dítě", "3", "U12", "Pobocka1"),
+    ("Dítě", "4", "U14", "Pobocka1"),
+    ("Dítě", "5", "U16", "Pobocka1"),
+    ("Dítě", "6", "U18", "Pobocka1"),
+    ("Dítě", "7", "U8", "Pobocka2"),
+    ("Dítě", "8", "U10", "Pobocka2"),
+    ("Dítě", "9", "U12", "Pobocka2"),
+    ("Dítě", "10", "U14", "Pobocka2"),
+    ("Dítě", "11", "U16", "Pobocka2"),
+    ("Dítě", "12", "U18", "Pobocka2"),
+    ("Dítě", "13", "U8", "Pobocka3"),
+    ("Dítě", "14", "U10", "Pobocka3"),
+    ("Dítě", "15", "U12", "Pobocka3"),
+    ("Dítě", "16", "U14", "Pobocka3"),
+    ("Dítě", "17", "U16", "Pobocka3"),
 )
 
 # (název, pobočka, začátek, konec, weekdays ISO, trenér, spolutrenéři) — idempotentní seed při startu
@@ -108,33 +105,33 @@ DEFAULT_TRAINING_GROUPS: tuple[
     ...,
 ] = (
     (
-        "Orlova Úterý+Čtvrtek",
-        "Orlova",
+        "Pobocka1 Úterý+Čtvrtek",
+        "Pobocka1",
         time(17, 0),
         time(18, 30),
         (2, 4),
-        ("Lukáš", "Morcin"),
-        (("Petr", "Matejcek"),),
+        ("Trenér", "1"),
+        (("Trenér", "2"),),
     ),
     (
-        "Dolni Lutyne Úterý+Čtvrtek",
-        "Dolni Lutyne",
+        "Pobocka2 Úterý+Čtvrtek",
+        "Pobocka2",
         time(17, 0),
         time(18, 30),
         (2, 4),
-        ("Eduard", "Lanča"),
-        (("Roman", "Bielczyk"),),
+        ("Trenér", "4"),
+        (("Trenér", "5"),),
     ),
 )
 
 # (název, typ, místo, dní od dneška, čas začátku, autor) — idempotentní seed při startu
 DEFAULT_EVENT: tuple[str, EventType, str, int, time, tuple[str, str]] = (
-    "Jarní turnaj klubu",
+    "Demo turnaj",
     EventType.tournament,
-    "Orlova",
+    "Pobocka1",
     14,
     time(10, 0),
-    ("Viki", "Fintová"),
+    ("Trenér", "1"),
 )
 
 

@@ -174,7 +174,7 @@ async def test_trainer_pay_includes_tournament_rsvp(client):
                 "title": "Pay Cup",
                 "description": "",
                 "event_type": "tournament",
-                "location": "Orlová",
+                "location": "Pobocka1",
                 "starts_at": starts.isoformat(),
                 "targets": [{"audience": "trainer"}],
             },

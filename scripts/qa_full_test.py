@@ -211,9 +211,9 @@ def run_tests() -> Report:
     branch_id: int | None = None
     branch2_id: int | None = None
     branches = qa.client.get("/branches").json() if qa.client.get("/branches").status_code == 200 else []
-    orlova_id = next((b["id"] for b in branches if b["name"] == "Orlova"), None)
-    lutyne_id = next((b["id"] for b in branches if b["name"] == "Dolni Lutyne"), None)
-    petrvald_id = next((b["id"] for b in branches if b["name"] == "Petrvald"), None)
+    orlova_id = next((b["id"] for b in branches if b["name"] == "Pobocka1"), None)
+    lutyne_id = next((b["id"] for b in branches if b["name"] == "Pobocka2"), None)
+    petrvald_id = next((b["id"] for b in branches if b["name"] == "Pobocka3"), None)
     group_branch_b = lutyne_id or petrvald_id
 
     create_branch = qa.request(
@@ -391,14 +391,14 @@ def run_tests() -> Report:
     group_b_id: int | None = None
     if qa.trainer_token and orlova_id and student_ids:
         ga = qa.request(
-            "training group Orlova Mon/Wed/Fri",
+            "training group Pobocka1 Mon/Wed/Fri",
             "POST",
             "/training-groups",
             token=qa.trainer_token,
             write=True,
             json_body={
                 "branch_id": orlova_id,
-                "name": f"{TAG} Orlova 16:00",
+                "name": f"{TAG} Pobocka1 16:00",
                 "start_time": "16:00:00",
                 "end_time": "17:30:00",
                 "weekdays": [1, 3, 5],
@@ -584,7 +584,7 @@ def run_tests() -> Report:
                 "title": f"{TAG} Tournament",
                 "description": "QA event",
                 "event_type": "tournament",
-                "location": "Orlova",
+                "location": "Pobocka1",
                 "starts_at": starts.isoformat().replace("+00:00", "Z"),
                 "targets": [{"audience": "trainer"}, {"audience": "parent", "branch_id": orlova_id}],
             },

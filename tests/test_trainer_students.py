@@ -19,7 +19,7 @@ async def _trainer_students(client, token: str, branch_id: int):
 
 @pytest.mark.asyncio
 async def test_trainer_students_requires_token(client):
-    orlova = await _branch_id(client, "Orlova")
+    orlova = await _branch_id(client, "Pobocka1")
     response = await client.get(f"/trainers/me/students?branch_id={orlova}")
     assert response.status_code == 401
 
@@ -27,7 +27,7 @@ async def test_trainer_students_requires_token(client):
 @pytest.mark.asyncio
 async def test_trainer_students_forbidden_branch(client):
     token = await login_trainer(client)
-    dolni = await _branch_id(client, "Dolni Lutyne")
+    dolni = await _branch_id(client, "Pobocka2")
     response = await _trainer_students(client, token, dolni)
     assert response.status_code == 403
 
@@ -35,7 +35,7 @@ async def test_trainer_students_forbidden_branch(client):
 @pytest.mark.asyncio
 async def test_trainer_sees_roster_students(client):
     token = await login_trainer(client)
-    orlova = await _branch_id(client, "Orlova")
+    orlova = await _branch_id(client, "Pobocka1")
     response = await _trainer_students(client, token, orlova)
     assert response.status_code == 200
     body = response.json()
@@ -50,8 +50,8 @@ async def test_trainer_sees_roster_students(client):
 @pytest.mark.asyncio
 async def test_trainer_does_not_see_student_outside_groups(client):
     token = await login_trainer(client)
-    orlova = await _branch_id(client, "Orlova")
-    dolni = await _branch_id(client, "Dolni Lutyne")
+    orlova = await _branch_id(client, "Pobocka1")
+    dolni = await _branch_id(client, "Pobocka2")
 
     isolated = await client.post(
         "/students",
@@ -75,7 +75,7 @@ async def test_trainer_does_not_see_student_outside_groups(client):
 @pytest.mark.asyncio
 async def test_trainer_without_group_gets_empty_list(client):
     token = await login_trainer(client, trainer_id=2)
-    orlova = await _branch_id(client, "Orlova")
+    orlova = await _branch_id(client, "Pobocka1")
     response = await _trainer_students(client, token, orlova)
     assert response.status_code == 200
     assert response.json() == []
@@ -84,7 +84,7 @@ async def test_trainer_without_group_gets_empty_list(client):
 @pytest.mark.asyncio
 async def test_guest_from_attendance_appears_as_guest(client):
     token = await login_trainer(client)
-    orlova = await _branch_id(client, "Orlova")
+    orlova = await _branch_id(client, "Pobocka1")
     group_id = await first_group_id(client)
 
     guest = await client.post(
@@ -120,4 +120,4 @@ async def test_guest_from_attendance_appears_as_guest(client):
     guest_row = next(row for row in response.json() if row["id"] == guest_id)
     assert guest_row["is_guest"] is True
     assert guest_row["training_groups"] == []
-    assert guest_row["home_branch"] == "Orlova"
+    assert guest_row["home_branch"] == "Pobocka1"

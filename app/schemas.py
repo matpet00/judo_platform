@@ -31,8 +31,8 @@ class StudentBrief(BaseModel):
     """Žák bez pobočky a rodičů — pro výpis pod pobočkou (bez cyklů v JSON)."""
 
     id: int = Field(examples=[1])
-    first_name: str = Field(examples=["Pepa"])
-    last_name: str = Field(examples=["Zelený"])
+    first_name: str = Field(examples=["Dítě"])
+    last_name: str = Field(examples=["1"])
     age_group: AgeGroup = Field(examples=[AgeGroup.U10])
 
     model_config = {"from_attributes": True}
@@ -42,8 +42,8 @@ class TrainerBrief(BaseModel):
     """Trenér bez pobočky — pro výpis pod pobočkou."""
 
     id: int = Field(examples=[1])
-    first_name: str = Field(examples=["Jirka"])
-    last_name: str = Field(examples=["Trenér"])
+    first_name: str = Field(examples=["Trenér"])
+    last_name: str = Field(examples=["1"])
 
     model_config = {"from_attributes": True}
 
@@ -103,8 +103,8 @@ class TrainerCreate(BaseModel):
 
 class TrainerRead(BaseModel):
     id: int = Field(examples=[1])
-    first_name: str = Field(examples=["Jirka"])
-    last_name: str = Field(examples=["Trenér"])
+    first_name: str = Field(examples=["Trenér"])
+    last_name: str = Field(examples=["1"])
     created_at: datetime
     updated_at: datetime
     branches: list[BranchRead]
@@ -172,9 +172,9 @@ class ParentCreate(BaseModel):
 
 class ParentRead(BaseModel):
     id: int = Field(examples=[1])
-    first_name: str = Field(examples=["Marie"])
-    last_name: str = Field(examples=["Nováková"])
-    email: EmailStr = Field(examples=["marie.novakova@example.com"])
+    first_name: str = Field(examples=["Rodič"])
+    last_name: str = Field(examples=["1"])
+    email: EmailStr = Field(examples=["rodic1@example.com"])
     phone: str = Field(examples=["+420601234567"])
     created_at: datetime
     updated_at: datetime
@@ -435,8 +435,8 @@ class AgeGroupPreview(BaseModel):
 
 class StudentRead(BaseModel):
     id: int = Field(examples=[1])
-    first_name: str = Field(examples=["Pepa"])
-    last_name: str = Field(examples=["Zelený"])
+    first_name: str = Field(examples=["Dítě"])
+    last_name: str = Field(examples=["1"])
     age_group: AgeGroup = Field(examples=[AgeGroup.U10])
     birth_date: date | None = None
     birth_number: str | None = None
@@ -690,7 +690,7 @@ class TrainingGroupPatch(BaseModel):
 class TrainingGroupRead(BaseModel):
     id: int = Field(examples=[1])
     branch_id: int = Field(examples=[1])
-    name: str = Field(examples=["Orlova 16:00–17:30"])
+    name: str = Field(examples=["Pobocka1 16:00–17:30"])
     start_time: time
     end_time: time
     weekdays: list[int] | None = Field(examples=[[1, 3]])
@@ -712,7 +712,7 @@ class TrainingGroupDetailRead(TrainingGroupRead):
 class TrainingGroupBrief(BaseModel):
     id: int = Field(examples=[1])
     branch_id: int = Field(examples=[1])
-    name: str = Field(examples=["Orlova 16:00–17:30"])
+    name: str = Field(examples=["Pobocka1 16:00–17:30"])
     start_time: time
     end_time: time
     weekdays: list[int] | None = None
@@ -1154,8 +1154,8 @@ class NotificationCommentCreate(BaseModel):
 
 class ParentBrief(BaseModel):
     id: int = Field(examples=[1])
-    first_name: str = Field(examples=["Marie"])
-    last_name: str = Field(examples=["Nováková"])
+    first_name: str = Field(examples=["Rodič"])
+    last_name: str = Field(examples=["1"])
 
     model_config = {"from_attributes": True}
 

@@ -113,8 +113,8 @@ def main() -> int:
 
     state = json.load(open(STATE_PATH, encoding="utf-8"))
     branches = state["branches"]
-    orlova = branches["Orlova"]
-    lutyne = branches["Dolni Lutyne"]
+    orlova = branches["Pobocka1"]
+    lutyne = branches["Pobocka2"]
     parent_logins = state.get("parent_logins") or []
     if len(parent_logins) < 2:
         print("Need parent_logins in demo_state.json", file=sys.stderr)
@@ -135,7 +135,7 @@ def main() -> int:
         n1 = post_trainer(
             client, tt,
             title="[demo] Schůzka trenérů pátek",
-            body="Pátek 18:00 sraz na Orlové — prosím potvrďte účast.",
+            body="Pátek 18:00 sraz na Pobocka1 — prosím potvrďte účast.",
             targets=[{"audience": "trainer"}],
         )
         add_comment(client, t2t, n1["id"], "Já budu, díky za info.")
@@ -154,19 +154,19 @@ def main() -> int:
         add_comment(client, tt, n2["id"], "Super, díky za zpětnou vazbu!")
         created.append({"id": n2["id"], "label": "trenér→rodiče (všichni)", "comments": 2})
 
-        # 3) Trenér → rodiče U10 jen Orlova
+        # 3) Trenér → rodiče U10 jen Pobocka1
         n3 = post_trainer(
             client, tt,
-            title="[demo] Turnaj U10 Orlova",
-            body="Sraz v sobotu v 8:00 u haly — jen kategorie U10 z Orlové.",
+            title="[demo] Turnaj U10 Pobocka1",
+            body="Sraz v sobotu v 8:00 u haly — jen kategorie U10 z Pobocka1.",
             targets=[{"audience": "parent", "branch_id": orlova, "age_group": "U10"}],
         )
-        created.append({"id": n3["id"], "label": "trenér→rodiče U10 @ Orlova", "comments": 0})
+        created.append({"id": n3["id"], "label": "trenér→rodiče U10 @ Pobocka1", "comments": 0})
 
-        # 4) Trenér → všichni @ Dolni Lutyne (trenéři + rodiče pobočky)
+        # 4) Trenér → všichni @ Pobocka2 (trenéři + rodiče pobočky)
         n4 = post_trainer(
             client, tt,
-            title="[demo] Změna času — Dolni Lutyne",
+            title="[demo] Změna času — Pobocka2",
             body="Úterní trénink posunut na 18:00 (platí jen pro tuto pobočku).",
             targets=[
                 {"audience": "trainer", "branch_id": lutyne},
@@ -175,8 +175,8 @@ def main() -> int:
         )
         p2 = parent_logins[1]
         pt2 = parent_token(client, p2["username"], p2["password"])
-        add_comment(client, tt, n4["id"], "Potvrzuji změnu pro Lutyň.")
-        created.append({"id": n4["id"], "label": "trenér→Lutyne (trenéři+rodiče)", "comments": 1})
+        add_comment(client, tt, n4["id"], "Potvrzuji změnu pro Pobocka2.")
+        created.append({"id": n4["id"], "label": "trenér→Pobocka2 (trenéři+rodiče)", "comments": 1})
 
         # 5) Rodič → trenéři (celý klub) + odpověď trenéra
         n5 = post_parent_to_trainers(
@@ -187,14 +187,14 @@ def main() -> int:
         add_comment(client, tt, n5["id"], "Ano, stačí napsat docházku jako nemoc — ozvu se.")
         created.append({"id": n5["id"], "label": "rodič→trenéři", "comments": 1})
 
-        # 6) Rodič → trenéři jen Orlova (bez reakce — k rozkliknutí)
+        # 6) Rodič → trenéři jen Pobocka1 (bez reakce — k rozkliknutí)
         n6 = post_parent_to_trainers(
             client, pt1,
-            title="[demo] Dotaz k pobočce Orlova",
+            title="[demo] Dotaz k pobočce Pobocka1",
             body="Je možné vyzvednout dítě o 15 min dřív?",
             branch_id=orlova,
         )
-        created.append({"id": n6["id"], "label": "rodič→trenéři @ Orlova", "comments": 0})
+        created.append({"id": n6["id"], "label": "rodič→trenéři @ Pobocka1", "comments": 0})
 
         state["demo_notifications"] = created
         with open(STATE_PATH, "w", encoding="utf-8") as f:

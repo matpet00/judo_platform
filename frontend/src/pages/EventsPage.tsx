@@ -1256,7 +1256,7 @@ function TrainingSetupForm({
         </label>
         <label className="notification-field">
           Název tréninku
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Např. Orlová mladší" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Např. skupina A" />
         </label>
       </div>
       <div className="events-compose__row">

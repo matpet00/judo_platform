@@ -7,14 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AttendanceRecord, Branch, EventRsvp, Student, student_branches
 
-FALLBACK_BRANCH_NAME = "Orlova"
+FALLBACK_BRANCH_NAME = "Pobocka1"
 
 
 async def get_fallback_branch(db: AsyncSession, deleted_branch_id: int) -> Branch:
-    """Default home branch for students left without a pobočka (usually Orlova)."""
-    orlova = await db.scalar(select(Branch).where(Branch.name == FALLBACK_BRANCH_NAME))
-    if orlova is not None and orlova.id != deleted_branch_id:
-        return orlova
+    """Default home branch for students left without a pobočka."""
+    primary = await db.scalar(select(Branch).where(Branch.name == FALLBACK_BRANCH_NAME))
+    if primary is not None and primary.id != deleted_branch_id:
+        return primary
 
     fallback = await db.scalar(
         select(Branch).where(Branch.id != deleted_branch_id).order_by(Branch.id),
@@ -45,7 +45,7 @@ async def orphan_student_ids_on_branch(db: AsyncSession, branch_id: int) -> list
 
 
 async def unlink_branch_students(db: AsyncSession, branch_id: int) -> None:
-    """Unlink students from a deleted branch; orphans move to Orlova (fallback)."""
+    """Unlink students from a deleted branch; orphans move to fallback branch."""
     orphan_ids = await orphan_student_ids_on_branch(db, branch_id)
     fallback = await get_fallback_branch(db, branch_id) if orphan_ids else None
 
@@ -68,15 +68,15 @@ async def unlink_branch_students(db: AsyncSession, branch_id: int) -> None:
 
 
 async def cleanup_students_without_branches(conn) -> None:
-    """Assign legacy students with no branch to Orlova."""
-    orlova_row = await conn.execute(
+    """Assign legacy students with no branch to the fallback branch."""
+    fallback_row = await conn.execute(
         text("SELECT id FROM branches WHERE name = :name LIMIT 1"),
         {"name": FALLBACK_BRANCH_NAME},
     )
-    orlova = orlova_row.first()
-    if orlova is None:
+    fallback = fallback_row.first()
+    if fallback is None:
         return
-    orlova_id = orlova[0]
+    orlova_id = fallback[0]
 
     result = await conn.execute(
         text("SELECT id FROM students WHERE id NOT IN (SELECT student_id FROM student_branches)"),

@@ -26,7 +26,7 @@ from app.schemas import (
 )
 from app.security import create_parent_token, hash_pin
 
-CLUB_NAME = "JUDO KLUB ORLOVÁ"
+CLUB_NAME = "Judo Klub"
 
 
 def normalize_email(email: str) -> str:

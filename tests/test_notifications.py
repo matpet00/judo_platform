@@ -54,7 +54,7 @@ async def test_branch_targets_are_stored(client):
     token = await login_trainer(client, trainer_id=1)
 
     branches = await client.get("/branches")
-    orlova_id = next(row["id"] for row in branches.json() if row["name"] == "Orlova")
+    orlova_id = next(row["id"] for row in branches.json() if row["name"] == "Pobocka1")
 
     response = await client.post(
         "/notifications",
@@ -83,7 +83,7 @@ async def test_parent_category_targets_are_stored(client):
     token = await login_trainer(client, trainer_id=1)
 
     branches = await client.get("/branches")
-    orlova_id = next(row["id"] for row in branches.json() if row["name"] == "Orlova")
+    orlova_id = next(row["id"] for row in branches.json() if row["name"] == "Pobocka1")
 
     response = await client.post(
         "/notifications",
@@ -565,8 +565,8 @@ async def test_branch_scoped_notification_visibility(client):
 
     branches = await client.get("/branches")
     branch_by_name = {row["name"]: row["id"] for row in branches.json()}
-    orlova_id = branch_by_name["Orlova"]
-    petrvald_id = branch_by_name["Petrvald"]
+    orlova_id = branch_by_name["Pobocka1"]
+    petrvald_id = branch_by_name["Pobocka3"]
 
     admin = await login_admin(client)
     created = await client.post(
@@ -581,8 +581,8 @@ async def test_branch_scoped_notification_visibility(client):
     orlova_only = await client.post(
         "/notifications",
         json={
-            "title": "Orlova only",
-            "body": "For Orlova trainers.",
+            "title": "Pobocka1 only",
+            "body": "For Pobocka1 trainers.",
             "targets": [{"audience": "trainer", "branch_id": orlova_id}],
         },
         headers=write_headers(author_token),
@@ -607,7 +607,7 @@ async def test_branch_scoped_notification_visibility(client):
     assert petrvald_listing.status_code == 200
     petrvald_titles = {row["title"] for row in petrvald_listing.json()}
     assert "All trainers" in petrvald_titles
-    assert "Orlova only" not in petrvald_titles
+    assert "Pobocka1 only" not in petrvald_titles
 
     orlova_listing = await client.get(
         "/notifications",
@@ -615,7 +615,7 @@ async def test_branch_scoped_notification_visibility(client):
     )
     assert orlova_listing.status_code == 200
     orlova_titles = {row["title"] for row in orlova_listing.json()}
-    assert {"All trainers", "Orlova only"} <= orlova_titles
+    assert {"All trainers", "Pobocka1 only"} <= orlova_titles
 
 
 @pytest.mark.asyncio
@@ -663,8 +663,8 @@ async def test_parent_can_write_to_all_trainers_and_thread(client):
 async def test_parent_message_scoped_to_branch_and_edit_permissions(client):
     branches = await client.get("/branches")
     branch_by_name = {row["name"]: row["id"] for row in branches.json()}
-    orlova_id = branch_by_name["Orlova"]
-    petrvald_id = branch_by_name["Petrvald"]
+    orlova_id = branch_by_name["Pobocka1"]
+    petrvald_id = branch_by_name["Pobocka3"]
 
     author_token = await login_trainer(client, trainer_id=1)
     admin = await login_admin(client)
@@ -677,13 +677,13 @@ async def test_parent_message_scoped_to_branch_and_edit_permissions(client):
 
     create = await client.post(
         "/notifications/to-trainers",
-        json={"title": "Orlová dotaz", "body": "Jen pro Orlovou.", "branch_id": orlova_id},
+        json={"title": "Pobocka1 dotaz", "body": "Jen pro Pobocka1.", "branch_id": orlova_id},
         headers={**write_headers(), **_parent_bearer(1)},
     )
     assert create.status_code == 201
     notification_id = create.json()["id"]
 
-    # Petrvald trainer is out of scope and should not see it.
+    # Pobocka3 trainer is out of scope and should not see it.
     petrvald_list = await client.get("/notifications", headers={"Authorization": f"Bearer {petrvald_token}"})
     assert notification_id not in {row["id"] for row in petrvald_list.json()}
 

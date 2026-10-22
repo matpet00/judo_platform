@@ -1,10 +1,13 @@
 import { Link } from "react-router-dom";
+import { CLUB_NAME } from "../lib/clubBrand";
 
 export function AppFooter() {
   const year = new Date().getFullYear();
   return (
     <footer className="app-footer">
-      <span>Judo klub Orlová {year}</span>
+      <span>
+        {CLUB_NAME} {year}
+      </span>
       <span className="app-footer__sep" aria-hidden="true">
         ·
       </span>

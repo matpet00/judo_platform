@@ -94,7 +94,7 @@ def main() -> int:
         shot(page, "01-landing")
 
         # 2) Trainer hub
-        login_trainer(page, state, "Petr Matejcek")
+        login_trainer(page, state, state["trainers"][0]["name"])
         shot(page, "02-trainer-hub")
 
         # 3) Attendance today
@@ -118,13 +118,10 @@ def main() -> int:
             page.wait_for_timeout(400)
         shot(page, "04-session-attendance")
 
-        # 5) Events — return to hub via SPA home, then open Akce
-        page.locator("a.back-link, a").filter(has_text=re.compile(r"Zpět|Menu")).first.click()
-        page.wait_for_timeout(400)
-        # From /today → Menu
-        menu = page.get_by_role("link", name="Menu")
-        if menu.count():
-            menu.click()
+        # 5) Events
+        page.locator("a").filter(has_text="Zpět").first.click()
+        page.wait_for_url("**/today", timeout=10000)
+        page.get_by_role("link", name="Menu").click()
         page.get_by_text("Kam chceš jít?").wait_for(timeout=10000)
         page.locator(".trainer-card").filter(has_text="Akce").click()
         page.wait_for_url("**/events", timeout=15000)
@@ -132,8 +129,8 @@ def main() -> int:
         page.wait_for_timeout(800)
         shot(page, "05-trainer-events")
 
-        # 6) Board / notifications
-        page.get_by_role("link", name="Menu").click()
+        # 6) Board — Events uses button.board-link for Menu
+        page.locator("button.board-link, a.board-link").filter(has_text="Menu").click()
         page.get_by_text("Kam chceš jít?").wait_for(timeout=10000)
         page.locator(".trainer-card").filter(has_text="Board").click()
         page.wait_for_url("**/board", timeout=15000)

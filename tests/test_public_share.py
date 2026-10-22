@@ -15,7 +15,7 @@ async def test_public_event_share_page(client):
             "title": "Share Turnaj",
             "description": "Veřejný popis",
             "event_type": "tournament",
-            "location": "Hala Orlová",
+            "location": "Hala Pobocka1",
             "starts_at": "2030-05-10T16:00:00+02:00",
             "ends_at": None,
             "targets": [{"audience": "parent", "branch_id": branch_id, "age_group": "U8"}],
@@ -31,7 +31,7 @@ async def test_public_event_share_page(client):
     body = public.json()
     assert body["kind"] == "event"
     assert body["title"] == "Share Turnaj"
-    assert body["location"] == "Hala Orlová"
+    assert body["location"] == "Hala Pobocka1"
     assert body["description"] == "Veřejný popis"
     assert any("U8" in label for label in body["audience_labels"])
     assert body["intended_for_you"] is None

@@ -63,7 +63,7 @@ async def _assert_trainer_features(client, token: str) -> None:
             "title": "PIN test event",
             "description": "After PIN change",
             "event_type": "training",
-            "location": "Orlova",
+            "location": "Pobocka1",
             "starts_at": (datetime.now(UTC) + timedelta(days=3)).isoformat(),
             "targets": [{"audience": "trainer"}],
         },

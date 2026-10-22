@@ -196,7 +196,7 @@ function ChildFields({
           <input
             value={child.first_name}
             onChange={(e) => onChange({ ...child, first_name: e.target.value })}
-            placeholder="Pepa"
+            placeholder="Dítě"
             required
           />
         </label>
@@ -205,7 +205,7 @@ function ChildFields({
           <input
             value={child.last_name}
             onChange={(e) => onChange({ ...child, last_name: e.target.value })}
-            placeholder="Novák"
+            placeholder="1"
             required
           />
         </label>

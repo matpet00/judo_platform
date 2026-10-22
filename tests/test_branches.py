@@ -124,7 +124,7 @@ async def test_delete_branch_moves_orphans_to_orlova(client: AsyncClient) -> Non
 
     students = await client.get("/students", headers=write_headers(trainer))
     row = next(s for s in students.json() if s["id"] == student_id)
-    assert [b["name"] for b in row["branches"]] == ["Orlova"]
+    assert [b["name"] for b in row["branches"]] == ["Pobocka1"]
 
 
 @pytest.mark.asyncio

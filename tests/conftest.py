@@ -24,9 +24,9 @@ DEFAULT_PIN = "1234"
 async def seed_test_data() -> None:
     async with async_session_maker() as session:
         async with session.begin():
-            branch = (await session.execute(select(Branch).where(Branch.name == "Orlova"))).scalar_one()
+            branch = (await session.execute(select(Branch).where(Branch.name == "Pobocka1"))).scalar_one()
 
-            trainer = Trainer(first_name="Petr", last_name="Matej", pin_hash=hash_pin(DEFAULT_PIN))
+            trainer = Trainer(first_name="Trenér", last_name="1", pin_hash=hash_pin(DEFAULT_PIN))
             trainer.branches.append(branch)
             other_trainer = Trainer(first_name="Jana", last_name="Coach", pin_hash=hash_pin(DEFAULT_PIN))
             other_trainer.branches.append(branch)

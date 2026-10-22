@@ -2,9 +2,9 @@
 """Vytvoří rodičovský účet (username 'rodic', heslo 'rodic') se dvěma dětmi.
 
 Rodiče se nepřihlašují PINem, ale username/heslem. Účet dostane dvě existující
-děti: jedno U8 z pobočky Orlova a jedno U10 z pobočky Dolni Lutyne. Protože
-v Dolni Lutyne zatím žádné dítě není, vezme se existující U10 dítě a přeřadí
-se na Dolni Lutyne.
+děti: jedno U8 z pobočky Pobocka1 a jedno U10 z pobočky Pobocka2. Protože
+v Pobocka2 zatím žádné dítě není, vezme se existující U10 dítě a přeřadí
+se na Pobocka2.
 
 Spouštět z kořene projektu (ideálně když neběží zápis z API):
 
@@ -44,8 +44,8 @@ async def main() -> None:
 
     async with async_session_maker() as session:
         async with session.begin():
-            orlova = await _branch(session, "Orlova")
-            lutyne = await _branch(session, "Dolni Lutyne")
+            orlova = await _branch(session, "Pobocka1")
+            lutyne = await _branch(session, "Pobocka2")
 
             u8 = (
                 await session.execute(
@@ -58,7 +58,7 @@ async def main() -> None:
                 )
             ).scalars().first()
             if u8 is None:
-                print("Nenašlo se žádné U8 dítě na pobočce Orlova.", file=sys.stderr)
+                print("Nenašlo se žádné U8 dítě na pobočce Pobocka1.", file=sys.stderr)
                 sys.exit(1)
 
             u10 = (
@@ -74,7 +74,7 @@ async def main() -> None:
                 print("Nenašlo se žádné U10 dítě.", file=sys.stderr)
                 sys.exit(1)
 
-            # V Dolni Lutyne zatím žádné dítě není -> přeřadíme U10 dítě na Lutyne.
+            # V Pobocka2 zatím žádné dítě není -> přeřadíme U10 dítě na Lutyne.
             u10.branches = [lutyne]
 
             parent = (
@@ -108,8 +108,8 @@ async def main() -> None:
         await session.refresh(parent, attribute_names=["children"])
         print(
             f"Hotovo: rodič username={USERNAME!r} heslo={PASSWORD!r} (id={parent.id})\n"
-            f"  dítě U8 (Orlova): id={u8.id} {u8.first_name} {u8.last_name}\n"
-            f"  dítě U10 (Dolni Lutyne): id={u10.id} {u10.first_name} {u10.last_name}",
+            f"  dítě U8 (Pobocka1): id={u8.id} {u8.first_name} {u8.last_name}\n"
+            f"  dítě U10 (Pobocka2): id={u10.id} {u10.first_name} {u10.last_name}",
         )
 
 

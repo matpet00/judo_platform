@@ -20,22 +20,12 @@ uvicorn app.main:app --reload --port 8001
 - Dokumentace API: http://127.0.0.1:8001/docs  
 - SQLite soubor (výchozí): `./judo.db` (vznikne při startu v aktuálním adresáři)
 
-### Demo žáci (Orlova) přes API
+### Demo data přes API
 
-Po spuštění API můžeš z kořene projektu vytvořit **30 fiktivních žáků** na pobočce **Orlova** čistě voláním REST (žádný seed v aplikaci):
-
-```bash
-python scripts/populate_orlova_students.py
-```
-
-Jiný port (např. výchozí uvicorn 8000): `BASE_URL=http://127.0.0.1:8000 python scripts/populate_orlova_students.py`
-
-Skript má výchozí `BASE_URL` **:8001** (stejně jako příkaz výše). Očekává, že na tom URL už běží **toto** API (`GET /health` → `{"status":"ok"}`). Když `GET /branches` vrátí **404**, na daném portu typicky běží jiná aplikace — spusť `uvicorn` z adresáře **judo** v druhém terminálu, nebo nastav správný `BASE_URL`.
-
-Trenér **Petr Matej** na Orlově (jednorázově přes API, pokud ještě neexistuje):
+Preferovaný způsob (reset + generická jména `Dítě 1`, `Rodič 1`, `Trenér 1`, …):
 
 ```bash
-python scripts/create_trainer_petr_matej_orlova.py
+python scripts/reset_and_seed_demo.py
 ```
 
 ## Endpointy (shrnutí)
@@ -110,7 +100,7 @@ Backend musí běžet na portu **8001** (CORS povolen pro `:5173`).
 2. **`/today`** — přehled: probíhající slot, existující docházky, nové tréninky.
 3. **`/session/:id`** — fullscreen karty: swipe **→** přítomen, **←** nepřítomen, **2× tap** omluven; přepínač Seznam/Karty.
 
-**Výchozí seed poboček** (viz `DEFAULT_BRANCHES` v [`app/models.py`](app/models.py)): Orlova, Dolni Lutyne, Petrvald + fiktivní adresy.
+**Výchozí seed poboček** (viz `DEFAULT_BRANCHES` v [`app/models.py`](app/models.py)): Pobocka1, Pobocka2, Pobocka3 + fiktivní adresy.
 
 **Migrace schématu:** při změně sloupců v SQLite smažte lokální `judo.db` a nechte aplikaci znovu vytvořit tabulky při startu. U entit pobočka, trenér, rodič a žák odpovědi obsahují `created_at` a `updated_at` (časová razítka z databáze).
 

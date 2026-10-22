@@ -252,8 +252,8 @@ def area_admin_crud(page, state: dict, qa: UIQA) -> None:
 
     page.get_by_role("button", name="Pobočky").click()
     wait_ready(page)
-    qa.check("3 branches in admin", page.get_by_text("Orlova").count() > 0)
-    qa.check("Dolni Lutyne branch", page.get_by_text("Dolni Lutyne").count() > 0)
+    qa.check("3 branches in admin", page.get_by_text("Pobocka1").count() > 0)
+    qa.check("Pobocka2 branch", page.get_by_text("Pobocka2").count() > 0)
 
     page.get_by_role("button", name="Přehled").click()
     wait_ready(page)
