@@ -1,128 +1,119 @@
-# Judo club API
+# Judo Platform
 
-Minimální FastAPI + async SQLite (SQLAlchemy 2 + `aiosqlite`) pro žáky, trenéry a rodiče.
+Mobilní webová platforma pro **judo klub** — trenéři, rodiče i administrativa na jednom místě.
 
-## Nastavení
+Docházka na tatami, nástěnka, chat, akce/turnaje, registrace dětí a správa poboček. Postaveno jako FastAPI + React (Vite), s demo daty pro lokální vyzkoušení.
+
+<p align="center">
+  <img src="docs/screenshots/01-landing.png" alt="Přihlášení — výběr role" width="280" />
+</p>
+
+## Pro koho je to
+
+| Role | Co umí |
+|------|--------|
+| **Trenér** | Docházka (swipe / seznam), nástěnka, chat, akce, děti na pobočce, reporty k proplacení |
+| **Rodič** | Přehled docházky dítěte, nástěnka, chat, RSVP na akce, správa údajů |
+| **Admin** | Trenéři, děti, rodiče, pobočky, registrace, exporty a statistiky |
+| **Nový zájemce** | Veřejná registrace dítěte ke schválení klubem |
+
+## Náhledy (demo data)
+
+### Trenér — menu a docházka
+
+<p align="center">
+  <img src="docs/screenshots/02-trainer-hub.png" alt="Menu trenéra" width="240" />
+  &nbsp;
+  <img src="docs/screenshots/03-trainer-attendance.png" alt="Dnešní tréninky" width="240" />
+  &nbsp;
+  <img src="docs/screenshots/04-session-attendance.png" alt="Označení docházky" width="240" />
+</p>
+
+### Nástěnka a akce
+
+<p align="center">
+  <img src="docs/screenshots/06-trainer-board.png" alt="Nástěnka / notifikace" width="280" />
+  &nbsp;
+  <img src="docs/screenshots/05-trainer-events.png" alt="Akce a turnaje" width="280" />
+</p>
+
+### Rodič a registrace
+
+<p align="center">
+  <img src="docs/screenshots/07-parent-home.png" alt="Domovská stránka rodiče" width="240" />
+  &nbsp;
+  <img src="docs/screenshots/08-parent-attendance.png" alt="Přehled docházky dítěte" width="240" />
+  &nbsp;
+  <img src="docs/screenshots/09-registration.png" alt="Registrace dítěte" width="240" />
+</p>
+
+### Administrace
+
+<p align="center">
+  <img src="docs/screenshots/10-admin-overview.png" alt="Admin přehled klubu" width="720" />
+</p>
+
+## Hlavní funkce
+
+- **Docházka** — rychlé označení přítomný / nepřítomný / omluven, hosté z jiné pobočky, měsíční přehledy
+- **Nástěnka** — oznámení mezi trenéry a rodiči s odpověďmi
+- **Akce** — turnaje, schůzky, tréninky; RSVP a veřejné share odkazy (QR / WhatsApp)
+- **Chat** — 1:1 zprávy
+- **Registrace** — žádost o přijetí dítěte + souhlas s ochranou osobních údajů
+- **Více poboček** — např. Orlova, Dolní Lutyně, Petřvald
+- **Kategorie** — U8–U18, U21, Over 21
+
+## Rychlý start
 
 ```bash
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+# Backend
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-Volitelně zkopírujte `.env.example` na `.env` a doplňte SMTP pro odesílání e-mailů.
-
-## Spuštění
-
-```bash
 uvicorn app.main:app --reload --port 8001
-```
 
-- Dokumentace API: http://127.0.0.1:8001/docs  
-- SQLite soubor (výchozí): `./judo.db` (vznikne při startu v aktuálním adresáři)
-
-### Demo žáci (Orlova) přes API
-
-Po spuštění API můžeš z kořene projektu vytvořit **30 fiktivních žáků** na pobočce **Orlova** čistě voláním REST (žádný seed v aplikaci):
-
-```bash
-python scripts/populate_orlova_students.py
-```
-
-Jiný port (např. výchozí uvicorn 8000): `BASE_URL=http://127.0.0.1:8000 python scripts/populate_orlova_students.py`
-
-Skript má výchozí `BASE_URL` **:8001** (stejně jako příkaz výše). Očekává, že na tom URL už běží **toto** API (`GET /health` → `{"status":"ok"}`). Když `GET /branches` vrátí **404**, na daném portu typicky běží jiná aplikace — spusť `uvicorn` z adresáře **judo** v druhém terminálu, nebo nastav správný `BASE_URL`.
-
-Trenér **Petr Matej** na Orlově (jednorázově přes API, pokud ještě neexistuje):
-
-```bash
-python scripts/create_trainer_petr_matej_orlova.py
-```
-
-## Endpointy (shrnutí)
-
-| Metoda | Cesta | Popis |
-|--------|--------|--------|
-| GET | `/health` | Stav API |
-| GET | `/branches` | Seznam poboček + **`students`** a **`trainers`** (zjednodušené objekty) |
-| GET | `/branches/{id}` | Jedna pobočka včetně **`students`** a **`trainers`** |
-| POST | `/branches` | Nová pobočka (odpověď stejný tvar; `students` / `trainers` obvykle `[]`) |
-| PATCH | `/branches/{id}` | Částečná úprava `name` / `address`; odpověď včetně **`students`** a **`trainers`** |
-| DELETE | `/branches/{id}` | Smazání pobočky (409, pokud má žáky nebo trenéry) |
-| GET | `/trainers` | Seznam trenérů |
-| POST | `/trainers` | Trenér: `first_name`, `last_name`, **`branch_ids`** (1+ poboček, M:N) |
-| PATCH | `/trainers/{id}` | Částečná úprava; volitelně **`branch_ids`** (nahradí celý seznam, min. 1) |
-| DELETE | `/trainers/{id}` | Smazání trenéra |
-| GET | `/parents` | Seznam rodičů |
-| POST | `/parents` | Rodič: `first_name`, `last_name`, `email`, `phone` |
-| PATCH | `/parents/{id}` | Částečná úprava: `first_name`, `last_name`, `email`, `phone` |
-| DELETE | `/parents/{id}` | Smazání rodiče (odpadnou vazby na žáky) |
-| GET | `/students` | Seznam žáků |
-| POST | `/students` | Žák: `first_name`, `last_name`, `age_group`, **`branch_ids`** (1+ poboček, M:N), `parents` … |
-| PATCH | `/students/{id}` | Částečná úprava; volitelně **`branch_ids`** (nahradí celý seznam, min. 1) nebo **`parents`** … |
-| DELETE | `/students/{id}` | Smazání žáka |
-| GET | `/training-groups` | Seznam tréninkových skupin včetně **`students`** (volitelně `?branch_id=`) |
-| POST | `/training-groups` | Nová skupina: `branch_id`, `name`, `start_time`, `end_time`, volitelně `weekdays` |
-| GET | `/training-groups/{id}` | Skupina včetně **`students`** |
-| PATCH | `/training-groups/{id}` | Částečná úprava slotu |
-| DELETE | `/training-groups/{id}` | Smazání (409, pokud existují tréninky) |
-| PUT | `/training-groups/{id}/students` | Nahradit celý roster (`student_ids`) |
-| POST | `/training-groups/{id}/sessions` | Trénink pro daný den (`session_date`); **201** nový, **200** už existuje |
-| GET | `/training-sessions` | Seznam tréninků (`?branch_id=`, `?trainer_id=`, `?training_group_id=`, **`?session_date=`**) |
-| POST | `/training-sessions` | Nový trénink: **`training_group_id`**, **`session_date`**, volitelně `trainer_id`, `notes` (409 pokud existuje) |
-| GET | `/training-sessions/{id}` | Trénink včetně **`students`** (roster + `attendance`) a **`attendance_records`** |
-| PATCH | `/training-sessions/{id}` | Částečná úprava (`session_date`, `training_group_id`, `trainer_id`, `notes`) |
-| DELETE | `/training-sessions/{id}` | Smazání tréninku (včetně docházky) |
-| GET | `/training-sessions/{id}/attendance` | Docházka na tréninku |
-| PUT | `/training-sessions/{id}/attendance` | Hromadný upsert docházky (`records`: `[{student_id, status}, …]`) |
-| POST | `/training-sessions/{id}/attendance` | Jeden záznam docházky (`student_id`, `status`, volitelně `recorded_by_id`) |
-| GET/PATCH/DELETE | `/training-sessions/{id}/attendance/{attendance_id}` | Jedna záznam docházky |
-| GET | `/students/{id}/attendance` | Historie docházky žáka (volitelně `?session_id=`) |
-| POST | `/mail/parents` | E-mail rodičům (`parent_ids`, `subject`, `body`) — vyžaduje SMTP v `.env` |
-
-**PATCH:** posílej jen pole, která chceš změnit; prázdné tělo → **400** `No fields to update.`
-
-Bez `SMTP_HOST` a `SMTP_FROM` vrátí `/mail/parents` **503**.
-
-**Žák i trenér ↔ pobočka:** vztah **M:N** — pole **`branch_ids`** při zápisu, v odpovědi **`branches`** (řazeno podle id pobočky).
-
-**Docházka:** `status` je `present`, `absent` nebo `excused`. Platí roster tréninkové skupiny. **`GET /training-sessions/{id}`** vrací všechny žáky ve skupině s `attendance: null` (ještě neoznačeno) nebo stavem. Duplicitní **POST** jednoho záznamu → **409** (použij **PUT** bulk nebo **PATCH**).
-
-**Tréninková session:** vždy vázaná na **`training_group_id`**. Při vytvoření stačí **`session_date`** (YYYY-MM-DD) — `branch_id` a `starts_at` (datum + `start_time` grupy) se odvodí na backendu. Duplicitní session pro stejnou grupu a den → **409** (nebo **POST /training-groups/{id}/sessions** vrátí existující **200**).
-
-**Tréninkové skupiny:** časový slot na pobočce (`start_time`–`end_time`), nezávislý na U-skupině — v jednom slotu mohou být U8, U10, … Volitelně `weekdays` (ISO 1=Po … 7=Ne). Žák musí být na pobočce skupiny, aby šel do rosteru.
-
-## Frontend (docházka)
-
-Mobilní React app pro trenéra — smart boot flow + swipe docházka.
-
-```bash
+# Frontend (druhý terminál)
 cd frontend
-cp .env.example .env   # volitelně uprav VITE_API_URL
+cp .env.example .env               # volitelně VITE_API_URL
 npm install
-npm run dev            # http://127.0.0.1:5173
+npm run dev                        # http://127.0.0.1:5173
 ```
 
-Backend musí běžet na portu **8001** (CORS povolen pro `:5173`).
+API docs: http://127.0.0.1:8001/docs
 
-### Flow aplikace
+### Demo data
 
-1. **`/` (Boot)** — načte skupiny + dnešní session; pokud jsi v okně slotu (45 min před startem až do konce), nabídne rovnou otevřít existující session nebo potvrzení „Zahájit docházku“.
-2. **`/today`** — přehled: probíhající slot, existující docházky, nové tréninky.
-3. **`/session/:id`** — fullscreen karty: swipe **→** přítomen, **←** nepřítomen, **2× tap** omluven; přepínač Seznam/Karty.
+```bash
+python scripts/reset_and_seed_demo.py   # 30 dětí, trenéři, dnešní docházka, notifikace, chat
+```
 
-**Výchozí seed poboček** (viz `DEFAULT_BRANCHES` v [`app/models.py`](app/models.py)): Orlova, Dolni Lutyne, Petrvald + fiktivní adresy.
+Výchozí demo přihlášení po seedu (viz `scripts/demo_state.json`):
 
-**Migrace schématu:** při změně sloupců v SQLite smažte lokální `judo.db` a nechte aplikaci znovu vytvořit tabulky při startu. U entit pobočka, trenér, rodič a žák odpovědi obsahují `created_at` a `updated_at` (časová razítka z databáze).
+| Role | Přihlášení |
+|------|------------|
+| Trenér | výběr jména + PIN `123456` |
+| Rodič | `demo1` / `demo1234` |
+| Admin | `admin` / `admin` |
 
-## Nasazení online
+Screenshoty pro README:
 
-| Platforma | Návod | Poznámka |
-|-----------|--------|----------|
-| **Render.com** | **[docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md)** | Zdarma, GitHub login, minimum údajů |
-| **Oracle Cloud VPS** | **[docs/DEPLOY_ORACLE.md](docs/DEPLOY_ORACLE.md)** | Zdarma VPS, více osobních údajů |
+```bash
+TRAINER_PIN=123456 python scripts/capture_readme_screenshots.py
+```
 
-Skripty: `render.yaml` (Render), `deploy/install.sh` (VPS)
+## Dokumentace
 
-## Skupiny věku
+| Dokument | Obsah |
+|----------|--------|
+| [docs/API.md](docs/API.md) | Endpointy, auth, schémata |
+| [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md) | Nasazení na Render.com |
+| [docs/DEPLOY_ORACLE.md](docs/DEPLOY_ORACLE.md) | Nasazení na Oracle Cloud VPS |
 
-`U8`, `U10`, `U12`, `U14`, `U16`, `U18` — pole `age_group` u `POST /students`.
+## Stack
+
+- **Backend:** FastAPI, SQLAlchemy 2, async SQLite (`aiosqlite`)
+- **Frontend:** React + Vite + TanStack Query
+- **Auth:** JWT (trenér PIN, rodič username/heslo, admin)
+
+---
+
+*Judo Klub Orlová — interní / demo platforma.*

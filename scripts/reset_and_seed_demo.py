@@ -19,7 +19,7 @@ BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8001").rstrip("/")
 API_WRITE_KEY = os.environ.get("API_WRITE_KEY", "")
 ADMIN_USER = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "admin")
-TRAINER_PIN = os.environ.get("TRAINER_PIN", "1234")
+TRAINER_PIN = os.environ.get("TRAINER_PIN", "123456")
 STATE_PATH = os.environ.get("DEMO_STATE_PATH", "scripts/demo_state.json")
 
 KEEP_BRANCHES = ("Orlova", "Dolni Lutyne", "Petrvald")
@@ -138,7 +138,7 @@ def trainer_by_name(trainers: list[dict], first_name: str, last_name: str) -> di
     raise RuntimeError(f"Trainer not found: {first_name} {last_name}")
 
 
-def ensure_trainers(client: httpx.Client, branches: dict[str, int]) -> list[dict]:
+def ensure_trainers(client: httpx.Client, branches: dict[str, int], admin: str) -> list[dict]:
     print("== ENSURE TRAINERS ==")
     existing = client.get("/trainers", headers=headers()).json()
     by_name = {(t["first_name"], t["last_name"]): t for t in existing}
@@ -151,7 +151,7 @@ def ensure_trainers(client: httpx.Client, branches: dict[str, int]) -> list[dict
         if row is None:
             r = client.post(
                 "/trainers",
-                headers=headers(),
+                headers=headers(admin),
                 json={"first_name": first_name, "last_name": last_name, "branch_ids": branch_ids},
             )
             r.raise_for_status()
@@ -162,7 +162,7 @@ def ensure_trainers(client: httpx.Client, branches: dict[str, int]) -> list[dict
             if sorted(branch_ids) != current_ids:
                 r = client.patch(
                     f"/trainers/{row['id']}",
-                    headers=headers(),
+                    headers=headers(admin),
                     json={"branch_ids": branch_ids},
                 )
                 r.raise_for_status()
@@ -172,7 +172,7 @@ def ensure_trainers(client: httpx.Client, branches: dict[str, int]) -> list[dict
                 print(f"  = {first_name} {last_name}")
         client.patch(
             f"/trainers/{row['id']}",
-            headers=headers(),
+            headers=headers(admin),
             json={"pin": TRAINER_PIN},
         ).raise_for_status()
         trainers.append(row)
@@ -182,11 +182,11 @@ def ensure_trainers(client: httpx.Client, branches: dict[str, int]) -> list[dict
 
 def wipe(client: httpx.Client, admin: str, trainer_tok: str) -> None:
     print("== WIPE ==")
-    for s in client.get("/students", headers=headers()).json():
+    for s in client.get("/students", headers=headers(admin)).json():
         client.delete(f"/students/{s['id']}", headers=headers(admin))
 
-    for p in client.get("/parents", headers=headers()).json():
-        client.delete(f"/parents/{p['id']}", headers=headers())
+    for p in client.get("/parents", headers=headers(admin)).json():
+        client.delete(f"/parents/{p['id']}", headers=headers(admin))
 
     for g in client.get("/training-groups", headers=headers(trainer_tok)).json():
         client.delete(f"/training-groups/{g['id']}", headers=headers(trainer_tok))
@@ -207,7 +207,7 @@ def wipe(client: httpx.Client, admin: str, trainer_tok: str) -> None:
             client.delete(f"/branches/{b['id']}", headers=headers(admin))
 
 
-def seed_students(client: httpx.Client, branches: dict[str, int]) -> list[dict]:
+def seed_students(client: httpx.Client, branches: dict[str, int], admin: str) -> list[dict]:
     print("== SEED 30 STUDENTS ==")
     created: list[dict] = []
     idx = 0
@@ -227,7 +227,7 @@ def seed_students(client: httpx.Client, branches: dict[str, int]) -> list[dict]:
                     "phone": f"+420700{i:07d}",
                 }],
             }
-            r = client.post("/students", headers=headers(), json=payload)
+            r = client.post("/students", headers=headers(admin), json=payload)
             r.raise_for_status()
             row = r.json()
             created.append({
@@ -528,6 +528,48 @@ def seed_today_sessions(
     return opened
 
 
+def assign_demo_parent_logins(students: list[dict]) -> list[dict]:
+    """Set known demo username/password for seeded parents via local DB."""
+    import asyncio
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    from sqlalchemy import select
+
+    from app.database import async_session_maker
+    from app.models import Parent
+    from app.security import hash_pin
+
+    password = os.environ.get("DEMO_PARENT_PASSWORD", "demo1234")
+    logins: list[dict] = []
+
+    async def _run() -> None:
+        async with async_session_maker() as session:
+            for i, s in enumerate(students):
+                parent = (
+                    await session.execute(select(Parent).where(Parent.id == s["parent_id"]))
+                ).scalar_one()
+                username = f"demo{i + 1}"
+                parent.username = username
+                parent.password_hash = hash_pin(password)
+                logins.append({
+                    "parent_id": parent.id,
+                    "student_id": s["id"],
+                    "username": username,
+                    "password": password,
+                })
+            await session.commit()
+
+    asyncio.run(_run())
+    print(f"== PARENT LOGINS == ({len(logins)} accounts, password={password!r})")
+    for row in logins:
+        print(f"  {row['username']} / {row['password']} (parent #{row['parent_id']})")
+    return logins
+
+
 def main() -> int:
     with httpx.Client(base_url=BASE_URL, timeout=60.0) as client:
         h = client.get("/health")
@@ -543,7 +585,7 @@ def main() -> int:
             print(f"Expected 3 branches, got {branches}", file=sys.stderr)
             return 1
 
-        trainers = ensure_trainers(client, branches)
+        trainers = ensure_trainers(client, branches, admin)
         if not trainers:
             print("No trainers", file=sys.stderr)
             return 1
@@ -551,22 +593,11 @@ def main() -> int:
 
         wipe(client, admin, trainer_tok)
 
-        students = seed_students(client, branches)
+        students = seed_students(client, branches, admin)
         extras = seed_trainings_and_event(client, trainers, branches, students)
 
-        # Parent credentials for QA
-        parent_logins: list[dict] = []
-        for s in students[:6]:
-            pid = s["parent_id"]
-            r = client.post(f"/admin/parents/{pid}/resend-credentials", headers=headers(admin))
-            if r.status_code == 200:
-                j = r.json()
-                parent_logins.append({
-                    "parent_id": pid,
-                    "student_id": s["id"],
-                    "username": j["username"],
-                    "password": j["password"],
-                })
+        # Parent credentials for QA (API už nevrací plaintext heslo — nastavíme lokálně)
+        parent_logins = assign_demo_parent_logins(students[:6])
 
         demo_notifications = seed_notifications(client, trainers, branches, parent_logins)
         demo_chat = seed_chat(client, trainers, parent_logins)
