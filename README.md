@@ -75,10 +75,8 @@ uvicorn app.main:app --reload --port 8001
 cd frontend
 cp .env.example .env               # volitelně VITE_API_URL
 npm install
-npm run dev                        # http://127.0.0.1:5173
+npm run dev
 ```
-
-API docs: http://127.0.0.1:8001/docs
 
 ### Demo data
 
