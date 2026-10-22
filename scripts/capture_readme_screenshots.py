@@ -34,6 +34,13 @@ def wait_ready(page, timeout_ms: int = 20000) -> None:
     page.wait_for_load_state("networkidle", timeout=timeout_ms)
 
 
+def settle_ui(page, extra_ms: int = 3500) -> None:
+    """Fonts + badges need extra time on hub screens before screenshot."""
+    wait_ready(page)
+    page.evaluate("() => document.fonts.ready")
+    page.wait_for_timeout(extra_ms)
+
+
 def shot(page, name: str) -> None:
     path = OUT / f"{name}.png"
     page.screenshot(path=str(path), full_page=False)
@@ -93,8 +100,10 @@ def main() -> int:
         page.get_by_text("Vyber, jak se chceš přihlásit").wait_for(timeout=15000)
         shot(page, "01-landing")
 
-        # 2) Trainer hub
+        # 2) Trainer hub (wait for fonts + notification badges)
         login_trainer(page, state, state["trainers"][0]["name"])
+        page.locator(".hub-card__actions .trainer-card").first.wait_for(state="visible")
+        settle_ui(page, extra_ms=5000)
         shot(page, "02-trainer-hub")
 
         # 3) Attendance today
@@ -142,6 +151,8 @@ def main() -> int:
         context.clear_cookies()
         page.evaluate("() => { localStorage.clear(); sessionStorage.clear(); }")
         login_parent(page, state)
+        page.get_by_text("Moje děti").wait_for(state="visible")
+        settle_ui(page, extra_ms=5000)
         shot(page, "07-parent-home")
 
         # 8) Parent attendance
